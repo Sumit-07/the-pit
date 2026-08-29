@@ -27,6 +27,11 @@ const config: NextConfig = {
   serverExternalPackages: [
     '@the-pit/engine',
     '@the-pit/db',
+    // The guarded URL fetcher reaches for `node:dns` and `node:https` to pin a
+    // connection to an address it has already checked (`packages/fetch/src/node`).
+    // That is server-only by construction, and bundling it would both fail and
+    // put a fetch-arbitrary-URL primitive somewhere it must never be.
+    '@the-pit/fetch',
     'exceljs',
     '@anthropic-ai/sdk',
     'postgres',

@@ -14,6 +14,7 @@
     "@the-pit/auth": "workspace:*",
     "@the-pit/db": "workspace:*",
     "@the-pit/engine": "workspace:*",
+    "@the-pit/fetch": "workspace:*",
     "@the-pit/payments": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "inngest": "^4.18.1",

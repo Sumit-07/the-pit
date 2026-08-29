@@ -67,9 +67,12 @@ describe('normalizeUrl', () => {
     expect(normalizeUrl('https://exämple.com/a')).toBe('xn--exmple-cua.com/a');
   });
 
-  it('does not resolve a shortener — that is Phase 3', () => {
-    // The one rule of brief §2.5 deliberately not implemented here: it needs an
-    // SSRF-guarded fetcher, and nothing in this module performs I/O.
+  it('does not resolve a shortener, because nothing in this module performs I/O', () => {
+    // The one rule of brief §2.5 that is not implemented HERE. It is implemented
+    // in `@the-pit/fetch`'s `resolveProductUrl`, which follows the link through
+    // an SSRF-guarded fetcher and then calls this function on the target — so
+    // `bit.ly/3xYzAbC` and the page it points at share a key, without this
+    // module ever opening a socket.
     expect(normalizeUrl('https://bit.ly/3xYzAbC')).toBe('bit.ly/3xyzabc');
   });
 
