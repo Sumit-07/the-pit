@@ -23,6 +23,7 @@
  * | §2.4 one pitch per product per cycle | `checkSubmissionLocal` + `cycleAt` |
  * | §2.5 normalized URL | `normalizeSubmissionUrl`, wrapping the engine's `normalizeUrl` |
  * | `DECISIONS.md` S12 category, pre-payment | `checkSubmission` + the `SubmissionClearance` brand |
+ * | `DECISIONS.md` S12 obvious mismatches blocked | `seededCategoryClassifier`, offline, no model call |
  * | `DECISIONS.md` S8 | left OPEN as `RepitchPolicy`, a required argument with no default |
  *
  * ## Storage vocabulary
@@ -52,6 +53,9 @@ export * from './checkout/webhook.js';
 export * from './listing/repitch.js';
 
 export * from './submission/category.js';
+export * from './submission/category-classifier.js';
+export * from './submission/category-model.js';
+export * from './submission/category-model.data.js';
 export * from './submission/cycle.js';
 export * from './submission/guards.js';
 export * from './submission/job.js';

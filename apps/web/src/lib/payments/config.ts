@@ -35,7 +35,7 @@ import {
   type Database,
   type PostgresAccountStore,
 } from '@the-pit/db';
-import { acceptAllClassifier, AttemptsLedger, type DodoConfig } from '@the-pit/payments';
+import { AttemptsLedger, seededCategoryClassifier, type DodoConfig } from '@the-pit/payments';
 
 import { candidateCategories, listingLookup } from '@/lib/checkout/bindings';
 import type { DodoWebhookDeps } from '@/lib/payments/webhook-handlers';
@@ -149,7 +149,7 @@ export function placementDeps(): PlacementEnqueueDeps | null {
       // the pre-payment and pre-enqueue checks start disagreeing.
       guards: {
         listings: listingLookup(db),
-        classifier: acceptAllClassifier,
+        classifier: seededCategoryClassifier,
         candidateCategories,
       },
     };

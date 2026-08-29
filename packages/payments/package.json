@@ -13,7 +13,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc -p tsconfig.json",
+    "build:category-model": "node --experimental-strip-types scripts/build-category-model.ts",
+    "typecheck": "tsc -p tsconfig.json && tsc -p scripts/tsconfig.json",
     "test": "vitest run"
   },
   "dependencies": {

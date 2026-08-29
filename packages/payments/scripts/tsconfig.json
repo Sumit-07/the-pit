@@ -1,0 +1,15 @@
+{
+  // The generator is run by `node --experimental-strip-types`, which resolves a
+  // `.ts` specifier literally and does not rewrite `.js` back to `.ts`. That needs
+  // `allowImportingTsExtensions`, which TypeScript only permits under `noEmit` —
+  // so it gets its own project rather than being folded into the package's, where
+  // `tsconfig.build.json` sets `noEmit: false` and would refuse the flag.
+  //
+  // It is still typechecked: `pnpm typecheck` runs this project too, so the
+  // generator cannot rot into something that no longer compiles against `src`.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true
+  },
+  "include": [".", "../src"]
+}
