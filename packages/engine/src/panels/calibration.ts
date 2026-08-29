@@ -23,9 +23,21 @@
  * same category in the incremental prompt, **shown with the scores they were
  * already assigned, as reference, and never re-scored**. That restores the
  * comparative context. The juror still returns one product's scores, so the
- * output stays ~200 tokens instead of ~2,400; only the input grows, and the
- * calibration block is identical for every submission to a category, which makes
- * it a natural prompt-cache breakpoint.
+ * output stays ~200 tokens instead of ~2,400; only the input grows.
+ *
+ * ## Known cost consequence
+ *
+ * The calibration block is NOT a shared prompt-cache breakpoint across
+ * submissions. `categoryVersion` is part of the seed, and per `brief` Part 3 the
+ * category snapshot version bumps on every placement and every nightly rebuild —
+ * so the anchor is redrawn for each customer and the block never repeats between
+ * them. That is the correct behaviour: an anchor frozen against a stale
+ * population would calibrate a new product against a board that no longer
+ * exists. But it means the added input tokens are paid on every submission
+ * rather than amortized across a category, and anything downstream that plans
+ * cache breakpoints (Task 5) must place them on the parts that genuinely repeat
+ * — the juror mandate, the rubric — and not on this block. This is the same
+ * shape of trade-off `DECISIONS.md` S10 records for the preview cache key.
  *
  * Two properties are the whole point of the fix, and both are enforced here:
  *
@@ -120,6 +132,12 @@ interface Candidate extends CalibrationProduct {
  * Seeding on a slug rather than on the display string means re-casing or
  * re-punctuating a category's name does not silently reshuffle its calibration
  * sample.
+ *
+ * A name with no alphanumeric characters at all slugs to `''`. That is refused
+ * by the caller rather than tolerated: an empty slug would give two distinct
+ * categories the same seed AND the same slug component of the version digest,
+ * which is the same collide-two-different-states bug the empty-`categoryVersion`
+ * guard exists to prevent.
  */
 function categorySlug(category: string): string {
   return category
@@ -198,6 +216,10 @@ function mulberry32(seed: number): () => number {
  * it. A caller handed an empty sample is scoring in isolation and should say so
  * rather than pretend the correction was applied.
  *
+ * An empty `categoryVersion`, or a category name with no alphanumeric characters
+ * (which would slug to `''`), throws. Both would silently collide two different
+ * states onto one seed and one version digest.
+ *
  * @param products Every usable product in the category, from ingest — the source
  *   of the descriptions the ranking rows do not carry.
  * @param rankings The category's ranking document (`01 §6.6`), the source of the
@@ -220,6 +242,12 @@ export function selectCalibrationSample(
   }
 
   const slug = categorySlug(rankings.category);
+  if (slug === '') {
+    throw new RangeError(
+      `selectCalibrationSample: category must contain at least one alphanumeric character, got ${JSON.stringify(rankings.category)}`,
+    );
+  }
+
   const candidates = collectCandidates(products, rankings.ranking);
 
   const selected =

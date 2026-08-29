@@ -17,6 +17,8 @@
  * fifteen and fails immediately.
  */
 
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 
 import { CALIBRATION_SAMPLE, SANITIZE_LIMIT } from '../../src/config/constants.js';
@@ -77,6 +79,59 @@ const ROWS_45 = makeRows(45);
 function idsFor(categoryVersion = VERSION, category = CATEGORY): number[] {
   return selectCalibrationSample(PRODUCTS_45, ranking(ROWS_45, category), categoryVersion).sample.map((peer) => peer.id);
 }
+
+/**
+ * The expected selection, recomputed from `src/panels/calibration.ts`'s
+ * DOCUMENTED SPECIFICATION rather than from its code. Nothing here is imported
+ * from the module under test — `node:crypto` is the standard library, and
+ * mulberry32 is transcribed from its published definition, which is what the
+ * module's doc comment names.
+ *
+ * The fixture is what makes this possible: product `id` has mean score `99 - id`,
+ * strictly decreasing, so a candidate's canonical index IS its `id` and a band's
+ * index range is a band's id range. No knowledge of the implementation's internal
+ * ordering is needed.
+ *
+ * Spec, verbatim from the module:
+ *   slug   = name lowercased, non-alphanumeric runs -> '-', trimmed of '-'
+ *   seed   = first 32 bits of SHA-256(JSON.stringify(['calibration-seed', slug, version]))
+ *   bands  = n split into `sampleSize` parts, first `n % sampleSize` one larger
+ *   pick_i = bandStart_i + (nextUint32() % bandSize_i), one draw per band, in order
+ */
+function expectedIds(category: string, categoryVersion: string, n: number, sampleSize: number): number[] {
+  const slug = category
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/^-+|-+$/gu, '');
+
+  const seedHex = createHash('sha256')
+    .update(JSON.stringify(['calibration-seed', slug, categoryVersion]), 'utf8')
+    .digest('hex')
+    .slice(0, 8);
+
+  // mulberry32, published definition, returning raw uint32.
+  let state = Number.parseInt(seedHex, 16) >>> 0;
+  const nextUint32 = (): number => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return (t ^ (t >>> 14)) >>> 0;
+  };
+
+  const base = Math.floor(n / sampleSize);
+  const remainder = n % sampleSize;
+  const ids: number[] = [];
+  let start = 0;
+  for (let band = 0; band < sampleSize; band += 1) {
+    const size = band < remainder ? base + 1 : base;
+    ids.push(start + (nextUint32() % size));
+    start += size;
+  }
+  return ids;
+}
+
+/** The selection as committed at review time. See the guard test for why. */
+const FROZEN_IDS = [1, 5, 6, 11, 13, 15, 20, 23, 25, 27, 30, 35, 36, 40, 43];
 
 describe('selectCalibrationSample — shape (the contract Task 5 embeds)', () => {
   const result = selectCalibrationSample(PRODUCTS_45, ranking(ROWS_45), VERSION);
@@ -145,6 +200,28 @@ describe('selectCalibrationSample — spread across the score range (NOT the top
     // The top-15 sampler's span would be only 14 points.
   });
 
+  it('stratifies on published score, NOT on composite, rank or orig_rank', () => {
+    /*
+     * The one stated design decision in the selection (`Candidate.meanScore`):
+     * the spread axis is the mean published per-metric score, because that is
+     * the number the calibration block actually shows a juror. `composite`,
+     * `rank` and `orig_rank` are all correlated with it in the baseline fixture,
+     * so this fixture breaks the correlation: the published scores are
+     * unchanged, and composite, core, rank and orig_rank all run the OPPOSITE
+     * way. n = 45, so it goes through the stratifier rather than the
+     * return-everything path.
+     */
+    const products = PRODUCTS_45.map((product) => ({ ...product, orig_rank: 45 - product.id }));
+    const rows = ROWS_45.map((row) => ({ ...row, composite: row.id / 10, core: row.id / 10, rank: 45 - row.id }));
+    const ids = selectCalibrationSample(products, ranking(rows), VERSION).sample.map((peer) => peer.id);
+
+    expect(ids).toEqual(FROZEN_IDS);
+    // An implementation stratifying on composite/rank/orig_rank would cut its
+    // bands over the reversed list, so canonical index c would hold id 44 - c and
+    // the same band offsets would return this set instead:
+    expect(ids).not.toEqual(FROZEN_IDS.map((id) => 44 - id));
+  });
+
   it('holds a stratum-one peer even when a stratum is not evenly sized', () => {
     // 44 candidates over 15 strata: base = 2, remainder = 14 -> fourteen 3s, one 2.
     const products = makeProducts(44);
@@ -198,19 +275,54 @@ describe('selectCalibrationSample — stable per category (the whole point of §
   });
 
   /**
-   * REGRESSION LOCK, not a hand-computed expectation. These ids were produced by
-   * the implementation and frozen: any change to the seed derivation, the PRNG,
-   * the stratum split, or the canonical ordering will change them, and that is a
-   * decision to be made deliberately (it invalidates every cached calibration in
-   * production), never an accident of a refactor.
+   * THE SUITE'S ONLY CROSS-PROCESS DETERMINISM GUARD. Not a movement detector,
+   * and not regenerable from the implementation.
    *
-   * The properties above are what prove the selection CORRECT; this proves it
-   * has not silently MOVED.
+   * Every other test in this file passes against at least two wrong
+   * implementations:
+   *
+   * - a `Math.random()` seed memoized once per process — one peer per stratum,
+   *   full score span, permutation-invariant, slug-invariant, and identical on
+   *   every call *within one process*, so even the test above it cannot see the
+   *   defect;
+   * - taking the first element of every stratum and ignoring the seed entirely.
+   *
+   * Only this test rejects them, because it is the only one that says what the
+   * answer must actually BE. That is why the expectation is RE-DERIVED here
+   * rather than pasted: `expectedIds` recomputes the selection from the module's
+   * documented specification — SHA-256 over
+   * `JSON.stringify(['calibration-seed', slug, version])`, first 32 bits as the
+   * seed, mulberry32, `% stratumSize` per band — using `node:crypto` and a
+   * transcription of the published PRNG, and imports nothing from
+   * `src/panels/calibration.ts`. Two independent computations of the same
+   * specification are compared.
+   *
+   * Regenerating the literal below from a refactored implementation is
+   * FORBIDDEN: it would defeat the only guard that separates a genuine seeded
+   * selection from a per-process random one, and a `Math.random()` regression
+   * ships silently to paying customers.
    */
-  it('is frozen against this exact fixture', () => {
-    expect(idsFor()).toEqual([1, 5, 6, 11, 13, 15, 20, 23, 25, 27, 30, 35, 36, 40, 43]);
+  it('matches a selection re-derived independently from the documented spec', () => {
+    const derived = expectedIds(CATEGORY, VERSION, PRODUCTS_45.length, CALIBRATION_SAMPLE);
+
+    // The re-derivation and the implementation agree...
+    expect(idsFor()).toEqual(derived);
+    // ...and both agree with the value committed at review time, so a change to
+    // BOTH the spec and its transcription would still be visible in the diff.
+    expect(derived).toEqual(FROZEN_IDS);
     // floor(id/3) over that list is 0,1,2,...,14 — one peer per stratum, as the
     // property test above requires independently.
+  });
+
+  it('re-derives correctly for a bumped version too, not just the one fixture', () => {
+    const version = 'snapshot-2026-08-30-002';
+    expect(idsFor(version)).toEqual(expectedIds(CATEGORY, version, PRODUCTS_45.length, CALIBRATION_SAMPLE));
+  });
+
+  it('re-derives correctly for a different category too', () => {
+    expect(idsFor(VERSION, 'Developer Tools')).toEqual(
+      expectedIds('Developer Tools', VERSION, PRODUCTS_45.length, CALIBRATION_SAMPLE),
+    );
   });
 });
 
@@ -332,6 +444,19 @@ describe('selectCalibrationSample — untrusted text (Global Constraint 2)', () 
 describe('selectCalibrationSample — refuses inputs that would silently mis-seed', () => {
   it('rejects an empty category version', () => {
     expect(() => selectCalibrationSample(PRODUCTS_45, ranking(ROWS_45), '')).toThrow(RangeError);
+  });
+
+  it('rejects a category name that slugs to nothing', () => {
+    // '!!!' and '???' both slug to '' and would share a seed and share the slug
+    // component of the version digest — the same collide-two-states bug the
+    // empty-version guard exists to prevent.
+    expect(() => selectCalibrationSample(PRODUCTS_45, ranking(ROWS_45, '!!!'), VERSION)).toThrow(RangeError);
+    expect(() => selectCalibrationSample(PRODUCTS_45, ranking(ROWS_45, ''), VERSION)).toThrow(RangeError);
+    expect(() => selectCalibrationSample(PRODUCTS_45, ranking(ROWS_45, '   '), VERSION)).toThrow(RangeError);
+  });
+
+  it('accepts a category name that still carries an alphanumeric', () => {
+    expect(() => selectCalibrationSample(PRODUCTS_45, ranking(ROWS_45, 'C++'), VERSION)).not.toThrow();
   });
 
   it('rejects a non-positive or fractional sample size', () => {
