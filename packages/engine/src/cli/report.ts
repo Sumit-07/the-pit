@@ -86,10 +86,13 @@ export async function reportCommand(args: ParsedArgs, deps: ReportDeps): Promise
   deps.log(formatReportSummary(model, out));
 
   // A flagged gate is not a command failure — the report rendered, and its whole
-  // job is to put the flag in front of a person. Only a MISSING gate exits
-  // non-zero, because a Phase 1 report with no fix-1.1 evidence has not answered
-  // the question Phase 1 was for, and a wrapper should not treat it as done.
-  return model.gates.some((gate) => gate.status === 'missing') ? 1 : 0;
+  // job is to put the flag in front of a person. What DOES exit non-zero is a
+  // gate with no answer behind it: `missing` (the evidence was never produced)
+  // and `inconclusive` (it was produced and settles nothing). A Phase 1 report in
+  // either state has not answered the question Phase 1 was for, and a wrapper
+  // must not treat it as done. The two are separate statuses because they need
+  // separate remedies, but they are the same exit code.
+  return model.gates.some((gate) => gate.status === 'missing' || gate.status === 'inconclusive') ? 1 : 0;
 }
 
 async function writeFile2(path: string, contents: string): Promise<void> {

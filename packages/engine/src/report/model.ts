@@ -70,12 +70,20 @@ export interface GateCheck {
    * - `pass` — the number is where it should be.
    * - `flag` — it is not, and the report says what that means.
    * - `missing` — the evidence was not produced, which is not the same as passing.
+   * - `inconclusive` — the evidence WAS produced and settles nothing. Distinct
+   *   from `missing` (nothing was run) and emphatically distinct from `pass`: an
+   *   A/B whose two deltas are both exactly 0 answers `ab_exceeds_retest` with
+   *   `false`, which is the same boolean a genuinely clean result gives. Rendering
+   *   that as PASS would let the gate be cleared by a run with no sampling
+   *   variance in it — the same "cleared by omission" failure the `missing` arm
+   *   exists to prevent, reached by a different route. Exits non-zero like
+   *   `missing`.
    * - `info` — a number that must be read but that this report refuses to judge.
    *   The leak correlation is the only one: it cannot separate leakage from
    *   genuine agreement, so a pass/fail on it would be a claim the statistic
    *   does not support.
    */
-  status: 'pass' | 'flag' | 'missing' | 'info';
+  status: 'pass' | 'flag' | 'missing' | 'inconclusive' | 'info';
   value: string;
   note: string;
 }
@@ -295,7 +303,33 @@ function buildGates(model: ReportModel): GateCheck[] {
           'are one juror with a doubled vote. REDESIGN THE MANDATES before seeding further categories — ' +
           'a panel that agrees with itself produces a board with no information in it.'
         : `No pair reaches ${JUROR_CORRELATION_CEILING}; mean pair correlation ` +
-          `${model.correlation.mean_pair_correlation.toFixed(4)}. The jurors are saying different things.`,
+          `${model.correlation.mean_pair_correlation.toFixed(4)}` +
+          (model.correlation.flat_roles.length > 0
+            ? `, or ${model.correlation.mean_pair_correlation_excluding_flat.toFixed(4)} excluding the ` +
+              'zero-variance juror(s) below — read that one, not the first.'
+            : '. The jurors are saying different things.'),
+  });
+
+  // 3b. Zero-variance jurors. A separate row because on the independence
+  //     statistic above they look like the BEST jurors on the panel.
+  const flat = model.correlation.flat_roles;
+  gates.push({
+    name: 'juror score variance',
+    status: flat.length > 0 ? 'flag' : 'pass',
+    value:
+      flat.length > 0
+        ? `${flat.length} juror(s) with zero variance: ${flat.join(', ')}`
+        : `all ${model.correlation.roles.length} juror(s) separate the products`,
+    note:
+      flat.length > 0
+        ? 'These jurors gave every product the same composite, so their per-metric z-scores are all 0 and ' +
+          'they contribute a constant column. They correlate 0 with everyone, which is the value a ' +
+          'perfectly INDEPENDENT juror scores — so they pull the mean pair correlation down and make the ' +
+          'panel read as healthier than it is. They can clear the dead-weight cut too, if they deduct a ' +
+          'constant amount. Treat them as non-voting: they still count in the composite divisor, so they ' +
+          'dilute every juror that did vote.'
+        : 'No juror gave every product the same composite, so nobody is silently diluting the panel while ' +
+          'reading as independent.',
   });
 
   // 4. Dead weight.
@@ -322,12 +356,22 @@ function buildGates(model: ReportModel): GateCheck[] {
     });
   } else {
     const summary = model.ab.summary;
+    // `ab_exceeds_retest` is `false` in TWO very different worlds: the paths are
+    // genuinely indistinguishable (a pass), and neither path moved at all (no
+    // evidence either way). A run with zero sampling variance — a deterministic
+    // client, or a panel that answered identically twice — lands in the second
+    // and must never render as the first.
+    const noVariance =
+      summary.mean_abs_metric_delta_ab === 0 && summary.mean_abs_metric_delta_retest === 0;
+    const noTargets = model.ab.products.length === 0;
+
     gates.push({
       name: 'fix 1.1 evidence (A/B vs test-retest)',
-      status: summary.ab_exceeds_retest ? 'flag' : 'pass',
-      value:
-        `A/B ${summary.mean_abs_metric_delta_ab.toFixed(3)} pts vs retest ` +
-        `${summary.mean_abs_metric_delta_retest.toFixed(3)} pts over ${model.ab.products.length} product(s)`,
+      status: noTargets || noVariance ? 'inconclusive' : summary.ab_exceeds_retest ? 'flag' : 'pass',
+      value: noTargets
+        ? 'no target completed both paths'
+        : `A/B ${summary.mean_abs_metric_delta_ab.toFixed(3)} pts vs retest ` +
+          `${summary.mean_abs_metric_delta_retest.toFixed(3)} pts over ${model.ab.products.length} product(s)`,
       note: summary.reading,
     });
   }
@@ -354,15 +398,24 @@ function buildGates(model: ReportModel): GateCheck[] {
     name: 'recalibration schedule vs brief Part 7',
     status: schedule.score_only_within_budget ? 'pass' : 'flag',
     value:
-      `${money(schedule.monthly_score_only_usd)}/mo score-only, ` +
-      `${money(schedule.monthly_full_pipeline_usd)}/mo full pipeline, over ${schedule.categories} categories`,
-    note: schedule.score_only_within_budget
-      ? `Inside the $${schedule.budget.min_usd}-${schedule.budget.max_usd} line, which was stated over ` +
-        `${schedule.budget.stated_categories} categories. ESTIMATED, not measured.`
-      : `OVER the $${schedule.budget.min_usd}-${schedule.budget.max_usd} line by ` +
-        `${schedule.score_only_vs_budget_max.toFixed(2)}x on the score-only reading and ` +
-        `${schedule.full_pipeline_vs_budget_max.toFixed(2)}x on the full pipeline. That line was stated over ` +
-        `${schedule.budget.stated_categories} categories; this schedule runs ${schedule.categories}. ESTIMATED, not measured.`,
+      `${money(schedule.monthly_score_only_usd)}-${money(schedule.monthly_full_pipeline_usd)}/mo ` +
+      `over ${schedule.categories} categories`,
+    note:
+      (schedule.score_only_within_budget
+        ? `Inside the $${schedule.budget.min_usd}-${schedule.budget.max_usd} line at the lower bound.`
+        : `OVER the $${schedule.budget.min_usd}-${schedule.budget.max_usd} line by ` +
+          `${schedule.score_only_vs_budget_max.toFixed(2)}x score-only, ` +
+          `${schedule.score_and_customer_vs_budget_max.toFixed(2)}x score+customer, ` +
+          `${schedule.full_pipeline_vs_budget_max.toFixed(2)}x full pipeline.`) +
+      ` Which phases a pass runs is not settled — brief §1.5 rules out re-clustering only, and ` +
+      `DECISIONS.md S7 leaves the Floor question OPEN — so three readings are given. ` +
+      (schedule.verdict_survives_s7
+        ? 'All three land on the same side, so this verdict does not depend on S7. '
+        : 'The readings straddle the ceiling, so the answer turns on S7. ') +
+      `That line was stated over ${schedule.budget.stated_categories} categories; this schedule runs ` +
+      `${schedule.categories}. ESTIMATED, not measured, and its MAGNITUDE is only as good as the ` +
+      `${schedule.inputs.median_description_chars}-character median description it was rendered from ` +
+      `(real seeded corpus: ${schedule.inputs.seeded_corpus_median_chars}, DECISIONS.md S5).`,
   });
 
   // 9. The demand axis.

@@ -157,9 +157,14 @@ describe('spearman', () => {
     //
     // r = -9.5 / sqrt(10 * 9.5) = -9.5 / sqrt(95) = -sqrt(95) / 10 = -0.9746794
     //
-    // Note the shortcut formula 1 - 6*sum(d^2)/(n(n^2-1)) gives -0.975 here,
-    // which is WRONG in the presence of ties. That is why `spearman` is defined
-    // as Pearson over average ranks rather than through the shortcut.
+    // Note the shortcut formula 1 - 6*sum(d^2)/(n(n^2-1)) is WRONG here:
+    //   d   = rx - ry = [-4, -1.5, -0.5, 2, 4]
+    //   d^2 = [16, 2.25, 0.25, 4, 16]        sum = 38.5
+    //   n(n^2-1) = 5 * 24 = 120
+    //   1 - 6*38.5/120 = 1 - 1.925 = -0.925
+    // -0.925 against the correct -0.9746794 — the shortcut assumes no ties and
+    // fails silently when there are. That is why `spearman` is defined as Pearson
+    // over average ranks rather than through the shortcut.
     expect(spearman([1, 2, 3, 4, 5], [5, 4, 4, 2, 1])).toBeCloseTo(-0.9746794, 7);
   });
 

@@ -185,6 +185,69 @@ describe('projectSchedule', () => {
     expect(schedule.monthly_score_only_per_category_usd).toBeCloseTo(expected / CATEGORY_COUNT, 12);
   });
 
+  it('reports three readings, with score + customer bracketed between the bounds', () => {
+    // `brief` §1.5 establishes only that a routine pass cannot RE-CLUSTER.
+    // Re-polling the Floor over clusters whose membership did not move shifts no
+    // membership and clears no demand, and `DECISIONS.md` S7 records that
+    // question as OPEN — so score + customer is a real third reading and must be
+    // on the table, not inferred.
+    const schedule = projectSchedule(input);
+    expect(schedule.monthly_score_only_usd).toBeLessThan(schedule.monthly_score_and_customer_usd);
+    expect(schedule.monthly_score_and_customer_usd).toBeLessThan(schedule.monthly_full_pipeline_usd);
+    // The intermediate reading is exactly the two phases summed, per pass.
+    expect(schedule.monthly_score_and_customer_usd).toBeCloseTo(
+      monthlySpend(
+        schedule.nightly.score_only_cost_usd + schedule.nightly.customer_cost_usd,
+        schedule.weekly.score_only_cost_usd + schedule.weekly.customer_cost_usd,
+        CATEGORY_COUNT,
+      ),
+      12,
+    );
+  });
+
+  it('says whether the verdict survives S7 being unresolved', () => {
+    // All three readings on the same side of the ceiling means the budget answer
+    // does not depend on S7. Split readings mean it does.
+    const over = projectSchedule({ ...input, categories: 100_000 });
+    expect(over.score_only_within_budget).toBe(false);
+    expect(over.full_pipeline_within_budget).toBe(false);
+    expect(over.verdict_survives_s7).toBe(true);
+
+    const free = projectSchedule({ ...input, categories: 1 });
+    // Whatever side this lands on, the flag must agree with the three booleans.
+    const readings = [
+      free.score_only_within_budget,
+      free.score_and_customer_within_budget,
+      free.full_pipeline_within_budget,
+    ];
+    expect(free.verdict_survives_s7).toBe(readings.every(Boolean) || readings.every((r) => !r));
+  });
+
+  it('prints what the magnitude rests on, against the real seeded median', () => {
+    // A projection carries a real category name and real-looking dollars whatever
+    // it was rendered from. `DECISIONS.md` S5 measured the seeded corpus at a
+    // 141-character median; the fixture's synthetic text is shorter, and that
+    // must be visible rather than inferred.
+    const schedule = projectSchedule(input);
+    expect(schedule.inputs.products).toBe(44);
+    expect(schedule.inputs.metrics).toBe(JURY.metrics.length);
+    expect(schedule.inputs.personas).toBe(PANEL.personas.length);
+    expect(schedule.inputs.jurors).toBe(JURY.jurors.length);
+    expect(schedule.inputs.seeded_corpus_median_chars).toBe(141);
+    // makeProducts writes "A tool that helps someone do task number N without a
+    // spreadsheet." — well under the real median, so the fixture declares itself.
+    expect(schedule.inputs.median_description_chars).toBeGreaterThan(0);
+    expect(schedule.inputs.median_description_chars).toBeLessThan(141);
+  });
+
+  it('names S7 and the magnitude caveat in the printed assumptions', () => {
+    const caveats = projectSchedule(input).caveats.join('\n');
+    expect(caveats).toContain('DECISIONS.md S7');
+    expect(caveats).toContain('is OPEN');
+    expect(caveats).toContain('cannot re-cluster');
+    expect(caveats).toContain('COMPOSITION of the schedule, not its magnitude');
+  });
+
   it('keeps the score-only reading strictly cheaper than the full pipeline', () => {
     // `brief §1.5` makes full re-clustering an admin operation, so a routine
     // pass cannot re-cluster: score-only is the defensible reading and the

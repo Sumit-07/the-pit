@@ -142,12 +142,23 @@ export interface PassProjection {
   estimated_input_tokens: number;
   estimated_output_tokens: number;
   /**
-   * The Score phase alone. `brief §1.5` makes full re-clustering an explicit
-   * admin operation that clears demand, so a routine pass cannot re-cluster and
-   * cannot re-poll the Floor about clusters that did not move. This is the
-   * defensible reading of a recalibration pass.
+   * The Score phase alone — the LOWER bound on a recalibration pass.
+   *
+   * `brief §1.5` establishes only that a routine pass cannot RE-CLUSTER: full
+   * re-clustering is an explicit admin operation that clears demand. It says
+   * nothing about re-polling the customer panel over clusters whose membership
+   * did not move, which shifts no membership and clears no demand — so
+   * Score + Customer is a real third reading, and `DECISIONS.md` S7 records
+   * exactly that question ("Does nightly recalibration re-run the Floor?") as
+   * still OPEN. See `customer_cost_usd`.
    */
   score_only_cost_usd: number;
+  /**
+   * The Customer phase alone, so the intermediate Score + Customer reading can
+   * be read off the table rather than inferred. That reading is arguably the
+   * likeliest of the three and is bracketed by the other two columns.
+   */
+  customer_cost_usd: number;
   /** Score + Uniqueness + Customer. The ceiling, if a pass rebuilt everything. */
   full_pipeline_cost_usd: number;
 }
@@ -163,10 +174,14 @@ export interface RecalibrationSchedule {
   weekly: PassProjection;
   /** Per category, per month, Score phase only. */
   monthly_score_only_per_category_usd: number;
+  /** Per category, per month, Score + Customer — the S7 intermediate reading. */
+  monthly_score_and_customer_per_category_usd: number;
   /** Per category, per month, whole pipeline. */
   monthly_full_pipeline_per_category_usd: number;
   /** Across `categories`. The figure `brief` Part 7's line is about. */
   monthly_score_only_usd: number;
+  /** Across `categories`, Score + Customer. Bracketed by the other two. */
+  monthly_score_and_customer_usd: number;
   monthly_full_pipeline_usd: number;
   budget: {
     min_usd: number;
@@ -176,12 +191,51 @@ export interface RecalibrationSchedule {
   };
   /** `monthly_score_only_usd / budget.max_usd`. Above 1 means over the ceiling. */
   score_only_vs_budget_max: number;
+  score_and_customer_vs_budget_max: number;
   full_pipeline_vs_budget_max: number;
   score_only_within_budget: boolean;
+  score_and_customer_within_budget: boolean;
   full_pipeline_within_budget: boolean;
+  /**
+   * True when EVERY reading is inside the ceiling, and false when every reading
+   * is outside it — the verdict that does not depend on `DECISIONS.md` S7 being
+   * resolved. When the readings disagree, the answer genuinely turns on S7 and
+   * the report has to say so rather than pick one.
+   */
+  verdict_survives_s7: boolean;
+  /**
+   * The inputs the token estimate is driven by, printed so a reader can judge
+   * whether the MAGNITUDE transfers to a real category. The composition is
+   * verified; the magnitude is only as good as these.
+   */
+  inputs: ScheduleInputs;
   /** Assumptions the schedule rests on, printed with it. */
   caveats: string[];
 }
+
+/** What the projected prompt sizes actually depend on. */
+export interface ScheduleInputs {
+  products: number;
+  metrics: number;
+  personas: number;
+  jurors: number;
+  /** Median product description length in characters — the largest single driver. */
+  median_description_chars: number;
+  /**
+   * `DECISIONS.md` S5's measured median for the real seeded corpus, 141
+   * characters. Printed beside `median_description_chars` so a projection run
+   * against synthetic fixture text is visibly a projection against synthetic
+   * fixture text.
+   */
+  seeded_corpus_median_chars: number;
+}
+
+/**
+ * `DECISIONS.md` S5: "Seeded median is 141 chars; paid submissions will use the
+ * full 300." The reference point a projection's own description length is
+ * printed against.
+ */
+const SEEDED_CORPUS_MEDIAN_CHARS = 141;
 
 /**
  * Nights in an average month: `365 / 12 = 30.4167`, not a rounded 30.
@@ -236,14 +290,26 @@ export interface ScheduleInput {
  * projects one pass and its report compared that against the monthly budget,
  * which it necessarily fits; the number the budget is about is this one.
  *
- * ## Two readings of a nightly pass
+ * ## Which phases a pass runs is NOT settled
  *
- * `brief` Part 3 does not say which phases a nightly pass runs. `brief §1.5`
- * settles it in one direction — clusters are append-only and full re-clustering
- * is an admin operation that clears demand, so a routine pass cannot re-cluster —
- * which makes Score-only the defensible reading. The full-pipeline figure is
- * carried anyway as the ceiling, so the founder sees both bounds rather than a
- * number that depends on an assumption made out of sight.
+ * `brief` Part 3 does not say. `brief §1.5` settles exactly one half of it:
+ * clusters are append-only and full re-clustering is an explicit admin operation
+ * that clears demand, so a routine pass cannot RE-CLUSTER. It does not settle
+ * whether the pass re-polls the Floor — re-asking the customer panel about
+ * clusters whose membership did not move shifts no membership and clears no
+ * demand — and `DECISIONS.md` S7 records that question as still OPEN.
+ *
+ * So there are three readings, not two, and this projection reports the phases
+ * separately so all three can be read off one table:
+ *
+ *   Score only              lower bound
+ *   Score + Customer        the intermediate reading S7 leaves open, arguably
+ *                           the likeliest, bracketed by the other two
+ *   Score + Uniqueness + Customer   ceiling, if a pass rebuilt everything
+ *
+ * A budget verdict that holds across all three does not depend on S7 being
+ * resolved. One that held only at the lower bound would, and the report would
+ * have to say so.
  *
  * ## Where a night and a week collide
  *
@@ -265,7 +331,8 @@ export function projectSchedule(input: ScheduleInput): RecalibrationSchedule {
       ordering: input.ordering,
       ...(input.chunkSize === undefined ? {} : { chunkSize: input.chunkSize }),
     });
-    const score = projection.phases.find((phase) => phase.phase === 'score');
+    const phaseCost = (name: PhaseName): number =>
+      projection.phases.find((phase) => phase.phase === name)?.estimated_cost_usd ?? 0;
     return {
       label,
       products: products.length,
@@ -273,7 +340,8 @@ export function projectSchedule(input: ScheduleInput): RecalibrationSchedule {
       calls: projection.calls,
       estimated_input_tokens: projection.estimated_input_tokens,
       estimated_output_tokens: projection.estimated_output_tokens,
-      score_only_cost_usd: score?.estimated_cost_usd ?? 0,
+      score_only_cost_usd: phaseCost('score'),
+      customer_cost_usd: phaseCost('customer'),
       full_pipeline_cost_usd: projection.estimated_cost_usd,
     };
   };
@@ -284,11 +352,20 @@ export function projectSchedule(input: ScheduleInput): RecalibrationSchedule {
   const nightsPerMonth = NIGHTS_PER_MONTH;
   const weeksPerMonth = WEEKS_PER_MONTH;
 
+  // Three readings, because `DECISIONS.md` S7 leaves the middle one open.
+  const scoreAndCustomer = (pass: PassProjection): number =>
+    pass.score_only_cost_usd + pass.customer_cost_usd;
+
   const perCategoryScoreOnly = monthlySpend(nightly.score_only_cost_usd, weekly.score_only_cost_usd, 1);
+  const perCategoryBoth = monthlySpend(scoreAndCustomer(nightly), scoreAndCustomer(weekly), 1);
   const perCategoryFull = monthlySpend(nightly.full_pipeline_cost_usd, weekly.full_pipeline_cost_usd, 1);
 
   const monthlyScoreOnly = monthlySpend(nightly.score_only_cost_usd, weekly.score_only_cost_usd, categories);
+  const monthlyBoth = monthlySpend(scoreAndCustomer(nightly), scoreAndCustomer(weekly), categories);
   const monthlyFull = monthlySpend(nightly.full_pipeline_cost_usd, weekly.full_pipeline_cost_usd, categories);
+
+  const within = (monthly: number): boolean => monthly <= RECAL_BUDGET_MAX_USD;
+  const readings = [monthlyScoreOnly, monthlyBoth, monthlyFull];
 
   return {
     categories,
@@ -297,8 +374,10 @@ export function projectSchedule(input: ScheduleInput): RecalibrationSchedule {
     nightly,
     weekly,
     monthly_score_only_per_category_usd: perCategoryScoreOnly,
+    monthly_score_and_customer_per_category_usd: perCategoryBoth,
     monthly_full_pipeline_per_category_usd: perCategoryFull,
     monthly_score_only_usd: monthlyScoreOnly,
+    monthly_score_and_customer_usd: monthlyBoth,
     monthly_full_pipeline_usd: monthlyFull,
     budget: {
       min_usd: RECAL_BUDGET_MIN_USD,
@@ -306,9 +385,20 @@ export function projectSchedule(input: ScheduleInput): RecalibrationSchedule {
       stated_categories: RECAL_BUDGET_CATEGORIES,
     },
     score_only_vs_budget_max: monthlyScoreOnly / RECAL_BUDGET_MAX_USD,
+    score_and_customer_vs_budget_max: monthlyBoth / RECAL_BUDGET_MAX_USD,
     full_pipeline_vs_budget_max: monthlyFull / RECAL_BUDGET_MAX_USD,
-    score_only_within_budget: monthlyScoreOnly <= RECAL_BUDGET_MAX_USD,
-    full_pipeline_within_budget: monthlyFull <= RECAL_BUDGET_MAX_USD,
+    score_only_within_budget: within(monthlyScoreOnly),
+    score_and_customer_within_budget: within(monthlyBoth),
+    full_pipeline_within_budget: within(monthlyFull),
+    verdict_survives_s7: readings.every(within) || readings.every((monthly) => !within(monthly)),
+    inputs: {
+      products: input.products.length,
+      metrics: input.jury.metrics.length,
+      personas: input.personas.length,
+      jurors: input.jury.jurors.length,
+      median_description_chars: medianDescriptionChars(input.products),
+      seeded_corpus_median_chars: SEEDED_CORPUS_MEDIAN_CHARS,
+    },
     caveats: [
       `every figure here is ESTIMATED, never measured: input tokens are counted off the rendered ` +
         `bytes of requests that were never sent, output tokens come from the MAX_TOKENS_* worst cases`,
@@ -321,6 +411,23 @@ export function projectSchedule(input: ScheduleInput): RecalibrationSchedule {
         `panel is ${input.jury.jurors.length} jurors where 01 §4 assumed 5 (DECISIONS.md S1)`,
       'a cold prompt cache is assumed throughout — a real pass reads the shared juror prefix from ' +
         'cache and costs less, so this errs high',
+      `which phases a pass runs is NOT settled: brief §1.5 establishes only that it cannot re-cluster. ` +
+        `DECISIONS.md S7 ("Does nightly recalibration re-run the Floor?") is OPEN, and Score + Customer ` +
+        `is a real third reading between the two bounds`,
+      `the MAGNITUDE is only as good as the inputs it was rendered from — ${input.products.length} ` +
+        `products at a ${medianDescriptionChars(input.products)}-character median description, ` +
+        `${input.jury.metrics.length} metrics, ${input.personas.length} personas. DECISIONS.md S5 puts the ` +
+        `real seeded median at ${SEEDED_CORPUS_MEDIAN_CHARS} characters; what has been verified here is the ` +
+        `COMPOSITION of the schedule, not its magnitude`,
     ],
   };
+}
+
+/** Median description length, the largest single driver of a projected prompt size. */
+function medianDescriptionChars(products: readonly Product[]): number {
+  if (products.length === 0) return 0;
+  const lengths = products.map((product) => product.description.length).sort((a, b) => a - b);
+  const middle = Math.floor(lengths.length / 2);
+  if (lengths.length % 2 === 1) return lengths[middle] ?? 0;
+  return ((lengths[middle - 1] ?? 0) + (lengths[middle] ?? 0)) / 2;
 }

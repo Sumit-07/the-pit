@@ -17,7 +17,16 @@
  * statistic, so a formatting change can never move a number.
  */
 
-import { DISCRIMINATION_FLOOR, JUROR_CORRELATION_CEILING, UNIQ_LAMBDA } from '../config/constants.js';
+import {
+  DISCRIMINATION_FLOOR,
+  JUROR_CORRELATION_CEILING,
+  JUROR_COUNT,
+  METRICS_MAX,
+  METRICS_MIN,
+  PERSONAS_MAX,
+  PERSONAS_MIN,
+  UNIQ_LAMBDA,
+} from '../config/constants.js';
 import type { Spread } from './clusters.js';
 import type { GateCheck, ReportModel } from './model.js';
 
@@ -41,6 +50,10 @@ const GATE_MARK: Record<GateCheck['status'], string> = {
   pass: 'PASS',
   flag: 'FLAG',
   missing: 'MISSING',
+  // Deliberately not 'PASS' and deliberately not blank: the evidence ran and
+  // settled nothing, which is a decision the reader has to make rather than a
+  // box that got ticked.
+  inconclusive: 'NO EVIDENCE',
   info: 'READ',
 };
 
@@ -184,6 +197,17 @@ function sectionDisagreement(model: ReportModel): string {
     `Mean pair correlation **${num(model.correlation.mean_pair_correlation)}**. ` +
       `Threshold: any pair at or above **${JUROR_CORRELATION_CEILING}** is flagged.`,
     '',
+    ...(model.correlation.flat_roles.length === 0
+      ? []
+      : [
+          `> **Read that mean with care.** ${model.correlation.flat_roles.length} juror(s) — ` +
+            `${model.correlation.flat_roles.join(', ')} — gave every product the SAME composite. A ` +
+            'constant vector correlates 0 with everything, which is exactly the value a perfectly ' +
+            'independent juror would score, so a juror that said nothing pulls this mean DOWN and makes ' +
+            'the panel look healthier than it is. Over the jurors that actually voted the mean is ' +
+            `**${num(model.correlation.mean_pair_correlation_excluding_flat)}**. That is the number to read.`,
+          '',
+        ]),
     flagged.length === 0
       ? '_No pair reaches the threshold._'
       : `**${flagged.length} flagged pair(s):**\n\n` +
@@ -390,11 +414,13 @@ function sectionEstimatedCost(model: ReportModel): string {
       ]),
     ),
     '',
-    '**Two readings of a pass.** `brief` Part 3 does not say which phases a recalibration pass runs. ' +
-      '`brief` §1.5 settles it in one direction — clusters are append-only and full re-clustering is an explicit ' +
-      'admin operation that clears demand — so a routine pass cannot re-cluster and cannot re-poll the Floor. ' +
-      'The **score-only** column is therefore the defensible reading; **full-pipeline** is the ceiling if a pass ' +
-      'rebuilt everything. Both are shown so the assumption is not made out of sight.',
+    '**Which phases a pass runs is NOT settled.** `brief` Part 3 does not say. `brief` §1.5 settles exactly ' +
+      'one half of it: clusters are append-only and full re-clustering is an explicit admin operation that ' +
+      'clears demand, so a routine pass cannot RE-CLUSTER. It says nothing about re-polling the Floor over ' +
+      'clusters whose membership did not move — that shifts no membership and clears no demand — and ' +
+      '`DECISIONS.md` **S7 records exactly that question as OPEN**: "Does nightly recalibration re-run the ' +
+      'Floor?". So there are three readings, and **score + customer**, the one S7 leaves open, is arguably ' +
+      'the likeliest. All three are below, bracketed.',
     '',
     '### The month, across every category',
     '',
@@ -405,11 +431,18 @@ function sectionEstimatedCost(model: ReportModel): string {
       ['reading', 'per category / month', `× ${s.categories} categories`, `vs $${s.budget.max_usd} ceiling`, 'verdict'],
       [
         [
-          'score-only (defensible)',
+          'score only (lower bound)',
           money2(s.monthly_score_only_per_category_usd),
           `**${money2(s.monthly_score_only_usd)}**`,
           `${num(s.score_only_vs_budget_max, 2)}×`,
           s.score_only_within_budget ? 'within' : '**OVER**',
+        ],
+        [
+          'score + customer (S7 open)',
+          money2(s.monthly_score_and_customer_per_category_usd),
+          `**${money2(s.monthly_score_and_customer_usd)}**`,
+          `${num(s.score_and_customer_vs_budget_max, 2)}×`,
+          s.score_and_customer_within_budget ? 'within' : '**OVER**',
         ],
         [
           'full pipeline (ceiling)',
@@ -421,6 +454,14 @@ function sectionEstimatedCost(model: ReportModel): string {
       ],
     ),
     '',
+    s.verdict_survives_s7
+      ? 'All three readings land on the same side of the ceiling, so **this verdict does not depend on S7 ' +
+        'being resolved.**'
+      : '**The readings disagree**, so the answer genuinely turns on `DECISIONS.md` S7. Resolve S7 before ' +
+        'treating either figure as the budget.',
+    '',
+    inputsBlock(model),
+    '',
     `The $${s.budget.min_usd}–${s.budget.max_usd} line was stated over **${s.budget.stated_categories}** ` +
       `categories (\`brief\` Part 3). The data has **${s.categories}**, and the panel is six jurors where ` +
       '`01` §4 assumed five (`DECISIONS.md` S1). This is the re-baseline `DECISIONS.md` lists as an open ' +
@@ -431,6 +472,105 @@ function sectionEstimatedCost(model: ReportModel): string {
     '',
     priceTableBlock(model),
   ].join('\n');
+}
+
+/**
+ * The S2/S3 verdict.
+ *
+ * Separated out because it has to be able to say "I did not measure this". The
+ * mean of an empty list is 0 by convention (`mean([]) === 0`), and 0 is also the
+ * value that means "S3 moves solo products nowhere" — so a category with NO
+ * solo-cluster products would otherwise answer the bolded question with a
+ * measured-looking `0.0000`. Measuring that interaction is the entire purpose of
+ * this subsection, so reporting it as settled when it was never asked is the
+ * worst available outcome here.
+ *
+ * The yardstick for "near zero" is the magnitude of one full uniqueness tilt
+ * (`UNIQ_LAMBDA`), because the question is comparative: S2 and S3 are the two
+ * ways novelty touches `core`, and the honest statement about the second is
+ * whether it is larger or smaller than the whole of the first. The same figure is
+ * also given as a fraction of `core_spread`, the way the tilt already is, so a
+ * reader who prefers the population yardstick has it.
+ */
+function noveltyVerdict(model: ReportModel): string {
+  const n = model.novelty;
+  const preamble =
+    '**Is novelty credited twice?** S3 is two-directional by design: a strong solo product gains ' +
+    '`DEMAND_W × z_merit` and a weak one loses exactly that much, so the test is not whether the gain ' +
+    'is non-zero — it is whether the MEAN SIGNED gain over solo products is near zero. ';
+
+  if (n.s3_gain_solo.n === 0) {
+    return (
+      preamble +
+      '**Not measured in this category: no product has a missing demand entry, so S3 renormalized ' +
+      'nobody and there is no population to take that mean over.** The 0.0000 a naive reading would ' +
+      'print here is `mean([])`, not a finding. The interaction remains unmeasured until a category ' +
+      'with solo clusters is seeded.'
+    );
+  }
+
+  const asCoreSpread =
+    n.core_spread === 0 ? undefined : Math.abs(n.mean_s3_gain_solo) / n.core_spread;
+  const yardstick =
+    `It is **${num(n.mean_s3_gain_solo)}** \`core\` units over ${n.s3_gain_solo.n} solo product(s)` +
+    (asCoreSpread === undefined ? '' : `, i.e. ${pct(asCoreSpread)} of one population std of \`core\``) +
+    `, against a full uniqueness tilt of ±${UNIQ_LAMBDA}. `;
+
+  const reading =
+    Math.abs(n.mean_s3_gain_solo) <= n.max_tilt
+      ? 'That is within one full uniqueness tilt, so S3 is not moving solo products as a group in either ' +
+        'direction — the individual gains cancel, which is what two-directional means.'
+      : n.mean_s3_gain_solo > 0
+        ? 'That is a LIFT larger than a full uniqueness tilt: solo products are being raised as a group, on ' +
+          'top of the tilt. Novelty is credited twice at a magnitude that shows on the board.'
+        : 'That is a PENALTY larger than a full uniqueness tilt — solo products are, as a group, weaker on ' +
+          'merit than the rest, and S3 amplifies that downward. Novelty is not being credited twice here; ' +
+          'the renormalization is working in the direction the merit says.';
+
+  return preamble + yardstick + reading;
+}
+
+/**
+ * What the token estimate was actually rendered from.
+ *
+ * A projection carries a real category name and real-looking dollars whatever it
+ * was computed over, so the inputs that drive prompt size are printed beside it —
+ * with `DECISIONS.md` S5's measured 141-character seeded median as the reference.
+ * A run against synthetic fixture text then declares itself instead of reading as
+ * a measurement of the real corpus. What this section verifies is the COMPOSITION
+ * of the schedule; the magnitude is only as good as these numbers.
+ */
+function inputsBlock(model: ReportModel): string {
+  const inputs = model.schedule.inputs;
+  const drift = inputs.median_description_chars - inputs.seeded_corpus_median_chars;
+  return [
+    '**What the magnitude rests on.** The composition above is verified arithmetic. The dollar amounts are ' +
+      'only as good as the prompt bytes they were rendered from:',
+    '',
+    table(
+      ['driver', 'this projection', 'real seeded corpus'],
+      [
+        ['products in the category', String(inputs.products), 'varies by category'],
+        [
+          'median description characters',
+          String(inputs.median_description_chars),
+          `${inputs.seeded_corpus_median_chars} (\`DECISIONS.md\` S5)`,
+        ],
+        ['rubric metrics', String(inputs.metrics), `${METRICS_MIN}–${METRICS_MAX} (\`01\` §4 Step 2)`],
+        ['personas', String(inputs.personas), `${PERSONAS_MIN}–${PERSONAS_MAX} (\`01\` §4 Step 3)`],
+        ['jurors', String(inputs.jurors), `${JUROR_COUNT} (\`DECISIONS.md\` S1)`],
+      ],
+    ),
+    '',
+    drift === 0
+      ? ''
+      : `This projection's median description is ${Math.abs(drift)} characters ${drift < 0 ? 'SHORTER' : 'longer'} ` +
+        `than the real seeded median, and description text is the largest single driver of a scoring prompt. ` +
+        `${drift < 0 ? 'The real magnitude is therefore more likely HIGHER than the figure above, not lower.' : ''} ` +
+        'Treat the magnitude as unconfirmed until this harness runs against a seeded category.',
+  ]
+    .filter((line, index, all) => !(line === '' && all[index - 1] === ''))
+    .join('\n');
 }
 
 /**
@@ -568,18 +708,7 @@ function sectionClusters(model: ReportModel): string {
       'position(s). The counterfactual re-sorts by `(−core, −composite, id)`, i.e. `01` §6.4\'s final sort with ' +
       'the tilt removed, so the difference is attributable to the tilt and nothing else.',
     '',
-    `**Is novelty credited twice?** S3 is two-directional by design: a strong solo product gains ` +
-      '`DEMAND_W × z_merit` and a weak one loses exactly that much, so the test is not whether the gain is ' +
-      'non-zero — it is whether the MEAN SIGNED gain over solo products is near zero. It is ' +
-      `**${num(n.mean_s3_gain_solo)}** \`core\` units. ` +
-      (Math.abs(n.mean_s3_gain_solo) <= n.max_tilt
-        ? 'That is within one full uniqueness tilt, so S3 is not moving solo products as a group in either direction.'
-        : n.mean_s3_gain_solo > 0
-          ? 'That is a LIFT larger than a full uniqueness tilt: solo products are being raised as a group, on top ' +
-            'of the tilt. Novelty is credited twice at a magnitude that shows on the board.'
-          : 'That is a PENALTY larger than a full uniqueness tilt — solo products are, as a group, weaker on ' +
-            'merit than the rest, and S3 amplifies that downward. Novelty is not being credited twice here; ' +
-            'the renormalization is working in the direction the merit says.'),
+    noveltyVerdict(model),
   ].join('\n');
 }
 

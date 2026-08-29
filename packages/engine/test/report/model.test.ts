@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { DISCRIMINATION_FLOOR } from '../../src/config/constants.js';
 import { FixtureClient } from '../../src/model/fixture-client.js';
+import type { AbCheckResult } from '../../src/report/ab-check.js';
 import { buildReport } from '../../src/report/model.js';
 import type { GateCheck, ReportModel } from '../../src/report/model.js';
 import { formatReportSummary, renderReport } from '../../src/report/render.js';
@@ -55,6 +56,55 @@ async function report(options: ScriptOptions = {}): Promise<ReportModel> {
   const { products, results, ranking } = await seed(options);
   return buildReport({ ranking, results, products, jury: JURY, personas: PANEL.personas });
 }
+
+/**
+ * A minimal completed A/B result. One target, one metric, a real -3 point A/B
+ * delta against a 0 retest floor — i.e. a run that DID have variance, so tests
+ * can vary one field at a time and see the gate move for that reason alone.
+ */
+const ABF: AbCheckResult = {
+  category: CATEGORY,
+  category_version: CATEGORY_VERSION,
+  engine_version: '0.1.0',
+  sample_size: 1,
+  category_size: CATEGORY_SIZE,
+  products: [
+    {
+      id: 0,
+      name: 'Product 0',
+      batch: { metrics: { Craft: 80 }, rank: 1, composite: 1, category_size: CATEGORY_SIZE },
+      incremental: { metrics: { Craft: 77 }, rank: 3, composite: 0.9, category_size: CATEGORY_SIZE },
+      retest: { metrics: { Craft: 77 }, rank: 3, composite: 0.9, category_size: CATEGORY_SIZE },
+      metric_delta_ab: { Craft: -3 },
+      metric_delta_retest: { Craft: 0 },
+      mean_abs_metric_delta_ab: 3,
+      mean_abs_metric_delta_retest: 0,
+      rank_delta_ab: 2,
+      rank_delta_retest: 0,
+      calibration_peers: 15,
+      calibration_version: 'v7:abc',
+    },
+  ],
+  summary: {
+    mean_abs_metric_delta_ab: 3,
+    mean_abs_metric_delta_retest: 0,
+    mean_abs_rank_delta_ab: 2,
+    mean_abs_rank_delta_retest: 0,
+    metric_delta_ratio: Infinity,
+    rank_delta_ratio: Infinity,
+    ab_exceeds_retest: true,
+    reading: 'x',
+  },
+  cost: {
+    basis: 'measured',
+    phases: { score: zeroCost(), uniqueness: zeroCost(), customer: zeroCost() },
+    total: zeroCost(),
+    unpriced_models: [],
+    note: 'n',
+  },
+  failures: [],
+  notes: [],
+};
 
 const gate = (model: ReportModel, name: string): GateCheck => {
   const found = model.gates.find((entry) => entry.name === name);
@@ -118,6 +168,7 @@ describe('buildReport — the gate table', () => {
       'discrimination',
       'panel completeness',
       'juror independence',
+      'juror score variance',
       'juror deduction rate',
       'fix 1.1 evidence (A/B vs test-retest)',
       'source-ranking correlation (leak test)',
@@ -181,6 +232,121 @@ describe('buildReport — the gate table', () => {
     expect(completeness.note).toContain('Juror 6');
   });
 
+  it('never passes the fix-1.1 gate on a run with no sampling variance', async () => {
+    // `ab_exceeds_retest` is `false` in two very different worlds: the paths are
+    // genuinely indistinguishable, and neither path moved at all. Rendering the
+    // second as PASS would clear the gate by the same route the MISSING arm
+    // exists to block — and PASS is the half a scanner reads.
+    const clean = await seed();
+    const zeroVariance = {
+      ...ABF,
+      summary: {
+        ...ABF.summary,
+        mean_abs_metric_delta_ab: 0,
+        mean_abs_metric_delta_retest: 0,
+        metric_delta_ratio: 1,
+        ab_exceeds_retest: false,
+        reading: 'Nothing can be concluded …',
+      },
+    };
+
+    const model = buildReport({
+      ranking: clean.ranking,
+      results: clean.results,
+      products: clean.products,
+      jury: JURY,
+      personas: PANEL.personas,
+      ab: zeroVariance,
+    });
+
+    const fix = gate(model, 'fix 1.1 evidence (A/B vs test-retest)');
+    expect(fix.status).toBe('inconclusive');
+    expect(fix.status).not.toBe('pass');
+  });
+
+  it('marks a completed A/B with no target as inconclusive, not as a pass', async () => {
+    const clean = await seed();
+    const model = buildReport({
+      ranking: clean.ranking,
+      results: clean.results,
+      products: clean.products,
+      jury: JURY,
+      personas: PANEL.personas,
+      ab: { ...ABF, products: [] },
+    });
+
+    const fix = gate(model, 'fix 1.1 evidence (A/B vs test-retest)');
+    expect(fix.status).toBe('inconclusive');
+    expect(fix.value).toBe('no target completed both paths');
+  });
+
+  it('passes the fix-1.1 gate only when both paths actually moved', async () => {
+    // A/B 1.0 points against a retest floor of 2.0: the paths are
+    // indistinguishable from two samples of one path, which is the outcome fix
+    // 1.1 was aiming at — and there IS variance, so the finding is real.
+    const clean = await seed();
+    const model = buildReport({
+      ranking: clean.ranking,
+      results: clean.results,
+      products: clean.products,
+      jury: JURY,
+      personas: PANEL.personas,
+      ab: {
+        ...ABF,
+        summary: {
+          ...ABF.summary,
+          mean_abs_metric_delta_ab: 1,
+          mean_abs_metric_delta_retest: 2,
+          metric_delta_ratio: 0.5,
+          ab_exceeds_retest: false,
+        },
+      },
+    });
+    expect(gate(model, 'fix 1.1 evidence (A/B vs test-retest)').status).toBe('pass');
+  });
+
+  it('flags a zero-variance juror in the verdict table, not only forty lines down', async () => {
+    // The failure this closes: a juror that gave every product the same score
+    // correlates 0 with everyone, which is the value a perfectly INDEPENDENT
+    // juror scores — so it pulls the independence mean down and can clear the
+    // dead-weight cut too. Its zero spread otherwise appears only in §7.
+    const clean = await seed();
+    const flatten = clean.results.scoreLog.map((entry) =>
+      entry.juror_role !== 'Juror 6'
+        ? entry
+        : {
+            ...entry,
+            scores: entry.scores.map((row) => ({
+              ...row,
+              metrics: row.metrics.map((metric) => ({
+                name: metric.name,
+                score: 50,
+                deductions: [{ points: 50, reason: 'flat' }],
+              })),
+            })),
+          },
+    );
+
+    const model = buildReport({
+      ranking: clean.ranking,
+      results: { ...clean.results, scoreLog: flatten },
+      products: clean.products,
+      jury: JURY,
+      personas: PANEL.personas,
+    });
+
+    expect(model.correlation.flat_roles).toEqual(['Juror 6']);
+    const variance = gate(model, 'juror score variance');
+    expect(variance.status).toBe('flag');
+    expect(variance.value).toContain('Juror 6');
+    expect(variance.note).toContain('dilute every juror that did vote');
+    // And the independence mean must be reported both ways, never only the one
+    // the dead juror flattered.
+    expect(model.correlation.mean_pair_correlation_excluding_flat).toBeGreaterThan(
+      model.correlation.mean_pair_correlation,
+    );
+  });
+
   it('never passes or fails the leak test — it is READ only', async () => {
     // The correlation cannot separate leakage from genuine agreement, so a
     // pass/fail on it would be a claim the statistic does not support.
@@ -213,10 +379,16 @@ describe('buildReport — the gate table', () => {
   it('reports the schedule against the brief\'s line with both readings', async () => {
     const model = await report();
     const schedule = gate(model, 'recalibration schedule vs brief Part 7');
-    expect(schedule.value).toContain('score-only');
-    expect(schedule.value).toContain('full pipeline');
+    expect(schedule.value).toContain('over 28 categories');
     expect(schedule.note).toContain('ESTIMATED, not measured');
     expect(schedule.note).toContain('15 categories');
+    // All three readings named in the row itself, and the S7 caveat with them.
+    expect(schedule.note).toContain('score-only');
+    expect(schedule.note).toContain('score+customer');
+    expect(schedule.note).toContain('full pipeline');
+    expect(schedule.note).toContain('DECISIONS.md S7 leaves the Floor question OPEN');
+    // The magnitude caveat travels on the verdict row, not only in the body.
+    expect(schedule.note).toContain('DECISIONS.md S5');
   });
 });
 
@@ -281,52 +453,8 @@ describe('renderReport', () => {
     // caught `mean |Δ|` as a column heading. Every row of a contiguous table
     // block must carry the same number of pipes as its header.
     const { products, results, ranking } = await seed();
-    const ab = {
-      category: CATEGORY,
-      category_version: CATEGORY_VERSION,
-      engine_version: '0.1.0',
-      sample_size: 1,
-      category_size: CATEGORY_SIZE,
-      products: [
-        {
-          id: 0,
-          name: 'Product 0',
-          batch: { metrics: { Craft: 80 }, rank: 1, composite: 1, category_size: CATEGORY_SIZE },
-          incremental: { metrics: { Craft: 77 }, rank: 3, composite: 0.9, category_size: CATEGORY_SIZE },
-          retest: { metrics: { Craft: 77 }, rank: 3, composite: 0.9, category_size: CATEGORY_SIZE },
-          metric_delta_ab: { Craft: -3 },
-          metric_delta_retest: { Craft: 0 },
-          mean_abs_metric_delta_ab: 3,
-          mean_abs_metric_delta_retest: 0,
-          rank_delta_ab: 2,
-          rank_delta_retest: 0,
-          calibration_peers: 15,
-          calibration_version: 'v7:abc',
-        },
-      ],
-      summary: {
-        mean_abs_metric_delta_ab: 3,
-        mean_abs_metric_delta_retest: 0,
-        mean_abs_rank_delta_ab: 2,
-        mean_abs_rank_delta_retest: 0,
-        metric_delta_ratio: Infinity,
-        rank_delta_ratio: Infinity,
-        ab_exceeds_retest: true,
-        reading: 'x',
-      },
-      cost: {
-        basis: 'measured' as const,
-        phases: { score: zeroCost(), uniqueness: zeroCost(), customer: zeroCost() },
-        total: zeroCost(),
-        unpriced_models: [],
-        note: 'n',
-      },
-      failures: [],
-      notes: [],
-    };
-
     const markdown = renderReport(
-      buildReport({ ranking, results, products, jury: JURY, personas: PANEL.personas, ab }),
+      buildReport({ ranking, results, products, jury: JURY, personas: PANEL.personas, ab: ABF }),
     );
 
     let headerPipes: number | undefined;
@@ -346,6 +474,92 @@ describe('renderReport', () => {
     const markdown = renderReport(await report());
     expect(markdown).toContain('+1 by construction — this IS the residual channel');
     expect(markdown).toContain('cannot on its own separate');
+  });
+
+  it('refuses to answer the S2/S3 question when no product has a missing demand entry', async () => {
+    // `mean([])` is 0 by convention, and 0 is also the value that means "S3
+    // moves solo products nowhere". Printing it as a measured finding when the
+    // population is empty is the worst outcome for the section whose entire
+    // purpose is to measure that interaction.
+    const model = await report({ clusterPlan: 'one-big' });
+    expect(model.novelty.s3_gain_solo.n).toBe(0);
+
+    const markdown = renderReport(model);
+    expect(markdown).toContain('Not measured in this category');
+    expect(markdown).toContain('`mean([])`, not a finding');
+    expect(markdown).not.toContain('S3 is not moving solo products as a group');
+  });
+
+  it('answers the S2/S3 question, with both yardsticks, when solo products exist', async () => {
+    const model = await report({ clusterPlan: 'all-solo' });
+    expect(model.novelty.s3_gain_solo.n).toBeGreaterThan(0);
+
+    const markdown = renderReport(model);
+    expect(markdown).not.toContain('Not measured in this category');
+    // Both yardsticks: the tilt magnitude AND the population std of `core`.
+    expect(markdown).toContain('against a full uniqueness tilt of ±0.075');
+    expect(markdown).toContain('of one population std of `core`');
+  });
+
+  it('warns beside the independence mean when a zero-variance juror flattered it', async () => {
+    const clean = await seed();
+    const flattened = clean.results.scoreLog.map((entry) =>
+      entry.juror_role !== 'Juror 6'
+        ? entry
+        : {
+            ...entry,
+            scores: entry.scores.map((row) => ({
+              ...row,
+              metrics: row.metrics.map((metric) => ({
+                name: metric.name,
+                score: 50,
+                deductions: [{ points: 50, reason: 'flat' }],
+              })),
+            })),
+          },
+    );
+
+    const markdown = renderReport(
+      buildReport({
+        ranking: clean.ranking,
+        results: { ...clean.results, scoreLog: flattened },
+        products: clean.products,
+        jury: JURY,
+        personas: PANEL.personas,
+      }),
+    );
+
+    expect(markdown).toContain('Read that mean with care');
+    expect(markdown).toContain('Juror 6');
+    expect(markdown).toContain('That is the number to read');
+  });
+
+  it('narrows the §1.5 claim, cites S7 as open, and shows the intermediate reading', async () => {
+    const markdown = renderReport(await report());
+    expect(markdown).toContain('cannot RE-CLUSTER');
+    expect(markdown).toContain('S7 records exactly that question as OPEN');
+    expect(markdown).toContain('score + customer (S7 open)');
+    // The old overreach must be gone: §1.5 never settled the Floor question.
+    expect(markdown).not.toContain('cannot re-cluster and cannot re-poll the Floor');
+    expect(markdown).not.toContain('score-only (defensible)');
+  });
+
+  it('says whether the budget verdict depends on S7', async () => {
+    const markdown = renderReport(await report());
+    expect(markdown).toMatch(/does not depend on S7 being resolved|answer genuinely turns on/);
+  });
+
+  it('prints what the projected magnitude rests on, against the real seeded median', async () => {
+    // A projection carries a real category name and real-looking dollars whatever
+    // inputs produced it. The fixture's 72-character descriptions must declare
+    // themselves against `DECISIONS.md` S5's measured 141-character median.
+    const markdown = renderReport(await report());
+    expect(markdown).toContain('What the magnitude rests on');
+    expect(markdown).toContain('median description characters');
+    expect(markdown).toContain('141 (`DECISIONS.md` S5)');
+    expect(markdown).toContain('SHORTER');
+    expect(markdown).toContain('more likely HIGHER than the figure above');
+    expect(markdown).toContain('unconfirmed until this harness runs against a seeded category');
   });
 });
 

@@ -138,13 +138,16 @@ describe('engine report', () => {
     );
   });
 
-  it('reads ab.json when it exists and turns the fix-1.1 gate green', async () => {
-    // Produce the evidence with the `ab` command, then re-render.
-    const abLines: string[] = [];
+  it('reads ab.json when it exists and replaces the MISSING gate with a finding', async () => {
+    // `calibrationShift` gives the deterministic fixture a real difference
+    // between the two paths, so the A/B has variance in it. Without that both
+    // deltas are exactly 0 and the gate is INCONCLUSIVE, not a pass — see the
+    // next case, which pins that.
     const abWritten = new Map<string, string>();
     const abCode = await abCommand(parseArgs(['ab', '--category', CATEGORY, '--workdir', workdir, '--run']), {
-      log: (line) => abLines.push(line),
-      makeClient: () => new FixtureClient(makeScript({ clusterPlan: 'pairs', assignAnswer: PLACEMENT })),
+      log: () => undefined,
+      makeClient: () =>
+        new FixtureClient(makeScript({ clusterPlan: 'pairs', assignAnswer: PLACEMENT, calibrationShift: -3 })),
       write: (path, contents) => {
         abWritten.set(path, contents);
         return Promise.resolve();
@@ -159,12 +162,41 @@ describe('engine report', () => {
     await writeFile(abPath, abWritten.get(abPath) ?? '', 'utf8');
 
     const { code, written } = await runReport(['report', '--category', CATEGORY, '--workdir', workdir]);
+    // The A/B delta exceeds the retest floor, so the gate FLAGS rather than
+    // passes — and a flag is not a command failure: the report rendered and put
+    // the finding in front of a person.
     expect(code).toBe(0);
 
     const markdown = [...written.values()][0] ?? '';
     expect(markdown).not.toContain('**MISSING.**');
     expect(markdown).toContain('test-retest — incremental twice');
     expect(markdown).toContain('### Per metric, per product');
+    expect(markdown).toContain('| FLAG | fix 1.1 evidence (A/B vs test-retest) |');
+  });
+
+  it('does NOT clear the fix-1.1 gate on an A/B with no sampling variance', async () => {
+    // The regression this pins: without a calibration shift the deterministic
+    // fixture returns the identical number on both paths, both deltas are 0, and
+    // `ab_exceeds_retest` is `false` — the same boolean a genuinely clean result
+    // gives. Rendering that as PASS would clear the gate by the same route the
+    // MISSING arm exists to block, and exit 0 would tell a wrapper it was done.
+    const abWritten = new Map<string, string>();
+    await abCommand(parseArgs(['ab', '--category', CATEGORY, '--workdir', workdir, '--run']), {
+      log: () => undefined,
+      makeClient: () => new FixtureClient(makeScript({ clusterPlan: 'pairs', assignAnswer: PLACEMENT })),
+      write: (path, contents) => {
+        abWritten.set(path, contents);
+        return Promise.resolve();
+      },
+    });
+
+    const abPath = join(workdir, 'runs', SLUG, 'ab.json');
+    await writeFile(abPath, abWritten.get(abPath) ?? '', 'utf8');
+
+    const { code, log } = await runReport(['report', '--category', CATEGORY, '--workdir', workdir]);
+    expect(code).toBe(1);
+    expect(log).toContain('NO EVIDENCE');
+    expect(log).not.toMatch(/PASS\s+fix 1\.1/);
   });
 });
 

@@ -375,6 +375,55 @@ describe('jurorCorrelations', () => {
     expect(report.flagged[0]?.r).toBeCloseTo(1, 12);
   });
 
+  it('names a zero-variance juror and keeps it out of the independence mean', () => {
+    // The trap this closes: `pearson` reports a constant vector as 0, which is
+    // correct and is also the value a perfectly INDEPENDENT juror would score.
+    // So the deadest possible juror looks like the best one on the single
+    // quantitative proxy for "the jury must genuinely disagree".
+    //
+    // A and B2 are perfectly correlated (same order, different numbers), so the
+    // only live pair has r = 1. FLAT correlates 0 with both.
+    //   all three pairs      -> (1 + 0 + 0) / 3 = 0.3333
+    //   excluding FLAT       -> 1 / 1          = 1.0000
+    // The raw mean says "a third correlated"; the truth is "identical".
+    const jury: JurorWeights[] = [
+      { role: 'A', weights: { M: 1 } },
+      { role: 'B2', weights: { M: 1 } },
+      { role: 'FLAT', weights: { M: 1 } },
+    ];
+    const report = jurorCorrelations({
+      scoreLog: [entry('A', [10, 20, 60]), entry('B2', [30, 40, 80]), entry('FLAT', [50, 50, 50])],
+      jury,
+      productIds: PRODUCT_IDS,
+    });
+
+    expect(report.flat_roles).toEqual(['FLAT']);
+    expect(report.mean_pair_correlation).toBeCloseTo(1 / 3, 12);
+    expect(report.mean_pair_correlation_excluding_flat).toBeCloseTo(1, 12);
+  });
+
+  it('leaves the two means equal when no juror is flat', () => {
+    // So a reader never has to remember whether the adjustment applied.
+    const report = jurorCorrelations({ scoreLog: LOG, jury: JURY, productIds: PRODUCT_IDS });
+    expect(report.flat_roles).toEqual([]);
+    expect(report.mean_pair_correlation_excluding_flat).toBeCloseTo(report.mean_pair_correlation, 12);
+  });
+
+  it('is 0, not NaN, when every juror is flat and no live pair exists', () => {
+    const jury: JurorWeights[] = [
+      { role: 'F1', weights: { M: 1 } },
+      { role: 'F2', weights: { M: 1 } },
+    ];
+    const report = jurorCorrelations({
+      scoreLog: [entry('F1', [50, 50, 50]), entry('F2', [70, 70, 70])],
+      jury,
+      productIds: PRODUCT_IDS,
+    });
+    expect(report.flat_roles).toEqual(['F1', 'F2']);
+    expect(report.mean_pair_correlation_excluding_flat).toBe(0);
+    expect(Number.isNaN(report.mean_pair_correlation_excluding_flat)).toBe(false);
+  });
+
   it('reports a juror that scored everything alike as uncorrelated rather than NaN', () => {
     // Flat scores give popstd 0, so `standardize` returns all zeros and the
     // composite vector is constant. A NaN here would blank a matrix cell and

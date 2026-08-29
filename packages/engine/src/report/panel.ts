@@ -336,6 +336,31 @@ export interface CorrelationReport {
   max_pair?: JurorPair;
   /** Mean `r` over every pair — how much the panel agrees overall. */
   mean_pair_correlation: number;
+  /**
+   * Jurors whose composite vector has NO variance: every product got the same
+   * number, so their per-metric z-scores are all 0 and they contribute a constant
+   * column to the composite.
+   *
+   * These have to be named separately, because on this statistic a dead juror
+   * looks like the best one. `pearson` reports a constant vector as 0 — correct,
+   * and the only safe convention — but 0 is also the value a perfectly
+   * independent juror would score, so a juror that said nothing at all pulls
+   * `mean_pair_correlation` DOWN and makes the panel read as more independent
+   * than it is. It can clear the dead-weight cut too, if it deducts a constant
+   * amount. Its zero spread is visible in the score distributions, but that is
+   * pages below the verdict, and the verdict is what gets read.
+   */
+  flat_roles: string[];
+  /**
+   * `mean_pair_correlation` over pairs where BOTH jurors have variance.
+   *
+   * The honest headline when the panel contains a flat juror: it is what the
+   * jurors who actually voted think of each other. Equal to
+   * `mean_pair_correlation` when `flat_roles` is empty, so a reader never has to
+   * remember whether the adjustment applied. 0 when fewer than two jurors have
+   * variance — there is then no pair to average.
+   */
+  mean_pair_correlation_excluding_flat: number;
 }
 
 export interface CorrelationInput {
@@ -384,12 +409,19 @@ export function jurorCorrelations(input: CorrelationInput): CorrelationReport {
     undefined,
   );
 
+  // Exactly the condition `pearson` falls back on, checked here so the two can
+  // never disagree about which jurors are flat.
+  const flat = new Set(roles.filter((_, index) => popStd(vectors[index] ?? []) === 0));
+  const livePairs = pairs.filter((pair) => !flat.has(pair.a) && !flat.has(pair.b));
+
   const report: CorrelationReport = {
     roles,
     matrix,
     pairs,
     flagged,
     mean_pair_correlation: mean(pairs.map((pair) => pair.r)),
+    flat_roles: [...flat],
+    mean_pair_correlation_excluding_flat: mean(livePairs.map((pair) => pair.r)),
   };
   if (maxPair !== undefined) report.max_pair = maxPair;
   return report;
