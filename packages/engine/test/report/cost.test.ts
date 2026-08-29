@@ -70,6 +70,45 @@ describe('measuredCost — the four bases', () => {
     expect(result.note).toContain('LOWER BOUND, not a total');
     expect(result.note).toContain('claude-mystery-9');
   });
+
+  it('is NEVER `measured` when a call failed, however clean the rest of the ledger looks', () => {
+    // The reachable hole this closes. `recordFailedCall` books a call with no
+    // model id, no tokens and no dollars, so `unpriced_models` stays EMPTY and
+    // `cost_usd` stays 0 — and `measured` used to be decided by "nothing
+    // unpriced" alone. Re-emitting a round over a completed category books six
+    // handoff calls exactly like this, and the report printed
+    // "measured $0.00 over 6 call(s) / PASS" over a run that returned nothing.
+    const result = measuredCost(ledger({ calls: 6, failed_calls: 6, cost_usd: 0, unpriced_models: [] }));
+
+    expect(result.basis).toBe('lower_bound');
+    expect(result.note).toContain('LOWER BOUND, not a total');
+    expect(result.note).toContain('6 of 6 call(s) FAILED');
+    expect(result.note).not.toContain('this is the cost');
+  });
+
+  it('drops a fully-priced run to `lower_bound` on a single failure', () => {
+    // One failure in twenty is still an unknown shortfall: the failed call was
+    // billed for its input and this ledger cannot say how much.
+    const result = measuredCost(ledger({ calls: 20, failed_calls: 1, cost_usd: 0.42, unpriced_models: [] }));
+
+    expect(result.basis).toBe('lower_bound');
+    expect(result.note).toContain('1 of 20 call(s) FAILED');
+    // The priced total is still reported — it is a floor, not a discard.
+    expect(result.total.cost_usd).toBeCloseTo(0.42, 12);
+  });
+
+  it('still says UNMEASURED, not LOWER BOUND, when a locally-seeded run also had failures', () => {
+    // `unmeasured` is the stronger warning of the two — nothing at all could be
+    // priced — so a failure inside a locally-seeded run must not soften it into
+    // "some of this is a real total". The failures are appended to that note.
+    const result = measuredCost(
+      ledger({ calls: 10, failed_calls: 3, cost_usd: 0, unpriced_models: ['local-subagent'] }),
+    );
+
+    expect(result.basis).toBe('unmeasured');
+    expect(result.note).toContain('UNMEASURED — not $0.00');
+    expect(result.note).toContain('3 of 10 call(s) FAILED');
+  });
 });
 
 describe('priceTable', () => {

@@ -30,7 +30,7 @@
 import { DISCRIMINATION_FLOOR, JUROR_CORRELATION_CEILING, RECAL_NIGHTLY_TOP_N } from '../config/constants.js';
 import type { PanelOrdering } from '../panels/ordering.js';
 import { categorySlug } from '../panels/seeded.js';
-import type { RunResults } from '../run/types.js';
+import type { RunResults, RunSeeding } from '../run/types.js';
 import type { Health, Jury, Persona, Product, Ranking } from '../types.js';
 import type { AbCheckResult } from './ab-check.js';
 import {
@@ -97,6 +97,19 @@ export interface ReportProvenance {
   engine_version: string;
   /** `delivered` or `failed`, from `results.meta`. */
   outcome: string;
+  /**
+   * WHAT answered the panels (`RunMeta.seeding`), in one line.
+   *
+   * The other six fields say which version of the prompts produced these
+   * numbers; this one says whether the numbers mean what the report's score
+   * levels imply. A `local_subagent` run's absolute scores and its whole cost
+   * column do not transfer to the priced path, and sections 1, 8 and 9 print
+   * score levels, deduction rates and distributions with no other hedge on them.
+   * It belongs in the header table, beside the versions, rather than as the last
+   * bullet of the last section — a figure quoted onward has to carry its own
+   * qualification.
+   */
+  seeding: string;
 }
 
 /** Everything the Phase 1 report contains. Rendered by `renderReport`. */
@@ -212,6 +225,7 @@ export function buildReport(input: ReportInput): ReportModel {
       uniqueness_version: input.results.meta.uniqueness_version,
       engine_version: input.results.meta.engine_version,
       outcome: input.results.meta.outcome,
+      seeding: describeSeeding(input.results.meta.seeding),
     },
     products: rows.length,
     metrics: metricNames,
@@ -237,6 +251,25 @@ export function buildReport(input: ReportInput): ReportModel {
 
   model.gates = buildGates(model);
   return model;
+}
+
+/**
+ * `meta.seeding` as one printable line, with the consequence attached.
+ *
+ * Absence is NOT "unknown": `RunMeta.seeding` was added with the local path, so
+ * a run without it predates that path and was `messages_api` by construction —
+ * but it says so as an inference rather than as a record, because that is what
+ * it is.
+ */
+function describeSeeding(seeding: RunSeeding | undefined): string {
+  if (seeding === undefined) {
+    return 'messages_api (inferred: this run predates the seeding record, when no other path existed)';
+  }
+  return seeding.path === 'local_subagent'
+    ? 'local_subagent — Claude Code subagents answered every panel, NOT the priced Messages API. ' +
+        'Absolute score levels and every cost figure below do not transfer to production; the fix-1.1 ' +
+        'A/B cannot be produced on this path at all. See the warnings section for the full caveat.'
+    : 'messages_api — the priced, effort-controlled production path.';
 }
 
 /**
@@ -352,7 +385,10 @@ function buildGates(model: ReportModel): GateCheck[] {
       value: 'not produced',
       note:
         'No ab.json for this category. The A/B check is the ONLY evidence that the calibration sample ' +
-        'works, and without it Phase 1 has not answered its own question. Run `engine ab --category "…" --run`.',
+        'works, and without it Phase 1 has not answered its own question. Run `engine ab --category "…" --run` ' +
+        '— which REQUIRES an ANTHROPIC_API_KEY and spends. On a locally-seeded (keyless) category that ' +
+        'command cannot run, so this gate stays MISSING and `engine report` exits 1 permanently: that is ' +
+        'the correct outcome for such a run, not a failed seeding.',
     });
   } else {
     const summary = model.ab.summary;

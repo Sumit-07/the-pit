@@ -254,6 +254,76 @@ describe('runCategory — a juror that returns nothing (brief §2.3)', () => {
     expect(outcome.results.scoreLog).toEqual([]);
     expect(outcome.results.meta.phases.score.failure?.coverage?.missing_roles).toEqual(['Juror 3']);
   });
+
+  it('records it as a `schema` failure, not as a provider failure', async () => {
+    // The silent juror ANSWERED — `{scores: []}` is a well-formed tool call that
+    // then breaks `01 §5.1`. Reporting that as `model_call` names a provider
+    // outage in the integrity record of a run where the provider worked fine.
+    // `schema` is documented at run/types.ts and was unreachable at the phase
+    // level; both codes are retryable, so only the record changes.
+    const { outcome } = await run({ products: 10, options: silent });
+    expect(outcome.results.meta.phases.score.failure?.code).toBe('schema');
+    expect(outcome.results.meta.phases.score.failure?.retryable).toBe(true);
+  });
+
+  it('still says `model_call` when the provider is the one that failed', async () => {
+    // The other half: a thrown `ModelCallError` must not be relabelled `schema`
+    // just because the new branch exists.
+    const { outcome } = await run({
+      products: 10,
+      options: { uniquenessError: () => new ModelCallError('503', { retryable: true, status: 503 }) },
+    });
+    expect(outcome.results.meta.phases.uniqueness.failure?.code).toBe('model_call');
+  });
+});
+
+describe('runCategory — brief §2.3 partial success with every call successful', () => {
+  /**
+   * Two installed jurors sharing one `role`. `validateJury` refuses this at
+   * install time, and the phase is the last line of defence if one ever reaches
+   * it: every call returns and validates, nothing is missing and no cell is
+   * substituted — but `mergeScoreLog` folds the twins into ONE juror, so
+   * `computeComposite` divides by 5 where 6 are installed and every composite
+   * (and `discrimination` over them) is scaled by 6/5.
+   */
+  const twinned = {
+    ...JURY,
+    jurors: [...JURY.jurors.slice(0, 5), { ...JURY.jurors[5]!, role: JURY.jurors[0]!.role }],
+  };
+
+  it('fails with `incomplete_panel` rather than delivering a board divided by five', async () => {
+    const { outcome } = await run({ products: 10, jury: twinned });
+
+    expect(outcome.status).toBe('failed');
+    if (outcome.status !== 'failed') throw new Error('unreachable');
+    // `brief §2.3`: retry free, never deliver.
+    expect(outcome.retryable).toBe(true);
+    expect(outcome.results.meta.phases.score.failure?.code).toBe('incomplete_panel');
+    expect(outcome.results.meta.outcome).toBe('failed');
+  });
+
+  it('reaches that branch with no failed call and no substituted cell', async () => {
+    // What makes this case distinct from the silent-juror one above: there is
+    // nothing wrong with any ANSWER. If a future change made the phase infer
+    // partial success from failures alone, this test is the one that notices.
+    const { outcome } = await run({ products: 10, jury: twinned });
+    const coverage = outcome.results.meta.phases.score.failure?.coverage;
+
+    expect(coverage?.missing_roles).toEqual([]);
+    expect(coverage?.substituted).toEqual([]);
+    expect(coverage?.jurors_answered).toBe(JUROR_COUNT - 1);
+    expect(coverage?.jurors_expected).toBe(JUROR_COUNT);
+    expect(outcome.results.meta.ledger.total.failed_calls).toBe(0);
+  });
+
+  it('names the cause, so a failure with no missing role is still readable', async () => {
+    const { outcome } = await run({ products: 10, jury: twinned });
+    if (outcome.status !== 'failed') throw new Error('expected a failure');
+
+    const causes = outcome.failures.flatMap((failure) => failure.causes);
+    expect(causes.some((cause) => cause.includes('share a role'))).toBe(true);
+    expect(causes.some((cause) => cause.includes('divides by 5'))).toBe(true);
+  });
 });
 
 describe('runCategory — persistence and resumability', () => {

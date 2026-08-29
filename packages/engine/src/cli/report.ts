@@ -12,7 +12,14 @@
  * The one number a stored run cannot supply is the fix-1.1 A/B, because producing
  * it means scoring products through both paths. That lives in `engine ab`, which
  * writes `ab.json`; this command reads the file if it exists and renders the gate
- * as MISSING if it does not.
+ * as MISSING if it does not. `engine ab` needs an API key, so on a locally-seeded
+ * category that gate is permanently MISSING and this command permanently exits 1
+ * — which is the correct outcome for such a run, not a failure of it.
+ *
+ * What it will NOT report on is a run whose `results.json` says `failed`. A
+ * ranking is written only on delivery and is never removed, so a failed run can
+ * sit beside an earlier run's board; joining the two would attribute that board
+ * to this score log. See the check below.
  */
 
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -63,6 +70,24 @@ export async function reportCommand(args: ParsedArgs, deps: ReportDeps): Promise
   }
 
   const results = await loadResults(workdir, slug);
+
+  // A FAILED run has no verdict, so it has no gate report either. `ranking.json`
+  // is written only for a delivered run and is never removed, so a category that
+  // completed and was then re-emitted (`seed --emit` overwrites `results.json`
+  // with `outcome: "failed"` while every handoff call books a failed call) leaves
+  // a fresh, failed `results.json` beside a STALE `ranking.json`. Reporting over
+  // that pair joins this run's integrity record to the previous run's board and
+  // prints the result as a Phase 1 gate. Refused by name, with the file that
+  // decides it, rather than rendered with a warning nobody reads.
+  if (results.meta.outcome === 'failed') {
+    throw new UsageError(
+      `${join(runDir(workdir, slug), 'results.json')} has outcome "failed", so this run produced no board. ` +
+        'Any ranking.json beside it belongs to an EARLIER run and reporting over the pair would attribute ' +
+        "that board to this run's score log (brief §2.3 — a degraded verdict is never delivered). " +
+        'Finish the run first: `engine seed --category "…" --ingest --round 2`, then `engine rank`.',
+    );
+  }
+
   const ranking = await loadRanking(workdir, slug);
   const jury = await loadJury(workdir, slug);
   const personas = await loadPersonas(workdir, slug);

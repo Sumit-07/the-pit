@@ -74,9 +74,11 @@ export function priceTable(): PriceRow[] {
 // --- What was actually spent ----------------------------------------------------
 
 /**
- * - `measured` — every call reported a priced model id. `cost_usd` is the cost.
- * - `lower_bound` — some calls did, some did not. `cost_usd` is short by an
- *   unknown amount and must be labelled as a floor.
+ * - `measured` — every call reported a priced model id AND every call came back.
+ *   `cost_usd` is the cost.
+ * - `lower_bound` — some calls did, some did not — either because a model id
+ *   carried no price, or because a call FAILED before reporting one. `cost_usd`
+ *   is short by an unknown amount and must be labelled as a floor.
  * - `unmeasured` — no call reported a priced id, so `cost_usd` is $0 because
  *   nothing could be priced, NOT because nothing was spent. The normal state of
  *   a Task 9 locally-seeded run.
@@ -103,20 +105,40 @@ export interface MeasuredCost {
  * `unpriced_models` being non-empty while `cost_usd` is exactly 0. A run that
  * mixed a priced and an unpriced model would have a non-zero cost and lands in
  * `lower_bound`, which is the weaker and therefore safer claim.
+ *
+ * ## A failed call is a hole in the total, not an absence from it
+ *
+ * `measured` used to be decided by `unpriced_models` alone, and a failed call
+ * reports no model id at all — so a ledger of nothing but failures had an empty
+ * `unpriced_models` and printed "MEASURED … this is the cost" over $0.00. That
+ * is the exact understatement `src/run/ledger.ts` refuses ("a ledger that hid
+ * that would understate the cost of exactly the runs that cost the most"), and
+ * it is reachable: re-emitting a round over a completed category books every
+ * handoff call as a failure. `failed_calls` therefore blocks `measured`
+ * outright; the shortfall is unknown, so the claim drops to `lower_bound`.
  */
 export function measuredCost(ledger: CostLedger): MeasuredCost {
   const { total } = ledger;
   const unpriced = [...total.unpriced_models];
+  // `?? 0` for a `results.json` written before the field existed — those
+  // documents are read back untyped and trusted (`src/cli/load.ts`).
+  const failed = total.failed_calls ?? 0;
 
   const basis: CostBasis =
     total.calls === 0 ? 'no_calls' :
-    unpriced.length === 0 ? 'measured' :
+    unpriced.length === 0 ? (failed === 0 ? 'measured' : 'lower_bound') :
     total.cost_usd === 0 ? 'unmeasured' :
     'lower_bound';
 
+  const failedClause =
+    failed === 0
+      ? ''
+      : ` ${failed} of ${total.calls} call(s) FAILED before reporting any usage: they were billed for their ` +
+        'input and booked at $0 here, so the figure is short by an unknown amount.';
+
   const note =
     basis === 'measured'
-      ? 'MEASURED — every call reported a priced model id; this is the cost.'
+      ? 'MEASURED — every call reported a priced model id and every call came back; this is the cost.'
       : basis === 'no_calls'
         ? 'No model calls were made in this run, so $0.00 is the whole story. ' +
           'A resumed run reads its phases off disk and spends nothing; the spend is in the run that produced them.'
@@ -124,9 +146,14 @@ export function measuredCost(ledger: CostLedger): MeasuredCost {
           ? 'UNMEASURED — not $0.00. No call reported a model id this engine has a price for ' +
             `(${unpriced.map((id) => JSON.stringify(id)).join(', ')}), so every token was booked at zero. ` +
             'A locally-seeded run (Task 9) is unmeasurable by construction: Claude Code subagents ' +
-            'do not report a priced model id. Per-run cost must be re-baselined once a key exists.'
-          : 'LOWER BOUND, not a total — some calls reported a model id with no price ' +
-            `(${unpriced.map((id) => JSON.stringify(id)).join(', ')}) and their tokens were booked at $0.`;
+            'do not report a priced model id. Per-run cost must be re-baselined once a key exists.' +
+            failedClause
+          : 'LOWER BOUND, not a total —' +
+            (unpriced.length === 0
+              ? ''
+              : ' some calls reported a model id with no price ' +
+                `(${unpriced.map((id) => JSON.stringify(id)).join(', ')}) and their tokens were booked at $0.`) +
+            failedClause;
 
   return { basis, phases: ledger.phases, total, unpriced_models: unpriced, note };
 }

@@ -106,14 +106,22 @@ export const PHASES_IN_ROUND: Readonly<Record<HandoffRound, readonly PhaseName[]
  * The model-provenance caveat, stamped into `results.json.meta.seeding` and
  * repeated in `meta.warnings` so it travels with the run into the report.
  *
- * Verbatim from `docs/plans/phase-1-engine.md` Task 9.3.
+ * `docs/plans/phase-1-engine.md` Task 9.3's sentence, with one correction. The
+ * plan listed "the fix-1.1 A/B" among the results that stay valid on this path;
+ * it was written before the limitation was found. `engine ab` requires an API
+ * key, so a locally-seeded category cannot produce a fix-1.1 A/B AT ALL — the
+ * report's own gate table says MISSING two sections above where this text is
+ * printed. A claim contradicted by the document carrying it does not belong in
+ * an integrity record, so the A/B is named as excluded rather than left out
+ * silently: a reader who saw the old wording has to be told which way it moved.
  */
 export const LOCAL_SEEDING_CAVEAT =
   'Locally-seeded scores come from Claude Code subagents, not from the claude-haiku-4-5 / ' +
   'claude-sonnet-5 Messages API calls production will make, and the local path exposes no effort ' +
-  'control. The pipeline, the fix-1.1 A/B, cluster behaviour, discrimination and juror-correlation ' +
-  'results are all valid. ABSOLUTE SCORE LEVELS AND PER-RUN COST DO NOT TRANSFER TO PRODUCTION and ' +
-  'must be re-baselined once a key exists.';
+  'control. The pipeline, cluster behaviour, discrimination and juror-correlation results are all ' +
+  'valid. THE FIX-1.1 A/B IS NOT: `engine ab` needs an API key, so a keyless seed cannot produce it ' +
+  'and that gate stays MISSING. ABSOLUTE SCORE LEVELS AND PER-RUN COST DO NOT TRANSFER TO PRODUCTION ' +
+  'and must be re-baselined once a key exists.';
 
 /** What `runCategory` stamps into `meta.seeding` for a locally-seeded run. */
 export const LOCAL_SUBAGENT_SEEDING: Readonly<RunSeeding> = Object.freeze({
@@ -159,11 +167,18 @@ export interface HandoffCall {
  * Every call the run will make, per phase, IN THE ORDER THE PHASES MAKE THEM.
  *
  * Score is juror-major and chunk-minor (`runScorePhase`'s flat fan-out); Customer
- * is persona order. That ordering is how a request is matched to its descriptor,
- * and it is verified rather than trusted: on ingest the request the orchestrator
- * built must equal the one on disk byte for byte, so a plan that drifted out of
- * step with the phase fails loudly instead of attributing one juror's answer to
- * another.
+ * is persona order. That ordering is how a request is matched to its descriptor.
+ *
+ * It is checked on INGEST, not on emit. `sameRequest` compares the request the
+ * orchestrator just built against the one on disk byte for byte, so a plan that
+ * has drifted out of step with the phase fails loudly there instead of
+ * attributing one juror's answer to another. Nothing checks, at emit time, that
+ * the request the cursor hands a descriptor actually contains that descriptor's
+ * products — the file could be misnamed and the emit would not notice. Both
+ * sides iterate the same lists deterministically, so a drift would have to
+ * appear and disappear between the two passes to escape; but the guarantee this
+ * mechanism provides is "an answer cannot be ingested against a different
+ * request", not "a request cannot be misfiled".
  */
 export interface HandoffPlan {
   score: readonly HandoffCall[];

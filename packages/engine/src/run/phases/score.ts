@@ -112,6 +112,13 @@ export async function runScorePhase(input: ScorePhaseInput): Promise<PhaseResult
   let anyRetryable = false;
   let anyTerminal = false;
   let terminalCode: 'truncated' | 'internal' | undefined;
+  // `schema` is a documented `FailureCode` (`run/types.ts`) and was unreachable
+  // at the phase level: a juror that answered but broke `01 §5`'s rules was
+  // reported as `model_call`, i.e. as a provider failure. Both are retryable, so
+  // nothing downstream behaved differently — but the integrity record named the
+  // wrong cause, and "the provider failed" and "the panel answered badly" are
+  // not the same finding for anyone reading it afterwards.
+  let allSchema = true;
 
   for (const [jurorIndex, juror] of input.jury.jurors.entries()) {
     const results = byJuror.get(jurorIndex) ?? [];
@@ -121,6 +128,7 @@ export async function runScorePhase(input: ScorePhaseInput): Promise<PhaseResult
       for (const failure of failures) {
         if (failure.ok) continue;
         causes.push(failure.message);
+        if (failure.code !== 'schema') allSchema = false;
         if (failure.retryable) anyRetryable = true;
         else {
           anyTerminal = true;
@@ -162,7 +170,7 @@ export async function runScorePhase(input: ScorePhaseInput): Promise<PhaseResult
       cost,
       warnings,
       failure: {
-        code: anyTerminal ? (terminalCode ?? 'model_call') : 'model_call',
+        code: anyTerminal ? (terminalCode ?? 'model_call') : allSchema ? 'schema' : 'model_call',
         retryable: !anyTerminal && anyRetryable,
         message:
           `merit jury: ${causes.length} of ${settled.length} scoring call(s) did not return a usable answer, ` +

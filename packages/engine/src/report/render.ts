@@ -107,6 +107,10 @@ function header(model: ReportModel): string {
       ['field', 'value'],
       [
         ['run outcome', p.outcome],
+        // First of the provenance rows, above the versions. The versions say
+        // which prompts produced these numbers; this says whether the score
+        // LEVELS in sections 1, 8 and 9 mean what they appear to mean.
+        ['seeding (what answered the panels)', p.seeding],
         ['category_version', p.category_version],
         ['prompt_version', p.prompt_version],
         ['persona_version', p.persona_version],
@@ -762,6 +766,10 @@ export function formatReportSummary(model: ReportModel, path: string): string {
     '',
     `  ${model.products} products, ${model.completeness.jurors_present}/${model.completeness.jurors_expected} jurors, ` +
       `${model.metrics.length} metrics, run outcome ${model.provenance.outcome}`,
+    // On the terminal too, and above the gate table rather than at the end of
+    // it. Every score level printed below was produced by whatever this line
+    // names, and this summary is what gets pasted into a message.
+    `  Seeding: ${model.provenance.seeding}`,
     '',
   ];
 

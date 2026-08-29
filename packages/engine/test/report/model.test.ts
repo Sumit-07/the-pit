@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { DISCRIMINATION_FLOOR } from '../../src/config/constants.js';
+import { DISCRIMINATION_FLOOR, MODEL_ID_LOCAL_SUBAGENT } from '../../src/config/constants.js';
 import { FixtureClient } from '../../src/model/fixture-client.js';
+import { LOCAL_SUBAGENT_SEEDING } from '../../src/model/handoff-client.js';
 import type { AbCheckResult } from '../../src/report/ab-check.js';
 import { buildReport } from '../../src/report/model.js';
 import type { GateCheck, ReportModel } from '../../src/report/model.js';
@@ -187,6 +188,18 @@ describe('buildReport — the gate table', () => {
     expect(fix.status).toBe('missing');
     expect(fix.note).toContain('ONLY evidence');
     expect(fix.note).toContain('engine ab');
+  });
+
+  it('says the remedy needs a key, so a keyless run is not told to run a command it cannot', async () => {
+    // The note names `engine ab` as the fix, and `engine ab` requires an
+    // ANTHROPIC_API_KEY. On a locally-seeded category that gate is permanently
+    // MISSING and `engine report` therefore always exits 1 — an executor that
+    // does not know this reads a correct run as a failed one and retries it.
+    const model = await report();
+    const fix = gate(model, 'fix 1.1 evidence (A/B vs test-retest)');
+    expect(fix.note).toContain('ANTHROPIC_API_KEY');
+    expect(fix.note).toContain('exits 1');
+    expect(fix.note).toContain('not a failed seeding');
   });
 
   it('flags a fragile panel and quotes the consequence', async () => {
@@ -389,6 +402,78 @@ describe('buildReport — the gate table', () => {
     expect(schedule.note).toContain('DECISIONS.md S7 leaves the Floor question OPEN');
     // The magnitude caveat travels on the verdict row, not only in the body.
     expect(schedule.note).toContain('DECISIONS.md S5');
+  });
+});
+
+describe('buildReport — the seeding record', () => {
+  /** The same fixture run, stamped as answered by local Claude Code subagents. */
+  async function localReport(): Promise<ReportModel> {
+    const products = makeProducts(CATEGORY_SIZE);
+    const outcome = await runCategory({
+      category: CATEGORY,
+      products,
+      jury: JURY,
+      personas: PANEL,
+      client: new FixtureClient(makeScript({ clusterPlan: 'pairs', modelId: MODEL_ID_LOCAL_SUBAGENT })),
+      store: new MemoryRunStore(CATEGORY),
+      config: { categoryVersion: CATEGORY_VERSION, seeding: LOCAL_SUBAGENT_SEEDING },
+    });
+    if (outcome.status !== 'delivered') throw new Error('fixture seed run did not deliver');
+    return buildReport({
+      ranking: outcome.ranking,
+      results: outcome.results,
+      products,
+      jury: JURY,
+      personas: PANEL.personas,
+    });
+  }
+
+  it('names the path that answered the panels, beside the versions', async () => {
+    // `meta.seeding` decided every score level in sections 1, 8 and 9, and until
+    // now only `engine rank` read it: the report named six versions and omitted
+    // the one field that says whether its numbers mean what they appear to.
+    const model = await localReport();
+    expect(model.provenance.seeding).toContain('local_subagent');
+    expect(model.provenance.seeding).toContain('NOT the priced Messages API');
+    expect(model.provenance.seeding).toContain('do not transfer to production');
+  });
+
+  it('calls an absent seeding record an INFERENCE, not a record', async () => {
+    // Runs written before Task 9 have no `meta.seeding` and were `messages_api`
+    // by construction — but the report says which of the two that is.
+    const model = await report();
+    expect(model.provenance.seeding).toContain('messages_api');
+    expect(model.provenance.seeding).toContain('inferred');
+  });
+
+  it('puts it in the header table and on the terminal summary, not only in the warnings', async () => {
+    const model = await localReport();
+    const markdown = renderReport(model);
+    const summary = formatReportSummary(model, '/tmp/report.md');
+
+    expect(markdown).toContain('seeding (what answered the panels)');
+    expect(markdown).toContain('local_subagent');
+    // Above the versions it qualifies, and above the numbers it qualifies.
+    expect(markdown.indexOf('seeding (what answered the panels)')).toBeLessThan(
+      markdown.indexOf('| category_version |'),
+    );
+    expect(markdown.indexOf('seeding (what answered the panels)')).toBeLessThan(
+      markdown.indexOf('## 1. Does the jury separate the products?'),
+    );
+
+    // The summary is what gets pasted into a message, so the caveat travels on
+    // it rather than only in the file's last section.
+    expect(summary).toContain('Seeding: local_subagent');
+  });
+
+  it('carries the corrected caveat, which no longer claims a fix-1.1 A/B', async () => {
+    // The A/B cannot be produced without an API key, and this report's own gate
+    // table says MISSING two sections above where the caveat is printed.
+    const model = await localReport();
+    const warning = model.warnings[0] ?? '';
+    expect(warning).toContain('THE FIX-1.1 A/B IS NOT');
+    expect(warning).not.toContain('The pipeline, the fix-1.1 A/B');
+    expect(renderReport(model)).toContain('THE FIX-1.1 A/B IS NOT');
   });
 });
 

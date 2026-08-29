@@ -78,7 +78,16 @@ export function auditScoreCoverage(input: CoverageInput): ScoreCoverage {
   }
 
   return {
-    complete: missingRoles.length === 0 && substituted.length === 0,
+    // `answered.size === expectedRoles.length` is the third condition, and it is
+    // not implied by the other two. Two installed jurors sharing one `role` both
+    // answer, so nothing is missing and no cell is substituted — yet
+    // `mergeScoreLog` folds them into ONE juror and `computeComposite` divides
+    // every composite by 5 where 6 are installed. That is the silent reweighting
+    // this module's header exists to catch, and it is exactly what the report's
+    // own `panelCompleteness` already refuses (`jurors.length === jury.length &&
+    // substituted === 0`). The orchestrator's check and the board's disclosure
+    // must not disagree about what "complete" means.
+    complete: missingRoles.length === 0 && substituted.length === 0 && answered.size === expectedRoles.length,
     missing_roles: missingRoles,
     substituted,
     jurors_answered: answered.size,
@@ -98,6 +107,18 @@ export function describeCoverage(coverage: ScoreCoverage, sampleSize = 5): strin
 
   for (const role of coverage.missing_roles) {
     causes.push(`juror ${JSON.stringify(role)} returned no scores at all`);
+  }
+
+  // The one incompleteness that names no role and no cell: fewer DISTINCT roles
+  // answered than are installed, with none of them missing. Said out loud,
+  // because a failure whose causes list is empty is unreadable.
+  if (coverage.missing_roles.length === 0 && coverage.jurors_answered < coverage.jurors_expected) {
+    causes.push(
+      `${coverage.jurors_answered} distinct juror role(s) answered where ${coverage.jurors_expected} are ` +
+        'installed, and none is missing — two installed jurors share a role, so the composite divides by ' +
+        `${coverage.jurors_answered} and every score is scaled by ` +
+        `${coverage.jurors_expected}/${coverage.jurors_answered}`,
+    );
   }
 
   const sample = coverage.substituted.slice(0, sampleSize);

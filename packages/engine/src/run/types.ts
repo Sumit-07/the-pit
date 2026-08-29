@@ -89,6 +89,19 @@ export type FailureCode = 'model_call' | 'schema' | 'truncated' | 'incomplete_pa
 export interface PhaseCost {
   /** Model calls actually made. Zero on a skipped phase — that is the point of skipping. */
   calls: number;
+  /**
+   * Calls that threw before reporting a `usage` figure, counted inside `calls`.
+   *
+   * A failed call was still billed for its input, and it reports NO model id — so
+   * it leaves no trace in `unpriced_models` and `cost_usd` absorbs it as a
+   * silent zero. Without this field a ledger of nothing but failures reads as
+   * "every call reported a priced model id" (`measuredCost`'s test for
+   * `measured`), and the report would print `MEASURED — $0.00` over a run that
+   * spent real money and returned nothing. That is precisely the understatement
+   * `PhaseLedger`'s header refuses to allow, and `unpriced_models` alone cannot
+   * catch it.
+   */
+  failed_calls: number;
   usage: TokenUsage;
   cost_usd: number;
   /**
@@ -295,11 +308,13 @@ export interface RunDemand {
  * incomplete if it cannot say what answered the panels. Two paths exist and they
  * are not interchangeable: `messages_api` is the priced, `effort`-controlled
  * production path, and `local_subagent` is `01 §1`'s keyless path, where Claude
- * Code subagents answer through `HandoffClient`. The pipeline, the clusters, the
- * discrimination and correlation figures and the fix-1.1 A/B are all valid on
- * either; absolute score levels and per-run cost are not comparable across them.
- * `caveat` is the sentence that says so, carried with the run rather than left in
- * a document beside it.
+ * Code subagents answer through `HandoffClient`. The pipeline, the clusters and
+ * the discrimination and correlation figures are valid on either; absolute score
+ * levels and per-run cost are not comparable across them. The fix-1.1 A/B is
+ * valid on neither list: `engine ab` requires an API key, so a `local_subagent`
+ * run cannot produce one at all and that gate stays MISSING. `caveat` is the
+ * sentence that says so, carried with the run rather than left in a document
+ * beside it.
  */
 export interface RunSeeding {
   path: 'messages_api' | 'local_subagent';

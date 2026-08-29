@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { validateChoiceResult } from '../../src/panels/schemas.js';
 import { clusterMembers, reduceDemand } from '../../src/rank/demand.js';
 import type { DemandLogEntry, UniquenessResult } from '../../src/types.js';
 
@@ -360,5 +361,98 @@ describe('reduceDemand — a mixed uniqueness result still scores the whole clus
     expect(demandRaw.get(0)).toBeCloseTo(0.7518181818, PRECISION);
     expect(demandRaw.get(1)).toBeCloseTo(0.5109090909, PRECISION);
     expect(demandRaw.get(2)).toBeCloseTo(0.4206060606, PRECISION);
+  });
+});
+
+describe('reduceDemand — the guard `validateChoiceResult` holds, expressed as arithmetic', () => {
+  /*
+   * `validateChoiceResult` refuses a persona that answers one `cluster_id`
+   * twice. Nothing pinned that guard against what it protects, so this fixture
+   * runs the malformed answer THROUGH `reduceDemand` to show the damage, and
+   * then asserts the validator refuses the identical payload — which is why the
+   * arithmetic below can never be reached from a model.
+   *
+   * Two personas, one cluster {0, 1}. P1 answers c1 TWICE (first_pick 0,
+   * strength 100 both times); P2 answers once (first_pick 1, strength 50).
+   *
+   * DOUBLE-COUNTED (what reduceDemand computes if the answer got through)
+   *   votes    p0 = 1.0 + 1.0 = 2.0   p1 = 1.0        total = 3.0
+   *   capture  {P1, P2} / 2 = 1
+   *   share    p0 = 2/3               p1 = 1/3
+   *   breadth  p0 = 2/3               p1 = 1/3
+   *   intensity p0: strengths [100, 100] -> top 2 mean 100 -> 1.0
+   *             p1: strengths [50]       -> 0.5
+   *   demand   p0 = 0.4*(2/3) + 0.6*1.0 = 4/15 + 3/5 = 13/15 = 0.8666666667
+   *            p1 = 0.4*(1/3) + 0.6*0.5 = 2/15 + 3/10 = 13/30 = 0.4333333333
+   *
+   * HONEST (P1 answering once, the only shape the validator admits)
+   *   votes    p0 = 1.0               p1 = 1.0        total = 2.0
+   *   capture  1;  share 1/2 each;  breadth 1/2 each
+   *   intensity p0: [100] -> 1.0      p1: [50] -> 0.5
+   *   demand   p0 = 0.4*0.5 + 0.6*1.0 = 0.2 + 0.6 = 0.8
+   *            p1 = 0.4*0.5 + 0.6*0.5 = 0.2 + 0.3 = 0.5
+   *
+   * One duplicated line therefore adds 1/15 to the winner and takes 1/15 off
+   * the runner-up: it buys a product a second vote and a second helping of
+   * conviction from ONE buyer, which is the whole thing a forced choice is for.
+   */
+  const PAIR: UniquenessResult = {
+    clusters: [{ cluster_id: 'c1', label: 'Note takers', member_ids: [0, 1] }],
+    products: [
+      { id: 0, uniqueness_score: 40, cluster_id: 'c1', reason: 'crowded' },
+      { id: 1, uniqueness_score: 50, cluster_id: 'c1', reason: 'familiar' },
+    ],
+  };
+
+  const DOUBLE_ANSWER = {
+    choices: [
+      { cluster_id: 'c1', first_pick: 0, strength: 100, reason: 'the one I would buy' },
+      { cluster_id: 'c1', first_pick: 0, strength: 100, reason: 'still the one I would buy' },
+    ],
+  };
+
+  const doubled: DemandLogEntry[] = [
+    { persona: 'P1', choices: DOUBLE_ANSWER.choices },
+    { persona: 'P2', choices: [{ cluster_id: 'c1', first_pick: 1, strength: 50, reason: 'cheaper' }] },
+  ];
+
+  const honest: DemandLogEntry[] = [
+    { persona: 'P1', choices: [{ cluster_id: 'c1', first_pick: 0, strength: 100, reason: 'the one I would buy' }] },
+    { persona: 'P2', choices: [{ cluster_id: 'c1', first_pick: 1, strength: 50, reason: 'cheaper' }] },
+  ];
+
+  it('would let one persona vote twice and lend conviction twice', () => {
+    const { demandRaw, detail } = reduceDemand(doubled, PAIR);
+
+    expect(demandRaw.get(0)).toBeCloseTo(0.8666666667, PRECISION);
+    expect(demandRaw.get(1)).toBeCloseTo(0.4333333333, PRECISION);
+    // Both halves of the double count, named separately: two votes out of three
+    // from one buyer, and a two-value top-2 mean built from one answer.
+    expect(detail.get(0)?.share).toBeCloseTo(2 / 3, PRECISION);
+    expect(detail.get(0)?.intensity).toBeCloseTo(1.0, PRECISION);
+    expect(detail.get(0)?.picks).toHaveLength(2);
+    expect(detail.get(0)?.picks.every((pick) => pick.persona === 'P1')).toBe(true);
+  });
+
+  it('differs from the honest answer by exactly one buyer’s worth of demand', () => {
+    const { demandRaw } = reduceDemand(honest, PAIR);
+
+    expect(demandRaw.get(0)).toBeCloseTo(0.8, PRECISION);
+    expect(demandRaw.get(1)).toBeCloseTo(0.5, PRECISION);
+    // 13/15 - 4/5 = 1/15, and 13/30 - 1/2 = -1/15. The duplicate moves the pair
+    // apart by 2/15 of a `demand_raw` unit on a two-product cluster.
+    expect(0.8666666667 - 0.8).toBeCloseTo(1 / 15, 8);
+    expect(0.4333333333 - 0.5).toBeCloseTo(-1 / 15, 8);
+  });
+
+  it('is unreachable: the validator refuses the exact payload above', () => {
+    // `reduceDemand` has no defence of its own — it trusts the demand log — so
+    // this is the only thing standing between a repeated answer and the
+    // arithmetic in the two cases above.
+    const sets = new Map<string, readonly number[]>([['c1', [0, 1]]]);
+    expect(() => validateChoiceResult(DOUBLE_ANSWER, sets)).toThrow(/answered more than once/);
+    // The honest one passes, so the rejection above is about the repeat and
+    // nothing else in the payload.
+    expect(validateChoiceResult({ choices: [DOUBLE_ANSWER.choices[0]] }, sets)).toHaveLength(1);
   });
 });

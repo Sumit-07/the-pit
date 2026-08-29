@@ -102,9 +102,9 @@ export function tierPrices(tier: ModelTier): ModelPrices {
   return prices;
 }
 
-/** An empty cost: no calls, no tokens, no dollars, nothing unpriced. */
+/** An empty cost: no calls, no tokens, no dollars, nothing unpriced, nothing failed. */
 export function zeroCost(): PhaseCost {
-  return { calls: 0, usage: { ...ZERO_USAGE }, cost_usd: 0, unpriced_models: [] };
+  return { calls: 0, failed_calls: 0, usage: { ...ZERO_USAGE }, cost_usd: 0, unpriced_models: [] };
 }
 
 /**
@@ -115,6 +115,7 @@ export function zeroCost(): PhaseCost {
  */
 export class PhaseLedger {
   private calls = 0;
+  private failedCalls = 0;
   private readonly usage: TokenUsage = { ...ZERO_USAGE };
   private cost = 0;
   private readonly unpriced = new Set<string>();
@@ -130,9 +131,19 @@ export class PhaseLedger {
     if (MODEL_PRICES[modelId] === undefined) this.unpriced.add(modelId);
   }
 
-  /** Record a call that failed before returning a usage figure. Still a call. */
+  /**
+   * Record a call that failed before returning a usage figure. Still a call.
+   *
+   * Counted TWICE over: once in `calls`, and once in `failedCalls`. The second
+   * count is what stops the total being read as complete. A failed call reports
+   * no model id, so it adds nothing to `unpriced` and books $0 — and
+   * `measuredCost` decides `measured` from "nothing unpriced", which a ledger of
+   * nothing but failures satisfies. Recording the failures separately is the
+   * only thing that keeps that classification honest.
+   */
   recordFailedCall(): void {
     this.calls += 1;
+    this.failedCalls += 1;
   }
 
   /** Model ids seen that carry no price, so a caller can say the total is incomplete. */
@@ -147,6 +158,7 @@ export class PhaseLedger {
     // ledger, a report and a terminal table.
     return {
       calls: this.calls,
+      failed_calls: this.failedCalls,
       usage: { ...this.usage },
       cost_usd: this.cost,
       unpriced_models: [...this.unpriced],
@@ -161,6 +173,9 @@ export function buildLedger(phases: Record<PhaseName, PhaseCost>): CostLedger {
   for (const cost of Object.values(phases)) {
     for (const model of cost.unpriced_models) unpriced.add(model);
     total.calls += cost.calls;
+    // `?? 0` for a `results.json` written before this field existed: those
+    // documents are read back untyped and trusted (`src/cli/load.ts`).
+    total.failed_calls += cost.failed_calls ?? 0;
     total.usage.input_tokens += cost.usage.input_tokens;
     total.usage.output_tokens += cost.usage.output_tokens;
     total.usage.cache_creation_input_tokens += cost.usage.cache_creation_input_tokens;

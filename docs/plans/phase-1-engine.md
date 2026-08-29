@@ -323,10 +323,18 @@ stamp it into `results.json.meta`:
 
 > Locally-seeded scores come from Claude Code subagents, not from the
 > `claude-haiku-4-5` / `claude-sonnet-5` Messages API calls production will make, and
-> the local path exposes no `effort` control. The pipeline, the fix-1.1 A/B, cluster
-> behaviour, discrimination and juror-correlation results are all valid. **Absolute
-> score levels and per-run cost do not transfer to production** and must be
-> re-baselined once a key exists.
+> the local path exposes no `effort` control. The pipeline, cluster behaviour,
+> discrimination and juror-correlation results are all valid. **The fix-1.1 A/B is
+> not**: `engine ab` needs an API key, so a keyless seed cannot produce it and that
+> gate stays `MISSING`. **Absolute score levels and per-run cost do not transfer to
+> production** and must be re-baselined once a key exists.
+
+_Corrected after Task 9 landed._ The sentence above originally listed the fix-1.1 A/B
+among the results that stay valid on the local path. It was written before the
+limitation was found: `engine ab` requires an `ANTHROPIC_API_KEY`, so a locally-seeded
+category cannot produce an A/B at all and its Phase 1 report renders that gate as
+`MISSING` — which also means `engine report` exits 1 for such a run, by design.
+`LOCAL_SEEDING_CAVEAT` in `src/model/handoff-client.ts` is authoritative.
 
 ### 9.4 Tests
 

@@ -416,6 +416,7 @@ export function sumLedgers(ledgers: readonly CostLedger[]): CostLedger {
       const from = ledger.phases[name];
       const into = phases[name];
       into.calls += from.calls;
+      into.failed_calls += from.failed_calls;
       into.usage.input_tokens += from.usage.input_tokens;
       into.usage.output_tokens += from.usage.output_tokens;
       into.usage.cache_creation_input_tokens += from.usage.cache_creation_input_tokens;

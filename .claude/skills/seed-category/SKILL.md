@@ -19,10 +19,11 @@ panel's schema and against what that call asked for. Deductions that do not sum 
 > **Model provenance — repeat this in any summary you write.** Locally-seeded scores come
 > from Claude Code subagents, not from the `claude-haiku-4-5` / `claude-sonnet-5` Messages API
 > calls production will make, and the local path exposes no `effort` control. The pipeline,
-> the fix-1.1 A/B, cluster behaviour, discrimination and juror-correlation results are all
-> valid. **Absolute score levels and per-run cost do not transfer to production** and must be
-> re-baselined once a key exists. Cost is stamped `unmeasured`; the report prints
-> "UNMEASURED — not $0.00". Never quote it as measured.
+> cluster behaviour, discrimination and juror-correlation results are all valid. **The
+> fix-1.1 A/B is not**: `engine ab` needs an API key, so a keyless seed cannot produce it and
+> that gate stays `MISSING`. **Absolute score levels and per-run cost do not transfer to
+> production** and must be re-baselined once a key exists. Cost is stamped `unmeasured`; the
+> report prints "UNMEASURED — not $0.00". Never quote it as measured.
 
 ## When to use
 
@@ -44,7 +45,7 @@ From the repo root; `X` is the category name as the workbook spells it.
 | 5 | `pnpm engine seed --category "X" --ingest --round 1` |
 | 6 | `pnpm engine seed --category "X" --emit --round 2` |
 | 7 | `pnpm engine seed --category "X" --ingest --round 2` |
-| 8 | `pnpm engine rank --category "X"`, then `pnpm engine report --category "X"` |
+| 8 | `pnpm engine rank --category "X"`, then `pnpm engine report --category "X"` — **`report` exits 1 here by design**, see step 7 |
 
 ## Procedure
 
@@ -56,16 +57,28 @@ From the repo root; `X` is the category name as the workbook spells it.
 2. **Personas — APPROVAL GATE 2.** Same shape, `--kind personas`. **STOP** again: the roster
    must be genuinely different buyers, including one price-insensitive capability-chaser and
    one high-price-sensitivity defector.
-3. Weak panel? Edit the installed file and **bump `prompt_version` / `persona_version`**.
+3. Weak panel? Edit the installed file and **bump `prompt_version` / `persona_version`**. If
+   this round was already emitted and answered, the next `--emit` refuses with
+   `stale_request`: an answer to the OLD prompt is on disk and would silently become an
+   answer to the new one. Delete the `.response.json` files the command names, re-emit, and
+   re-answer them — the CLI prints the remedy, and nothing else clears it.
 4. **Round 1 (Score ‖ Uniqueness).** `--emit --round 1` prints the request count and every
    path. Per `*.request.json`: dispatch one subagent, hand it the file's `prompt` field
    verbatim, require **only** JSON matching that file's `tools[0].input_schema`, and write it
    to the sibling file named in `response_file`. They are independent — dispatch in parallel.
+   `--emit` also leaves a `results.json` with `outcome: "failed"` in the run directory: emit
+   answers nothing by construction, so the run it drives fails. That is expected mid-flow —
+   `rank` refuses such a run by name, and the successful `--ingest --round 2` overwrites it.
 5. `--ingest --round 1`. If it names missing files, answer those and re-run; answered files
    are not re-read.
 6. **Round 2 (Customer)** — only now, because personas choose *within* round 1's clusters.
    Repeat step 4's loop for `round-2`, then `--ingest --round 2`, which ranks and delivers.
-7. `rank`, then `report`. Relay the gate flags and the provenance caveat.
+7. `rank`, then `report`. Relay the gate flags and the provenance caveat. **`report` exits 1
+   on a locally-seeded category and that is success, not failure.** The fix-1.1 gate reads
+   `MISSING` because only `engine ab` can produce `ab.json` and it requires an
+   `ANTHROPIC_API_KEY`; a `missing` gate is a non-zero exit by design. Do not retry the
+   seeding, do not try to "fix" it, and do not report the run as failed — check that the
+   report file was written and that the only gate without an answer is fix 1.1.
 
 ## Common mistakes
 
@@ -76,3 +89,5 @@ From the repo root; `X` is the category name as the workbook spells it.
 | Quoting the run's cost | It is `unmeasured`, not `$0.00`. See the caveat. |
 | Skipping a gate because the validators passed | They are structural. An agreeable jury and a uniform roster pass every check and produce a board with no information in it. |
 | Editing a `.response.json` to get past ingest | The deduction ledger is the audit trail. Re-dispatch the subagent. |
+| Reading `report`'s exit 1 as a failed seeding | Expected here. The fix-1.1 gate is `MISSING` because `engine ab` needs an API key; a `missing` gate always exits non-zero. Check the report file, then relay the flags. |
+| Seeing `results.json` with `outcome: "failed"` after `--emit` | Expected mid-flow — emit answers nothing, so the run it drives fails. The successful round-2 `--ingest` overwrites it. |

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -129,6 +129,28 @@ describe('engine report', () => {
     const empty = await mkdtemp(join(tmpdir(), 'pit-empty-'));
     await expect(runReport(['report', '--category', CATEGORY, '--workdir', empty])).rejects.toThrow(
       /products\.json/,
+    );
+  });
+
+  it('refuses a run whose results.json says the run FAILED, however good the ranking beside it looks', async () => {
+    // The second half of the reachable repro. `seed --emit` overwrites
+    // `results.json` with `outcome: "failed"` — every handoff call books a
+    // failed call and answers nothing — while `ranking.json` is written only on
+    // delivery and is never removed. Reporting over that pair joins a fresh
+    // failed integrity record to the PREVIOUS run's board and renders it as a
+    // Phase 1 gate. `reportCommand` never looked at `meta.outcome`.
+    const root = await seedWorkdir();
+    const resultsPath = join(root, 'runs', SLUG, 'results.json');
+    const results = JSON.parse(await readFile(resultsPath, 'utf8')) as { meta: { outcome: string } };
+    results.meta.outcome = 'failed';
+    await writeFile(resultsPath, `${JSON.stringify(results, null, 2)}\n`, 'utf8');
+
+    await expect(runReport(['report', '--category', CATEGORY, '--workdir', root])).rejects.toThrow(
+      /outcome "failed"/,
+    );
+    // And it says why the ranking sitting next to it is not an answer.
+    await expect(runReport(['report', '--category', CATEGORY, '--workdir', root])).rejects.toThrow(
+      /EARLIER run/,
     );
   });
 

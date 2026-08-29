@@ -84,6 +84,31 @@ describe('PhaseLedger', () => {
     expect(ledger.total().cost_usd).toBe(0);
   });
 
+  it('counts a failed call AGAIN in failed_calls, because `calls` alone cannot say the total is short', () => {
+    // A failed call reports no model id, so it adds nothing to
+    // `unpriced_models` and nothing to `cost_usd`. `calls` rises, which makes
+    // the ledger look busier but not shorter — and `measuredCost` decides
+    // `measured` from "nothing unpriced". Without this second count a phase of
+    // nothing but failures is indistinguishable from a phase that cost $0.
+    const ledger = new PhaseLedger();
+    ledger.record(MODEL_ID_HAIKU, usage({ input_tokens: 1000 }));
+    ledger.recordFailedCall();
+    ledger.recordFailedCall();
+
+    const total = ledger.total();
+    expect(total.calls).toBe(3);
+    expect(total.failed_calls).toBe(2);
+    // The failures left no other trace: this is the whole reason the field exists.
+    expect(total.unpriced_models).toEqual([]);
+    expect(total.cost_usd).toBeCloseTo((1000 * PRICE_HAIKU_INPUT) / 1e6, 12);
+  });
+
+  it('leaves failed_calls at 0 when every call came back', () => {
+    const ledger = new PhaseLedger();
+    ledger.record(MODEL_ID_HAIKU, usage({ input_tokens: 1000 }));
+    expect(ledger.total().failed_calls).toBe(0);
+  });
+
   it('carries unpriced ids OUT with the cost, not merely on the getter', () => {
     // The getter alone was dead wiring: nothing read it, so an unrecognised id
     // booked $0.0000 and a report printed it as fact. The id now travels in the
@@ -105,25 +130,41 @@ describe('PhaseLedger', () => {
 
 describe('buildLedger', () => {
   it('totals the three phases', () => {
-    const phase = (calls: number, cost: number) => ({
+    const phase = (calls: number, cost: number, failed = 0) => ({
       calls,
+      failed_calls: failed,
       usage: { ...ZERO_USAGE, input_tokens: 10 },
       cost_usd: cost,
       unpriced_models: [],
     });
-    const ledger = buildLedger({ score: phase(6, 0.1), uniqueness: phase(1, 0.05), customer: phase(4, 0.2) });
+    const ledger = buildLedger({ score: phase(6, 0.1, 2), uniqueness: phase(1, 0.05), customer: phase(4, 0.2, 1) });
 
     expect(ledger.total.calls).toBe(11);
     expect(ledger.total.usage.input_tokens).toBe(30);
     expect(ledger.total.cost_usd).toBeCloseTo(0.35, 12);
+    // 2 + 0 + 1: the failures have to survive the roll-up, or the run-level
+    // ledger `results.json` carries loses what each phase knew.
+    expect(ledger.total.failed_calls).toBe(3);
   });
 
   it('starts from an empty cost', () => {
-    expect(zeroCost()).toEqual({ calls: 0, usage: { ...ZERO_USAGE }, cost_usd: 0, unpriced_models: [] });
+    expect(zeroCost()).toEqual({
+      calls: 0,
+      failed_calls: 0,
+      usage: { ...ZERO_USAGE },
+      cost_usd: 0,
+      unpriced_models: [],
+    });
   });
 
   it('unions the unpriced ids across phases, so a short total says so once', () => {
-    const phase = (unpriced: string[]) => ({ calls: 1, usage: { ...ZERO_USAGE }, cost_usd: 0, unpriced_models: unpriced });
+    const phase = (unpriced: string[]) => ({
+      calls: 1,
+      failed_calls: 0,
+      usage: { ...ZERO_USAGE },
+      cost_usd: 0,
+      unpriced_models: unpriced,
+    });
     const ledger = buildLedger({
       score: phase(['local-subagent']),
       uniqueness: phase(['local-subagent']),

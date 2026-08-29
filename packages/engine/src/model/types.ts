@@ -108,7 +108,11 @@ export interface ModelResponse {
   model: string;
 }
 
-/** The one seam. Two adapters implement it: `AnthropicClient` and `FixtureClient`. */
+/**
+ * The one seam. Three adapters implement it: `AnthropicClient` (the priced
+ * Messages API path), `FixtureClient` (offline tests) and `HandoffClient` (Task
+ * 9's keyless local-subagent path). See `src/model/index.ts`.
+ */
 export interface ModelClient {
   complete(request: ModelRequest): Promise<ModelResponse>;
 }
