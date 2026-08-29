@@ -8,26 +8,42 @@
  *
  * ## Why that is a property here, not a rule to remember
  *
- * **This module has no runtime import of `@the-pit/engine`, `@the-pit/db`,
- * `postgres` or an SDK.** The engine types it uses are `import type` and are
- * erased at compile time; the only runtime dependencies are `node:fs/promises`
- * and `node:path`. So "a board read cannot open a database connection or a model
- * client" is checkable by reading the import list, and `test/boards-read-path.test.ts`
- * walks the transitive graph from the routes and fails if anything on it gains
- * one. A rule that is enforced by the module graph does not decay.
+ * **Nothing reachable from this module imports `@the-pit/engine`, `@the-pit/db`,
+ * `postgres` or an SDK at runtime.** The engine types it uses are `import type`
+ * and are erased at compile time; the runtime dependencies are `node:fs/promises`,
+ * `node:path` and the snapshot sink, which is `fetch` and JSON. So "a board read
+ * cannot open a database connection or a model client" is checkable by reading an
+ * import list, and `test/boards-read-path.test.ts` walks the transitive graph from
+ * the routes and fails if anything on it gains one — naming the file and the
+ * specifier. A rule enforced by the module graph does not decay.
  *
- * `apps/web/src/lib/pipeline/` owns the *write* side — `buildSnapshot` and
- * `FileSnapshotSink.publish`, called from the pipeline's `deliver` step. This is
- * the read side, deliberately a separate module: the write side imports the
- * engine (it needs `ENGINE_VERSION`), and a read path that imported the write
- * path would inherit that. The one thing shared is the envelope's shape, taken as
- * a type only.
+ * ## The board is read through the SINK a placement publishes to
+ *
+ * This module used to `readFile` a directory. A placement in production publishes
+ * to a bucket, so `/boards/<slug>` could never see one: a customer paid, placed,
+ * and the public board went on showing the board from before their submission —
+ * no error, no failed step, just two different documents in two different places.
+ *
+ * So the published board now comes back through `SnapshotSink.read`, the same
+ * interface `run.ts`'s `deliver` step publishes through, resolved from the same
+ * `defaultSnapshotSink(env)`. There is no second answer to where a board lives.
+ *
+ * It stays a static read. `SnapshotSink` is `publish`, `read`, `list` — a
+ * document fetched by key from a directory or a bucket behind a CDN. Nothing on
+ * this path opens a database connection, re-ranks anything or re-derives a
+ * composite: `brief` Part 3's "reads never touch a model" and `02 §4`'s "the
+ * board never computes anything at read time" are unchanged, and are still
+ * enforced by the module graph rather than remembered.
+ *
+ * `buildSnapshot` — the one part of the pipeline's snapshot story that needs
+ * `ENGINE_VERSION` as a value — lives in `pipeline/snapshot-build.ts` precisely
+ * so that resolving a sink here does not put the engine on this graph.
  *
  * ## Two sources, one shape
  *
- * 1. **A published snapshot** — `<snapshotRoot>/boards/<slug>.json`, written by a
- *    placement. This is what production reads (from a bucket behind a CDN; the
- *    filesystem is the local and CI story, exactly as `service.ts` has it).
+ * 1. **A published snapshot** — read through the sink: `<snapshotRoot>/boards/<slug>.json`
+ *    locally and in CI, the bucket object behind the CDN in production. Written
+ *    by a placement, and it is the document that MOVES when someone pays.
  * 2. **A seeded run** — `<workdir>/runs/<slug>/ranking.json`, which is what the
  *    two categories on this branch actually are. `01 §3` puts the current source
  *    of truth in flat JSON under `cjr/`, a `ranking.json` is only written for a
@@ -36,6 +52,15 @@
  *
  * A published snapshot wins where both exist, because it is the document a
  * placement most recently wrote. Neither path computes a score.
+ *
+ * ## Where the roster of slugs comes from
+ *
+ * From the seeded workdir and from whatever the sink can enumerate — and a bucket
+ * can enumerate nothing, on purpose (`BucketSnapshotSink.list`). That is not a
+ * gap: a placement APPENDS a product to a category that already exists
+ * (`brief §1.2`), and a new category arrives by seeding, which commits
+ * `cjr/runs/<slug>/`. Publishing never invents a slug, so the committed workdir
+ * is the complete list in production and the sink supplies the rest locally.
  *
  * ## What it refuses to crash on
  *
@@ -53,7 +78,8 @@ import { dirname, join, resolve } from 'node:path';
 
 import type { Ranking } from '@the-pit/engine';
 
-import type { BoardSnapshot } from '@/lib/pipeline/snapshot';
+import { defaultSnapshotSink } from '@/lib/pipeline/sink';
+import { FileSnapshotSink, type BoardSnapshot, type SnapshotSink } from '@/lib/pipeline/snapshot';
 
 /**
  * One board's stored document, however it was found.
@@ -176,25 +202,44 @@ export interface FileBoardSourceOptions {
   snapshotRoot?: string;
 }
 
-/** Published snapshots first, seeded runs second. Both are `readFile` and nothing more. */
-export class FileBoardSource implements BoardSource {
-  private readonly workdir: string;
-  private readonly snapshotRoot: string;
+/** What a `SnapshotBoardSource` needs. */
+export interface SnapshotBoardSourceOptions {
+  /**
+   * Where published boards live — the SAME sink the `deliver` step publishes to.
+   *
+   * Injected rather than resolved here so a test can hand it a
+   * `MemorySnapshotSink` and prove that publishing through the sink is what the
+   * page reads back, which is the property that was missing.
+   */
+  snapshots: SnapshotSink;
+  /** Holds `runs/<slug>/ranking.json`. Defaults to the located `cjr/`. */
+  workdir?: string;
+}
 
-  constructor(options: FileBoardSourceOptions = {}) {
+/**
+ * Published snapshots first, seeded runs second.
+ *
+ * The first read goes through `SnapshotSink` — a directory locally, a bucket
+ * behind a CDN in production — and the second is one `readFile`. Neither computes
+ * anything.
+ */
+export class SnapshotBoardSource implements BoardSource {
+  private readonly workdir: string;
+  private readonly snapshots: SnapshotSink;
+
+  constructor(options: SnapshotBoardSourceOptions) {
     this.workdir = options.workdir ?? resolveWorkdir();
-    this.snapshotRoot =
-      options.snapshotRoot ?? process.env['PIT_SNAPSHOT_ROOT'] ?? join(this.workdir, 'public');
+    this.snapshots = options.snapshots;
   }
 
   async list(): Promise<string[]> {
     const slugs = new Set<string>();
-    for (const name of await entries(join(this.snapshotRoot, 'boards'), 'file')) {
-      if (name.endsWith('.json')) {
-        const slug = name.slice(0, -'.json'.length);
-        if (isBoardSlug(slug)) slugs.add(slug);
-      }
+    for (const slug of await this.snapshots.list()) {
+      if (isBoardSlug(slug)) slugs.add(slug);
     }
+    // The seeded workdir, which is the complete roster in production: a placement
+    // appends to a category that already exists, and a new category arrives by a
+    // commit under `cjr/runs/`. See the module header.
     for (const name of await entries(join(this.workdir, 'runs'), 'dir')) {
       if (isBoardSlug(name)) slugs.add(name);
     }
@@ -213,8 +258,25 @@ export class FileBoardSource implements BoardSource {
     return (await this.readSnapshot(slug)) ?? (await this.readSeededRun(slug));
   }
 
+  /**
+   * The published board, through the sink.
+   *
+   * A malformed document is `undefined` — the same answer a missing one gets,
+   * because a homepage that threw on one corrupt object would take down every
+   * board on the site. Anything else the sink raises PROPAGATES: an
+   * `ObjectStoreError` from a rotated token is a 403, not "no board", and
+   * reporting it as an empty list would render "nobody entered" over a category
+   * that has forty products live on the edge right now (`bucket.ts` makes the
+   * same distinction one layer down, and this is the layer that must not undo it).
+   */
   private async readSnapshot(slug: string): Promise<BoardDocument | undefined> {
-    const raw = await readJson(join(this.snapshotRoot, 'boards', `${slug}.json`));
+    let raw: unknown;
+    try {
+      raw = await this.snapshots.read(slug);
+    } catch (error) {
+      if (error instanceof SyntaxError) return undefined;
+      throw error;
+    }
     if (!isSnapshot(raw)) return undefined;
     return {
       slug,
@@ -266,6 +328,24 @@ export class FileBoardSource implements BoardSource {
   }
 }
 
+/**
+ * A `SnapshotBoardSource` over a directory of board JSON. The local and CI story.
+ *
+ * Kept as its own name because that is what a test wants to construct: a workdir
+ * and a snapshot root, with no environment involved.
+ */
+export class FileBoardSource extends SnapshotBoardSource {
+  constructor(options: FileBoardSourceOptions = {}) {
+    const workdir = options.workdir ?? resolveWorkdir();
+    super({
+      workdir,
+      snapshots: new FileSnapshotSink(
+        options.snapshotRoot ?? process.env['PIT_SNAPSHOT_ROOT'] ?? join(workdir, 'public'),
+      ),
+    });
+  }
+}
+
 async function entries(dir: string, kind: 'file' | 'dir'): Promise<string[]> {
   try {
     return (await readdir(dir, { withFileTypes: true }))
@@ -276,7 +356,14 @@ async function entries(dir: string, kind: 'file' | 'dir'): Promise<string[]> {
   }
 }
 
-/** The source the routes use. One place to swap the filesystem for a bucket. */
+/**
+ * The source the routes use.
+ *
+ * The sink comes from `defaultSnapshotSink`, which is the same function
+ * `service.ts` binds the pipeline's `deliver` step to — so the document this page
+ * reads is, by construction, the document a placement wrote. Locally that is a
+ * directory; in production it is the bucket behind the CDN.
+ */
 export function defaultBoardSource(): BoardSource {
-  return new FileBoardSource();
+  return new SnapshotBoardSource({ snapshots: defaultSnapshotSink() });
 }

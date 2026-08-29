@@ -158,9 +158,45 @@ describe('the board read path cannot reach a database or a model', () => {
     expect(source).toBeDefined();
     const edges = importsOf(source ?? '');
     expect(edges.some((edge) => edge.specifier === 'node:fs/promises' && !edge.typeOnly)).toBe(true);
-    // The engine and the snapshot envelope are types here, and types only.
+    // The engine is a type here, and a type only.
     expect(edges.find((edge) => edge.specifier === '@the-pit/engine')?.typeOnly).toBe(true);
-    expect(edges.find((edge) => edge.specifier === '@/lib/pipeline/snapshot')?.typeOnly).toBe(true);
+
+    // The snapshot sink IS a runtime import now, and that is the fix: a board is
+    // read back through the same interface a placement publishes to. The walker
+    // therefore has to follow it, which is what makes the offence list above a
+    // claim about the sink and the bucket as well as about this file.
+    expect(edges.find((edge) => edge.specifier === '@/lib/pipeline/sink')?.typeOnly).toBe(false);
+    expect(edges.find((edge) => edge.specifier === '@/lib/pipeline/snapshot')?.typeOnly).toBe(false);
+  });
+
+  it('keeps the engine off the graph even though the sink is on it', async () => {
+    // The reason `buildSnapshot` lives in `pipeline/snapshot-build.ts`: it is the
+    // one function in the snapshot story that needs `ENGINE_VERSION` as a VALUE,
+    // and leaving it in `snapshot.ts` would put `@the-pit/engine` on the read
+    // path the moment that module became reachable from a board route.
+    const snapshot = await readModule(join(SRC, 'lib/pipeline/snapshot.ts'));
+    expect(importsOf(snapshot ?? '').find((edge) => edge.specifier === '@the-pit/engine')?.typeOnly).toBe(true);
+
+    const build = await readModule(join(SRC, 'lib/pipeline/snapshot-build.ts'));
+    expect(importsOf(build ?? '').find((edge) => edge.specifier === '@the-pit/engine')?.typeOnly).toBe(false);
+
+    // And nothing a board route can reach imports it.
+    expect(await offences()).toEqual([]);
+  });
+
+  it('resolves the sink from the same factory the deliver step publishes through', async () => {
+    // The gap this closes was two code paths, not one broken one: the write side
+    // published to a bucket and the read side called `readFile`, so a paid
+    // placement never appeared on the public board and nothing failed. One
+    // factory is what makes a second answer impossible rather than unlikely.
+    const boards = await readModule(join(SRC, 'lib/boards/source.ts'));
+    const service = await readModule(join(SRC, 'lib/pipeline/service.ts'));
+    expect(boards).toContain('defaultSnapshotSink');
+    expect(service).toContain('defaultSnapshotSink');
+    // `service.ts` is on the forbidden list, so the shared factory has to be its
+    // own module rather than a function exported from there.
+    expect(FORBIDDEN).toContain('@/lib/pipeline/service');
+    expect(FORBIDDEN).not.toContain('@/lib/pipeline/sink');
   });
 
   it('would fail if a route reached for the pipeline bindings', () => {

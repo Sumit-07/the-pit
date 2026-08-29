@@ -61,6 +61,47 @@ describe('a delivered job is frozen', () => {
     expect(message).toMatch(/is frozen/);
   });
 
+  it('lets an UNDELIVERED job be deleted, which is the half the guard was never meant to stop', async () => {
+    // The test that was missing, and the reason a one-keyword bug survived.
+    //
+    // `jobs_delivery_immutable` is a BEFORE row trigger on UPDATE OR DELETE. It
+    // returned `NEW`, and `NEW` is NULL on a delete — and a BEFORE-row trigger
+    // that returns NULL tells Postgres to skip the operation. So the trigger
+    // cancelled EVERY delete, delivered or not, silently: no exception, no rows
+    // affected, and `DELETE FROM jobs` reporting success while removing nothing.
+    //
+    // The delivered case above passes either way, because a cancelled delete and
+    // a raised exception both leave the row in place. Only this one can tell
+    // them apart, and it has to assert the row is GONE rather than that nothing
+    // was raised, for exactly the same reason.
+    const categoryId = await insertCategory(database.pg, freshSlug('deletable'));
+    const job = await insertJob(database.pg, categoryId, { delivered: false });
+
+    const message = await expectRejection(database.pg, `DELETE FROM jobs WHERE id = $1`, [job]);
+    expect(message).toBeNull();
+
+    const remaining = await database.pg.query<{ id: string }>(`SELECT id FROM jobs WHERE id = $1`, [job]);
+    expect(remaining.rows).toHaveLength(0);
+  });
+
+  it('refuses the delivered one in the same breath, so the guard is a rule and not a blanket', async () => {
+    // The pair is the point: one category, two jobs, one delete each. If the
+    // trigger ever goes back to cancelling everything, the first half of this
+    // fails; if it stops guarding at all, the second half does.
+    const categoryId = await insertCategory(database.pg, freshSlug('deletepair'));
+    const open = await insertJob(database.pg, categoryId, { delivered: false });
+    const delivered = await insertJob(database.pg, categoryId, { delivered: true });
+
+    expect(await expectRejection(database.pg, `DELETE FROM jobs WHERE id = $1`, [open])).toBeNull();
+    expect(await expectRejection(database.pg, `DELETE FROM jobs WHERE id = $1`, [delivered])).toMatch(/is frozen/);
+
+    const rows = await database.pg.query<{ id: string }>(
+      `SELECT id FROM jobs WHERE category_id = $1 ORDER BY delivered_at NULLS FIRST`,
+      [categoryId],
+    );
+    expect(rows.rows.map((row) => row.id)).toEqual([delivered]);
+  });
+
   it('still allows an undelivered job to progress and be delivered', async () => {
     // The freeze starts at delivery, not at insert. A running job has to be able
     // to reach `succeeded`.

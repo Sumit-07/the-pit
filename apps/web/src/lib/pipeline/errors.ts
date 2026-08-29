@@ -13,6 +13,11 @@
  * and one terminal failure makes the whole run terminal. That is the same rule
  * `runCategory` applies to its own `RunOutcome`.
  *
+ * `isTerminalFailure` extends the same *method* — not the classification — to
+ * failures the engine never sees, because they come from storage rather than
+ * from a model. It reads an error CODE, exactly as `dispatch` does, and the codes
+ * it treats as terminal are listed in one constant below.
+ *
  * ## Why an exception rather than a return value
  *
  * Inside a durable step, the difference between "returned a failure" and "threw"
@@ -55,6 +60,59 @@ export class PhaseFailedError extends Error {
     // `failures.every(f => f.retryable)`.
     this.retryable = failures.length > 0 && failures.every((failure) => failure.retryable);
   }
+}
+
+/**
+ * The one storage fault that is deterministic, and therefore terminal.
+ *
+ * `PgPipelineStore.writeRanking` throws `SnapshotVersionConflictError` when the
+ * board this run produced disagrees with the board already stored under its
+ * `category_snapshot_version` — `snapshots_category_version_uk` allows one board
+ * per population version and `snapshots_body_immutable_trg` refuses to edit it.
+ *
+ * Nothing about that comes out differently on a second attempt: the run would
+ * recompute the same arithmetic over the same stored rows and hit the same
+ * unique. The fix is an operator's (bump `categories.category_snapshot_version`
+ * and re-enqueue), and until it is made, every retry is `brief §2.3`'s free-retry
+ * budget being spent reproducing a failure that cannot recover.
+ *
+ * Declared HERE rather than beside the error class so that the classifier and
+ * the thrower share one constant without the classifier importing `@the-pit/db`.
+ */
+export const SNAPSHOT_VERSION_CONFLICT = 'snapshot_version_conflict';
+
+/**
+ * Error codes that are terminal wherever they surface.
+ *
+ * A list rather than a single check because the next deterministic storage fault
+ * belongs on it, and because being able to read the whole list in one place is
+ * what stops the second one being classified by wording.
+ */
+const TERMINAL_CODES: readonly string[] = [SNAPSHOT_VERSION_CONFLICT];
+
+/**
+ * Is this failure one that cannot come out differently on a retry?
+ *
+ * Two sources, and only two:
+ *
+ * 1. A `PhaseFailedError` that already carries the engine's verdict. Nothing is
+ *    re-decided here; `retryable` is copied off `PhaseFailure.retryable`.
+ * 2. An error carrying a `code` on `TERMINAL_CODES`.
+ *
+ * The second arm keys on a CODE, never on message wording — the same rule
+ * `packages/engine/src/run/dispatch.ts` follows when it demotes a `max_tokens`
+ * truncation, and for the same reason: a message is prose that a later edit will
+ * reword, and a classifier that reads prose silently stops classifying.
+ *
+ * Structural rather than `instanceof`, because the throwers live behind
+ * `@the-pit/db` and this module is imported by every part of the pipeline that
+ * must not load a database driver.
+ */
+export function isTerminalFailure(error: unknown): boolean {
+  if (error instanceof PhaseFailedError) return !error.retryable;
+  if (typeof error !== 'object' || error === null) return false;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' && TERMINAL_CODES.includes(code);
 }
 
 /**

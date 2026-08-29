@@ -29,6 +29,13 @@
       "when": 1788024038455,
       "tag": "0003_accounts_and_verdicts",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788024039455,
+      "tag": "0004_jobs_delete_guard",
+      "breakpoints": true
     }
   ]
 }

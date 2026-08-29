@@ -21,6 +21,7 @@ import { readMigrations } from '@the-pit/db';
 import * as schema from '@the-pit/db/schema';
 import { drizzle } from 'drizzle-orm/pglite';
 import type { Database } from '@the-pit/db';
+import type { Jury, PersonaPanel, Product } from '@the-pit/engine';
 
 /** A migrated database and the handle to close it. */
 export interface TestDatabase {
@@ -73,4 +74,63 @@ export async function installCategory(pg: PGlite, category: InstalledCategory): 
   const id = result.rows[0]?.id;
   if (id === undefined) throw new Error(`installCategory: ${category.slug} was not inserted`);
   return id;
+}
+
+/**
+ * Approve a jury and a persona panel for a category, the way `01 §4` Steps 2 and
+ * 3 would once a human had fired the two gates.
+ *
+ * The versions are the panels' own, so a caller can install a panel under a
+ * version the category does NOT point at and watch `PgCategorySource` refuse to
+ * run — which is the whole reason those are separate columns.
+ */
+export async function installPanels(
+  pg: PGlite,
+  categoryId: string,
+  panels: { jury: Jury; personas: PersonaPanel },
+): Promise<void> {
+  await pg.query(
+    `INSERT INTO jury_versions (category_id, version, metrics, jurors, approved_by)
+     VALUES ($1, $2, $3::jsonb, $4::jsonb, 'test-approver')`,
+    [categoryId, panels.jury.prompt_version, JSON.stringify(panels.jury.metrics), JSON.stringify(panels.jury.jurors)],
+  );
+  await pg.query(
+    `INSERT INTO persona_versions (category_id, version, personas, approved_by)
+     VALUES ($1, $2, $3::jsonb, 'test-approver')`,
+    [categoryId, panels.personas.persona_version, JSON.stringify(panels.personas.personas)],
+  );
+}
+
+/**
+ * Put a category's population in `products`.
+ *
+ * `status` is a parameter because it is load-bearing: `held` is `DECISIONS.md`
+ * S9's flag-not-drop and has never been scored, so a source that included it
+ * would have the jury score a product no human approved.
+ */
+export async function installProducts(
+  pg: PGlite,
+  categoryId: string,
+  population: readonly Product[],
+  status: 'placed' | 'pending' | 'held' | 'rejected' = 'placed',
+): Promise<void> {
+  for (const product of population) {
+    await pg.query(
+      `INSERT INTO products
+         (category_id, engine_id, name, url, normalized_url, description, description_hash,
+          source, status, placed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'seeded', $8, $9)`,
+      [
+        categoryId,
+        product.id,
+        product.name,
+        product.url,
+        product.normalized_url,
+        product.description,
+        'a'.repeat(64),
+        status,
+        status === 'placed' ? new Date().toISOString() : null,
+      ],
+    );
+  }
 }

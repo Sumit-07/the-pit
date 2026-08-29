@@ -32,7 +32,9 @@ export {
 export type { HttpObjectStoreConfig, ObjectStore, PutOptions } from './bucket';
 export { CategoryNotRunnableError, FileCategorySource, MemoryCategorySource } from './catalog';
 export type { CategorySource } from './catalog';
-export { NoModelClient, PhaseFailedError } from './errors';
+export { MemoryPlacementClaims, placementRunKey, PlacementInFlightError } from './claims';
+export type { PlacementClaim, PlacementClaims, PlacementSubmission } from './claims';
+export { isTerminalFailure, NoModelClient, PhaseFailedError, SNAPSHOT_VERSION_CONFLICT } from './errors';
 export { CallMeter, RecordingStepRunner, stepInProgress } from './local';
 export { runPlacement } from './placement';
 export type { PlacementInput, PlacementOutcome, PlacementResult } from './placement';
@@ -42,13 +44,16 @@ export { deliverStep, phaseStep, runPipeline } from './run';
 export type { DeliverReport, PipelineResult } from './run';
 export {
   BOARD_CACHE_CONTROL,
-  buildSnapshot,
   DATED_SNAPSHOT_CACHE_CONTROL,
   datedSnapshotKey,
   FileSnapshotSink,
   MemorySnapshotSink,
   SNAPSHOT_VERSION,
 } from './snapshot';
+// `buildSnapshot` alone imports `ENGINE_VERSION` as a VALUE, so it lives in its
+// own module: the board read path resolves `SnapshotSink` through `snapshot.ts`,
+// and `02 §4` does not let the engine onto that graph. See `snapshot-build.ts`.
+export { buildSnapshot } from './snapshot-build';
 export type { BoardSnapshot, PublishedSnapshot, SnapshotSink } from './snapshot';
 export { readRunStatus } from './status';
 export type { RunState, RunStatus, StatusInput, StepStatus } from './status';

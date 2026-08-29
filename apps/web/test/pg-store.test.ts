@@ -84,13 +84,12 @@ afterAll(async () => {
 /**
  * Wipe every row a run writes, so each test starts from an unrun category.
  *
- * `TRUNCATE`, not `DELETE`: `jobs_delivery_immutable_trg` is a BEFORE DELETE row
- * trigger that returns `NEW`, and `NEW` is NULL in a delete — which cancels the
- * delete outright, for every job row, delivered or not. `TRUNCATE` does not fire
- * row triggers, so it is the only way to clear the table. (That the trigger
- * silently swallows a delete of an UNDELIVERED job is a `packages/db` quirk
- * rather than this suite's business; it is harmless in production, where nothing
- * deletes a job.)
+ * `TRUNCATE`, not `DELETE`, because `jobs_delivery_immutable_trg` refuses to
+ * delete a DELIVERED job — `brief` Part 6 makes a verdict URL permanent — and
+ * `TRUNCATE` does not fire row triggers. An undelivered job does delete, since
+ * `migrations/0004_jobs_delete_guard.sql`; before it, the trigger returned `NEW`
+ * on a delete, `NEW` is NULL there, and Postgres read that as "skip this
+ * operation" — so every delete was silently cancelled, delivered or not.
  */
 beforeEach(async () => {
   await database.pg.exec('TRUNCATE categories, jobs, products, snapshots, rankings CASCADE;');

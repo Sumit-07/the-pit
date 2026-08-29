@@ -20,8 +20,14 @@
  * arrives here already made: `dispatch` keys it on an error code and demotes a
  * `max_tokens` truncation to terminal precisely so a deterministic failure cannot
  * consume the budget. `toExecutorError` is the whole of this file's contribution
- * — a terminal `PhaseFailedError` becomes `NonRetriableError`, and nothing else
- * is reinterpreted.
+ * — a terminal failure becomes `NonRetriableError`, and nothing else is
+ * reinterpreted.
+ *
+ * "Terminal" is `isTerminalFailure`, and it covers one thing the engine cannot
+ * see: a deterministic STORAGE fault. `SnapshotVersionConflictError` is a unique
+ * constraint that will still be there on the third retry, so it is demoted on its
+ * error code exactly as `dispatch` demotes `max_tokens` — same rule, same reason,
+ * one layer out.
  *
  * ## Why the pipeline does not import this module
  *
@@ -34,7 +40,8 @@
 import { AnthropicClient, phaseVersions, type Product } from '@the-pit/engine';
 import { Inngest, NonRetriableError } from 'inngest';
 
-import { PhaseFailedError } from './errors';
+import { PlacementInFlightError, type PlacementSubmission } from './claims';
+import { isTerminalFailure } from './errors';
 import { runPlacement, type PlacementOutcome } from './placement';
 import { runPipeline, type PipelineResult } from './run';
 import { defaultBindings, type RunnerBindings } from './service';
@@ -89,6 +96,23 @@ export interface PlacementRequestedData {
    */
   categoryVersion?: string;
   product: Product;
+  /**
+   * `jobIdempotencyKey` from `@the-pit/payments` — the identity of the
+   * SUBMISSION.
+   *
+   * Optional in the type and required in practice for anything paid. `brief §2.2`
+   * asks for "an idempotency key on job creation so a double-clicked submit
+   * doesn't buy twice", and without it a second event for one submission — a
+   * retried webhook, a re-POSTed status page, a support replay fired in the
+   * window between a successful `rank` and a failed `deliver` — runs the whole
+   * pipeline again. The customer is not charged twice (`brief §2.3` consumes an
+   * attempt only on delivery), so nobody reports it; it shows up as an inference
+   * bill that does not match the sales count.
+   *
+   * Optional because an ADMIN placement has no submission and no payer, and
+   * making the field mandatory would only mean the admin path invented a value.
+   */
+  idempotencyKey?: string;
 }
 
 export const inngest = new Inngest({ id: 'the-pit' });
@@ -128,10 +152,27 @@ export function inngestStepRunner(step: { run: (id: string, body: () => Promise<
  * and the `retries: 3` cap. A terminal one becomes `NonRetriableError`: the run
  * cannot come out differently, and `brief §2.3` sends it to a support queue
  * rather than through a retry loop that spends money reproducing it.
+ *
+ * Two kinds of failure reach that arm, and `isTerminalFailure` is the only thing
+ * that decides which:
+ *
+ * - A terminal `PhaseFailedError`. The engine classified it; nothing here
+ *   re-opens the question.
+ * - A deterministic STORAGE fault, carried on an error code —
+ *   `SnapshotVersionConflictError` from `pg-store.ts`. It used to escape the
+ *   `rank` step unwrapped, so Inngest saw a bare error, assumed the optimistic
+ *   thing, and spent all three free retries reproducing a unique-constraint
+ *   violation that only an operator can clear.
+ *
+ * Keyed on a code and never on the message, for the reason
+ * `packages/engine/src/run/dispatch.ts` gives about its own `max_tokens`
+ * demotion: a classifier that matches prose stops classifying the day the prose
+ * is reworded, and it does so silently and on the money path.
  */
 export function toExecutorError(error: unknown): unknown {
-  if (error instanceof PhaseFailedError && !error.retryable) {
-    return new NonRetriableError(error.message, { cause: error });
+  if (isTerminalFailure(error)) {
+    const message = error instanceof Error ? error.message : String(error);
+    return new NonRetriableError(message, { cause: error });
   }
   return error;
 }
@@ -273,6 +314,28 @@ export async function executePlacement(
     );
   }
 
+  // The claim, BEFORE the first step and before anything is spent. See
+  // `claims.ts`: the window is a second event for one submission arriving while
+  // the first is in flight, and what it costs is a whole second pipeline —
+  // twelve juror calls, two clustering passes, two persona rounds — for one
+  // payment. A claim taken after the run would guard nothing.
+  const submission: PlacementSubmission | undefined =
+    data.idempotencyKey === undefined || data.idempotencyKey === ''
+      ? undefined
+      : { key: data.idempotencyKey, slug: data.slug, versions, productId: data.product.id };
+
+  if (submission !== undefined) {
+    const claim = await bindings.claims.claim(submission);
+    // A finished submission never runs again — whoever owns it, and including
+    // this run itself. One submission, one placement, one result.
+    if (claim.outcome !== undefined) return claim.outcome;
+    // Owned by someone else and not finished. Retryable rather than terminal: it
+    // costs no model calls, and the first placement landing is exactly the thing
+    // that makes a retry succeed. An unfinished claim of THIS run's own is
+    // `brief §2.3`'s free retry and falls through to resume its phases.
+    if (!claim.mine) throw new PlacementInFlightError(claim.runId);
+  }
+
   const deps: PipelineDeps = {
     client,
     // The scope is named to the BINDING rather than smuggled through the category
@@ -289,5 +352,10 @@ export async function executePlacement(
     ...(onDelivered === undefined ? {} : { onDelivered }),
   };
 
-  return runPlacement({ ...category, product: data.product, results, ranking }, deps, runner);
+  const outcome = await runPlacement({ ...category, product: data.product, results, ranking }, deps, runner);
+
+  // Recorded only on a finished run. A failure is not an outcome — `brief §2.3`
+  // makes it a free retry, and a retry has to be allowed to run.
+  if (submission !== undefined) await bindings.claims.record(submission, outcome);
+  return outcome;
 }

@@ -18,9 +18,12 @@
  * spending a customer's money twice on one attempt while still reporting the
  * retry as free (`brief §2.3`).
  *
- * `postgres` is `PgPipelineStore` over `@the-pit/db` and `BucketSnapshotSink`
- * over an object store. Both are addressable from any instance, which is the
- * whole property the filesystem lacks.
+ * `postgres` is `PgPipelineStore` and `PgCategorySource` over `@the-pit/db`, and
+ * `BucketSnapshotSink` over an object store. All three are addressable from any
+ * instance, which is the whole property the filesystem lacks — and the category
+ * source is on that list because a placement APPENDS a product and bumps
+ * `category_snapshot_version`, and a committed `products.json` cannot see either
+ * (`brief §1.2`).
  *
  * So the binding is chosen by environment and the wrong choice is REFUSED rather
  * than warned about. `assertBindingsConfigured()` runs at server startup
@@ -34,41 +37,44 @@
  */
 
 import { phaseVersions, type PhaseVersions } from '@the-pit/engine';
-import { createDatabase, DATABASE_URL_ENV, requireDatabaseUrl, type Database } from '@the-pit/db';
+import { createDatabase, requireDatabaseUrl, type Database } from '@the-pit/db';
 
-import { BucketSnapshotSink, HttpObjectStore } from './bucket';
 import { FileCategorySource, type CategorySource } from './catalog';
+import { MemoryPlacementClaims, type PlacementClaims } from './claims';
+import {
+  bucketProblems,
+  PipelineBindingError,
+  SNAPSHOT_PURGE_URL_ENV,
+  storageMode,
+  workdirOf,
+  type Env,
+} from './mode';
+import { PgPlacementClaims } from './pg-claims';
+import { PgCategorySource } from './pg-catalog';
 import { PgPipelineStore } from './pg-store';
+import { defaultSnapshotSink } from './sink';
 import { readRunStatus, type RunStatus } from './status';
-import { FileSnapshotSink, type SnapshotSink } from './snapshot';
+import type { SnapshotSink } from './snapshot';
 import { FilePipelineStore, placementScope, type PipelineStore } from './store';
 
-/** Which pair of implementations a deployment is bound to. */
-export type StorageMode = 'filesystem' | 'postgres';
-
-/** The environment variable that overrides the default choice. */
-export const STORAGE_MODE_ENV = 'PIT_STORAGE';
-
-/** The bucket the board snapshots are published to. Required in `postgres` mode. */
-export const SNAPSHOT_BUCKET_URL_ENV = 'PIT_SNAPSHOT_BUCKET_URL';
-/** Bearer token for writes to that bucket. */
-export const SNAPSHOT_BUCKET_TOKEN_ENV = 'PIT_SNAPSHOT_BUCKET_TOKEN';
-/** Optional: where a single-key CDN purge is POSTed after a placement. */
-export const SNAPSHOT_PURGE_URL_ENV = 'PIT_SNAPSHOT_PURGE_URL';
-
-/** A readable snapshot of the process environment. Injectable so tests never mutate the real one. */
-export type Env = Readonly<Record<string, string | undefined>>;
-
 /**
- * The deployment cannot be bound as configured.
- *
- * A named class, for the same reason `@the-pit/db` has `MissingDatabaseUrlError`:
- * "this deployment is not configured" and "the database refused the connection"
- * present identically and are fixed in completely different places.
+ * Re-exported from `mode.ts`, which is dependency-free so the board READ path can
+ * ask the same question without importing a database driver. One rule, two
+ * callers; see that module's header.
  */
-export class PipelineBindingError extends Error {
-  override readonly name = 'PipelineBindingError';
-}
+export {
+  DATABASE_URL_ENV,
+  isProductionBuild,
+  PipelineBindingError,
+  requiresDurableStorage,
+  SNAPSHOT_BUCKET_TOKEN_ENV,
+  SNAPSHOT_BUCKET_URL_ENV,
+  SNAPSHOT_PURGE_URL_ENV,
+  STORAGE_MODE_ENV,
+  storageMode,
+} from './mode';
+export type { Env, StorageMode } from './mode';
+export { defaultSnapshotSink } from './sink';
 
 /**
  * Which run's phases a store is for, when it is not the category's own.
@@ -87,9 +93,20 @@ export interface RunScope {
   placement?: number;
 }
 
-/** The four things a deployment binds. */
+/** What a deployment binds. */
 export interface RunnerBindings {
   categories: CategorySource;
+  /**
+   * Where a submission's idempotency key is claimed, so one payment buys one
+   * placement.
+   *
+   * Required rather than optional. A second `pit/placement.requested` for one
+   * submission is not double-charged — `brief §2.3` consumes an attempt only on
+   * delivery — it is double-RUN, twelve juror calls for one $5, and the customer
+   * cannot see it so it never becomes a support ticket. A binding that could be
+   * left off is a binding that will be.
+   */
+  claims: PlacementClaims;
   /**
    * A store for one run.
    *
@@ -106,58 +123,6 @@ export interface RunnerBindings {
 }
 
 /**
- * Is this a deployment where an ephemeral filesystem is a correctness bug?
- *
- * `VERCEL` is set in every Vercel build and runtime, including previews — a
- * preview deployment has the same ephemeral filesystem and the same real API key
- * as production, so it gets the same rule. `NODE_ENV` catches a self-hosted
- * production server.
- */
-export function requiresDurableStorage(env: Env = process.env): boolean {
-  return env['VERCEL'] !== undefined || env['NODE_ENV'] === 'production';
-}
-
-/**
- * Which mode this environment binds, or a `PipelineBindingError`.
- *
- * `PIT_STORAGE` may only narrow toward durability. Setting it to `filesystem` on
- * a deployment that needs durable storage is refused rather than honoured: it is
- * the one setting that produces the double-charge above, and an environment
- * variable is not a good enough reason to allow it.
- */
-export function storageMode(env: Env = process.env): StorageMode {
-  const requested = env[STORAGE_MODE_ENV];
-  const durable = requiresDurableStorage(env);
-
-  if (requested === undefined || requested === '') {
-    return durable ? 'postgres' : 'filesystem';
-  }
-  if (requested !== 'filesystem' && requested !== 'postgres') {
-    throw new PipelineBindingError(
-      `${STORAGE_MODE_ENV} must be "filesystem" or "postgres", got ${JSON.stringify(requested)}.`,
-    );
-  }
-  if (requested === 'filesystem' && durable) {
-    throw new PipelineBindingError(
-      `${STORAGE_MODE_ENV}=filesystem is refused on this deployment.\n\n` +
-        'Every invocation here gets its own filesystem, so a run whose phases land on two instances would\n' +
-        'find nothing persisted and re-buy a phase the customer has already paid for (brief §2.3).\n' +
-        `Unset ${STORAGE_MODE_ENV} and set ${DATABASE_URL_ENV} and ${SNAPSHOT_BUCKET_URL_ENV} instead.`,
-    );
-  }
-  return requested;
-}
-
-const HOW_TO_FIX_BUCKET = [
-  `Set ${SNAPSHOT_BUCKET_URL_ENV} to the base URL board snapshots are written under, e.g.`,
-  '  https://<bucket>.example-store.com/pit',
-  `and ${SNAPSHOT_BUCKET_TOKEN_ENV} to a token with write access to it.`,
-  '',
-  `${SNAPSHOT_PURGE_URL_ENV} is optional: set it when the CDN in front of the bucket has a purge API,`,
-  'so a placement invalidates that one category\'s board path (02 §4) instead of waiting out s-maxage.',
-].join('\n');
-
-/**
  * Every reason this environment cannot be bound, in one message.
  *
  * All of them at once rather than the first: someone configuring a deployment
@@ -167,7 +132,7 @@ const HOW_TO_FIX_BUCKET = [
 export function bindingProblems(env: Env = process.env): string[] {
   const problems: string[] = [];
 
-  let mode: StorageMode;
+  let mode: 'filesystem' | 'postgres';
   try {
     mode = storageMode(env);
   } catch (error) {
@@ -178,20 +143,15 @@ export function bindingProblems(env: Env = process.env): string[] {
   try {
     requireDatabaseUrl(env);
   } catch (error) {
+    // `DATABASE_URL` is what `PgPipelineStore` writes phases through AND what
+    // `PgCategorySource` reads the population and the approved panels from. A
+    // deployment missing it cannot see a placement either.
     problems.push(error instanceof Error ? error.message : String(error));
   }
 
-  const bucket = env[SNAPSHOT_BUCKET_URL_ENV];
-  if (bucket === undefined || bucket.trim() === '') {
-    problems.push(
-      `${SNAPSHOT_BUCKET_URL_ENV} is not set, so a delivered board has nowhere durable to be published.\n\n` +
-        HOW_TO_FIX_BUCKET,
-    );
-  } else if (!/^https?:\/\//.test(bucket.trim())) {
-    problems.push(
-      `${SNAPSHOT_BUCKET_URL_ENV} must be an http(s) URL, got ${JSON.stringify(bucket)}.\n\n${HOW_TO_FIX_BUCKET}`,
-    );
-  }
+  // The bucket half is `mode.ts`'s, because the board READ path needs the same
+  // check and must not import a database driver to make it.
+  problems.push(...bucketProblems(env));
 
   return problems;
 }
@@ -258,18 +218,24 @@ export async function closeDatabase(): Promise<void> {
  */
 export function defaultBindings(env: Env = process.env): RunnerBindings {
   const mode = storageMode(env);
-  const workdir = env['PIT_WORKDIR'] ?? 'cjr';
+  const workdir = workdirOf(env);
 
   if (mode === 'filesystem') {
-    const snapshotRoot = env['PIT_SNAPSHOT_ROOT'] ?? `${workdir}/public`;
     return {
       categories: new FileCategorySource(workdir),
+      // Per-process, like the filesystem store beside it and for the same reason:
+      // correct locally, useless across two lambdas, and unreachable in
+      // production because `storageMode` refuses `filesystem` there.
+      claims: new MemoryPlacementClaims(),
       store: (category: string, _versions: PhaseVersions, scope?: RunScope) =>
         new FilePipelineStore(
           scope?.placement === undefined ? category : placementScope(category, scope.placement),
           workdir,
         ),
-      snapshots: new FileSnapshotSink(snapshotRoot),
+      // `defaultSnapshotSink` and not a `FileSnapshotSink` written out here: the
+      // board READ path resolves its sink through the same function, and two
+      // constructions is how a placement comes to publish somewhere nobody reads.
+      snapshots: defaultSnapshotSink(env),
     };
   }
 
@@ -282,30 +248,34 @@ export function defaultBindings(env: Env = process.env): RunnerBindings {
   }
 
   const db = database(env);
-  const bucket = new HttpObjectStore({
-    baseUrl: (env[SNAPSHOT_BUCKET_URL_ENV] ?? '').trim(),
-    ...(env[SNAPSHOT_BUCKET_TOKEN_ENV] === undefined ? {} : { token: env[SNAPSHOT_BUCKET_TOKEN_ENV] }),
-    ...(env[SNAPSHOT_PURGE_URL_ENV] === undefined || env[SNAPSHOT_PURGE_URL_ENV] === ''
-      ? {}
-      : { purgeUrl: env[SNAPSHOT_PURGE_URL_ENV] }),
-  });
 
   return {
-    // STILL the filesystem, and knowingly so. `cjr/` is committed, so it ships
-    // with the deployment and is READ-only there — which is a different thing
-    // from the store, whose whole problem was writing. What it cannot do is see a
-    // placement: `brief §1.2` appends a product and bumps
-    // `category_snapshot_version`, and a committed `products.json` will not have
-    // it. A Postgres `CategorySource` over `categories`/`products`/
-    // `jury_versions`/`persona_versions` is the fix, and it is required before
-    // the first real placement, not before the first seeded run.
-    categories: new FileCategorySource(workdir),
+    // The tables the placement path writes, not the files the last commit froze.
+    //
+    // A committed `cjr/` ships with the deployment and reads perfectly well,
+    // which is why this was the filesystem for one commit longer than the store
+    // was. What it cannot do is see a placement: `brief §1.2` appends a product
+    // and bumps `category_snapshot_version`, and a committed `products.json` has
+    // neither — so the first paid placement would be scored against a population
+    // that excludes it, under a version that had already moved. Not a crash. A
+    // wrong board.
+    //
+    // Bound by MODE, with no fallback, for the same reason the store is: the
+    // wrong choice here is silent. `DATABASE_URL` is already required in this
+    // mode by `bindingProblems`, and `assertBindingsConfigured` checks it at boot
+    // — so a deployment that cannot reach the categories table fails in its
+    // startup logs rather than forty seconds into someone's paid run.
+    categories: new PgCategorySource(db),
+    // `jobs.idempotency_key` and its UNIQUE index — the guard `packages/payments`
+    // computes a key for and `packages/db` indexes, which nothing was reading.
+    claims: new PgPlacementClaims(db),
     store: (category: string, versions: PhaseVersions, scope?: RunScope) =>
       new PgPipelineStore(db, category, {
         versions,
         ...(scope?.placement === undefined ? {} : { placement: scope.placement }),
       }),
-    snapshots: new BucketSnapshotSink(bucket),
+    // Same factory as the filesystem branch and as the board read path.
+    snapshots: defaultSnapshotSink(env),
   };
 }
 

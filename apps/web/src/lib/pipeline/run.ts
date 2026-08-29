@@ -64,7 +64,8 @@ import {
 
 import { NoModelClient, PhaseFailedError } from './errors';
 import { reusableStoredPhase } from './resume';
-import { buildSnapshot, type PublishedSnapshot } from './snapshot';
+import type { PublishedSnapshot } from './snapshot';
+import { buildSnapshot } from './snapshot-build';
 import {
   PHASE_OF_STEP,
   type PipelineDeps,

@@ -12,7 +12,11 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { FileBoardSource, isBoardSlug, resolveWorkdir } from '@/lib/boards/source';
+import { FileBoardSource, isBoardSlug, resolveWorkdir, SnapshotBoardSource } from '@/lib/boards/source';
+import { BucketSnapshotSink } from '@/lib/pipeline/bucket';
+import { defaultBindings } from '@/lib/pipeline/service';
+import { defaultSnapshotSink } from '@/lib/pipeline/sink';
+import { FileSnapshotSink, MemorySnapshotSink, type BoardSnapshot } from '@/lib/pipeline/snapshot';
 
 import { sampleRanking, SAMPLE_CAVEAT, writePublishedSnapshot, writeSeededWorkdir } from './helpers/boards';
 
@@ -82,6 +86,123 @@ describe('a published snapshot wins', () => {
     expect(document_?.categoryVersion).toBe('v9');
     expect(document_?.engineVersion).toBe('0.1.0-published');
     expect(document_?.ranking.prompt_version).toBe('v3');
+  });
+});
+
+describe('a placement is what the public board shows', () => {
+  /**
+   * A board snapshot, exactly as the pipeline's `deliver` step builds one.
+   *
+   * Hand-built rather than run through `buildSnapshot`, because that function
+   * needs `ENGINE_VERSION` and lives on the write side; what is under test is the
+   * READ, and it must not be given the write side's help to pass.
+   */
+  function published(overrides: { productCount: number; generatedAt: string; version: string }): BoardSnapshot {
+    return {
+      snapshot_version: 1,
+      slug: 'developer-tools',
+      category: 'Developer Tools',
+      generated_at: overrides.generatedAt,
+      product_count: overrides.productCount,
+      engine_version: '0.1.0-published',
+      category_version: overrides.version,
+      ranking: sampleRanking(),
+    };
+  }
+
+  it('reads the board a placement published, NOT the file that was there before it', async () => {
+    // The gap, in one test. The read path used to `readFile` a directory while a
+    // placement published through `SnapshotSink` — in production, to a bucket. So
+    // a customer paid, placed, and `/boards/<slug>` went on serving the document
+    // from before their submission. Nothing threw; there were simply two
+    // documents in two different places, and the page read the wrong one.
+    //
+    // The sink here is in memory and the directory on disk holds an OLDER
+    // published board. A source that still reads the file reports 3 and
+    // `2026-08-01`; a source that reads through the sink reports 4 and
+    // `2026-09-02`. Only one of those is the board somebody paid for.
+    const workdir = await seeded();
+    await writePublishedSnapshot(workdir, {
+      slug: 'developer-tools',
+      category: 'Developer Tools',
+      generated_at: '2026-08-01T00:00:00.000Z',
+      product_count: 3,
+      ranking: sampleRanking(),
+    });
+
+    const snapshots = new MemorySnapshotSink();
+    await snapshots.publish(published({ productCount: 4, generatedAt: '2026-09-02T09:00:00.000Z', version: 'v10' }));
+
+    const source = new SnapshotBoardSource({ snapshots, workdir });
+    const document_ = await source.read('developer-tools');
+
+    expect(document_?.origin).toBe('snapshot');
+    expect(document_?.productCount).toBe(4);
+    expect(document_?.generatedAt).toBe('2026-09-02T09:00:00.000Z');
+    expect(document_?.categoryVersion).toBe('v10');
+  });
+
+  it('moves again on the NEXT placement, because it holds no copy of its own', async () => {
+    // `brief §1.2`: every placement moves every z-score, so the board a reader
+    // gets has to be the last one published and not the first one cached in a
+    // field. Two publishes, two different answers from one source object.
+    const workdir = await seeded();
+    const snapshots = new MemorySnapshotSink();
+    const source = new SnapshotBoardSource({ snapshots, workdir });
+
+    await snapshots.publish(published({ productCount: 4, generatedAt: '2026-09-02T09:00:00.000Z', version: 'v10' }));
+    expect((await source.read('developer-tools'))?.productCount).toBe(4);
+
+    await snapshots.publish(published({ productCount: 5, generatedAt: '2026-09-03T09:00:00.000Z', version: 'v11' }));
+    const after = await source.read('developer-tools');
+    expect(after?.productCount).toBe(5);
+    expect(after?.categoryVersion).toBe('v11');
+  });
+
+  it('falls back to the seeded run for a category nothing has been published for', async () => {
+    // The contrast that makes the two above mean something: an unpublished
+    // category is the ordinary state of every board on this branch, and it still
+    // renders from `cjr/runs/<slug>/ranking.json`.
+    const workdir = await seeded();
+    const document_ = await new SnapshotBoardSource({ snapshots: new MemorySnapshotSink(), workdir }).read(
+      'developer-tools',
+    );
+    expect(document_?.origin).toBe('seeded-run');
+    expect(document_?.productCount).toBe(3);
+  });
+
+  it('lists a slug the sink knows about and a slug only the workdir knows about', async () => {
+    // A bucket cannot enumerate (`BucketSnapshotSink.list`), so the roster is the
+    // seeded workdir's in production; a directory sink can, so a board published
+    // for a category with no run directory still appears locally. Both halves,
+    // deduplicated and sorted.
+    const workdir = await seeded();
+    const snapshots = new MemorySnapshotSink();
+    await snapshots.publish({ ...published({ productCount: 4, generatedAt: '2026-09-02T09:00:00.000Z', version: 'v10' }), slug: 'ai-writing' });
+    await snapshots.publish(published({ productCount: 4, generatedAt: '2026-09-02T09:00:00.000Z', version: 'v10' }));
+
+    expect(await new SnapshotBoardSource({ snapshots, workdir }).list()).toEqual(['ai-writing', 'developer-tools']);
+  });
+
+  it('is the same sink the pipeline publishes through, resolved from one factory', () => {
+    // `defaultBoardSource()` and `service.ts`'s bindings both call
+    // `defaultSnapshotSink(env)`. Asserted on the instance rather than on the
+    // source text, because the property that matters is "the same place", and in
+    // filesystem mode that place is one directory.
+    const env = { PIT_SNAPSHOT_ROOT: '/tmp/pit-boards-test' };
+    expect(defaultSnapshotSink(env)).toBeInstanceOf(FileSnapshotSink);
+    expect(defaultBindings(env).snapshots).toBeInstanceOf(FileSnapshotSink);
+
+    // And in production it is the bucket on BOTH sides — which is the state in
+    // which the old read path was silently wrong.
+    const production = {
+      VERCEL: '1',
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgres://user:pass@db.example.com/pit',
+      PIT_SNAPSHOT_BUCKET_URL: 'https://bucket.example.com/pit',
+    };
+    expect(defaultSnapshotSink(production)).toBeInstanceOf(BucketSnapshotSink);
+    expect(defaultBindings(production).snapshots).toBeInstanceOf(BucketSnapshotSink);
   });
 });
 

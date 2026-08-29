@@ -135,6 +135,30 @@ export class BucketSnapshotSink implements SnapshotSink {
     const body = await this.store.get(`${boardKey(slug)}.json`);
     return body === undefined ? undefined : (JSON.parse(body) as BoardSnapshot);
   }
+
+  /**
+   * Empty, always — and deliberately.
+   *
+   * `ObjectStore` is `put`, `get`, `purge`, because that is the intersection every
+   * candidate store speaks. LIST is not in it: S3 answers `ListObjectsV2` with
+   * XML, R2 and Vercel Blob answer their own shapes, and adding a fourth method
+   * would put the vendor coupling this module exists to avoid back into it — for a
+   * question nothing actually needs a bucket to answer.
+   *
+   * Nothing needs it because a placement does not invent a category. `brief §1.2`
+   * has a paid submission APPEND a product to a category that is already scored,
+   * and a new category arrives by seeding, which commits `cjr/runs/<slug>/`. So
+   * the roster of slugs is the category source's answer, and `SnapshotBoardSource`
+   * takes it from there and asks the sink only for each board's DOCUMENT — which
+   * is the half that moves on a placement, and the half that was being read from
+   * the wrong place.
+   *
+   * If a deployment ever does need enumeration, it belongs in an index object the
+   * publisher maintains, not in a LIST verb this interface has to grow.
+   */
+  list(): Promise<string[]> {
+    return Promise.resolve([]);
+  }
 }
 
 /** A bucket that answered with something other than success. */

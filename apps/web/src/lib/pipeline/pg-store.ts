@@ -76,6 +76,7 @@ import {
 import { categories, deterministicUuid, jobs, normalizeUrl, products, snapshots, type Database } from '@the-pit/db';
 import { and, desc, eq, ne, or, sql, type SQL } from 'drizzle-orm';
 
+import { SNAPSHOT_VERSION_CONFLICT } from './errors';
 import type { PipelineStore } from './store';
 
 /**
@@ -103,9 +104,18 @@ export class PipelineStoreNotProvisionedError extends Error {
  * inside the `rank` step. This says what actually happened and what to do, because
  * the fix — bump `categories.category_snapshot_version` and re-enqueue — is not
  * something anyone will infer from the trigger's own message.
+ *
+ * `code` is what makes it TERMINAL at the step boundary. The conflict is
+ * deterministic — the same run over the same stored rows hits the same unique
+ * every time — so retrying it spends `brief §2.3`'s three free retries
+ * reproducing a fault only an operator can clear. `inngest.ts` reads this code,
+ * through `isTerminalFailure`, exactly as `dispatch` reads
+ * `ModelCallError.code` to demote a `max_tokens` truncation. Never by wording:
+ * the message below is prose and prose gets reworded.
  */
 export class SnapshotVersionConflictError extends Error {
   override readonly name = 'SnapshotVersionConflictError';
+  readonly code = SNAPSHOT_VERSION_CONFLICT;
 }
 
 /** Which of `job_kind`'s members a run's job row is written under. */

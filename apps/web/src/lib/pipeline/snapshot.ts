@@ -37,10 +37,10 @@
  * resolving because its URL was never the one that moved.
  */
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-import { ENGINE_VERSION, type Ranking } from '@the-pit/engine';
+import type { Ranking } from '@the-pit/engine';
 
 /** Bumped when the ENVELOPE changes shape. The ranking inside it carries its own versions. */
 export const SNAPSHOT_VERSION = 1;
@@ -83,42 +83,36 @@ export interface BoardSnapshot {
   ranking: Ranking;
 }
 
-/** Where a published snapshot lives. */
+/**
+ * Where a published snapshot lives — and, since the read path goes through it
+ * too, where one is read back FROM.
+ *
+ * `read` is not a convenience. `/boards/<slug>` used to `readFile` a directory
+ * while a placement published to a bucket, so a customer could pay, place, and
+ * watch the public board never change — no error, just two different documents.
+ * One interface, both directions, is what makes that impossible to reintroduce.
+ */
 export interface SnapshotSink {
   /** Write the immutable dated document and the mutable board path. Returns both keys. */
   publish(snapshot: BoardSnapshot): Promise<PublishedSnapshot>;
   /** The current board for a category, or `undefined` if it has never been published. */
   read(slug: string): Promise<BoardSnapshot | undefined>;
+  /**
+   * Every slug with a published board.
+   *
+   * Empty is a legitimate answer for a store that cannot ENUMERATE as well as for
+   * one that holds nothing — `BucketSnapshotSink` says why it is the former.
+   * Callers that need the full roster of categories get it from the category
+   * source, not from here: a placement appends a product to a category that
+   * already exists, so publishing never invents a slug.
+   */
+  list(): Promise<string[]>;
 }
 
 /** What a publish wrote. `board` is the path a reader hits; `dated` is the permanent one. */
 export interface PublishedSnapshot {
   board: string;
   dated: string;
-}
-
-/**
- * Build the snapshot for a delivered run.
- *
- * Takes no client, no store and no network — everything it needs is the ranking
- * the `rank` step already produced.
- */
-export function buildSnapshot(input: {
-  slug: string;
-  ranking: Ranking;
-  categoryVersion: string;
-  generatedAt: Date;
-}): BoardSnapshot {
-  return {
-    snapshot_version: SNAPSHOT_VERSION,
-    slug: input.slug,
-    category: input.ranking.category,
-    generated_at: input.generatedAt.toISOString(),
-    product_count: input.ranking.ranking.length,
-    engine_version: ENGINE_VERSION,
-    category_version: input.categoryVersion,
-    ranking: input.ranking,
-  };
 }
 
 /**
@@ -151,6 +145,19 @@ export class FileSnapshotSink implements SnapshotSink {
     await this.write(dated, snapshot);
     await this.write(board, snapshot);
     return { board, dated };
+  }
+
+  async list(): Promise<string[]> {
+    try {
+      return (await readdir(join(this.root, 'boards'), { withFileTypes: true }))
+        .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+        .map((entry) => entry.name.slice(0, -'.json'.length))
+        .sort();
+    } catch {
+      // No `boards/` directory is a deployment that has published nothing yet,
+      // which is every category before its first delivered run.
+      return [];
+    }
   }
 
   async read(slug: string): Promise<BoardSnapshot | undefined> {
@@ -186,6 +193,15 @@ export class MemorySnapshotSink implements SnapshotSink {
 
   read(slug: string): Promise<BoardSnapshot | undefined> {
     return Promise.resolve(this.documents.get(`boards/${slug}`));
+  }
+
+  list(): Promise<string[]> {
+    return Promise.resolve(
+      [...this.documents.keys()]
+        .filter((key) => key.startsWith('boards/'))
+        .map((key) => key.slice('boards/'.length))
+        .sort(),
+    );
   }
 
   /** Every document ever written, dated keys included. Lets a test prove the archive is not overwritten. */

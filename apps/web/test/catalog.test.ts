@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { FileCategorySource } from '@/lib/pipeline/catalog';
+import { MemoryPlacementClaims } from '@/lib/pipeline/claims';
 import { loadRunStatus, type RunnerBindings } from '@/lib/pipeline/service';
 import { MemorySnapshotSink } from '@/lib/pipeline/snapshot';
 import { FilePipelineStore } from '@/lib/pipeline/store';
@@ -40,6 +41,7 @@ function bindings(): RunnerBindings {
   return {
     categories: new FileCategorySource(WORKDIR),
     store: (category: string) => new FilePipelineStore(category, WORKDIR),
+    claims: new MemoryPlacementClaims(),
     snapshots: new MemorySnapshotSink(),
   };
 }

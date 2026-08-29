@@ -18,16 +18,22 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { DATABASE_URL_ENV as DB_DATABASE_URL_ENV } from '@the-pit/db';
+
 import { BucketSnapshotSink } from '@/lib/pipeline/bucket';
+import { FileCategorySource } from '@/lib/pipeline/catalog';
 import { PgPipelineStore } from '@/lib/pipeline/pg-store';
 import {
   assertBindingsConfigured,
   bindingProblems,
+  DATABASE_URL_ENV,
   defaultBindings,
   PipelineBindingError,
   requiresDurableStorage,
   storageMode,
 } from '@/lib/pipeline/service';
+import { PgCategorySource } from '@/lib/pipeline/pg-catalog';
+import { defaultSnapshotSink } from '@/lib/pipeline/sink';
 import { FileSnapshotSink } from '@/lib/pipeline/snapshot';
 import { FilePipelineStore } from '@/lib/pipeline/store';
 
@@ -122,6 +128,14 @@ describe('a misconfigured deployment fails at startup, not at the first paid run
     expect(bindingProblems(LOCAL)).toEqual([]);
   });
 
+  it('names DATABASE_URL the way @the-pit/db names it', () => {
+    // `mode.ts` imports nothing — that is what lets the board read path ask which
+    // storage this deployment is bound to without loading a Postgres driver — so
+    // it restates this one constant. Restating it is how a name drifts, and this
+    // is the assertion that stops it.
+    expect(DATABASE_URL_ENV).toBe(DB_DATABASE_URL_ENV);
+  });
+
   it('warns, once, when a placement cannot invalidate the edge', () => {
     // Survivable — `BOARD_CACHE_CONTROL` carries `stale-while-revalidate` — but
     // not silent: `02 §4` asks for the category's path to be invalidated, and
@@ -143,10 +157,12 @@ describe('a misconfigured deployment fails at startup, not at the first paid run
 });
 
 describe('the bindings themselves', () => {
-  it('hands out a file store and a file sink locally', () => {
+  it('hands out a file store, a file catalogue and a file sink locally', () => {
     const bindings = defaultBindings(LOCAL);
     expect(bindings.store('Health, Fitness & Wellness', VERSIONS)).toBeInstanceOf(FilePipelineStore);
     expect(bindings.snapshots).toBeInstanceOf(FileSnapshotSink);
+    // `cjr/` on disk is right locally, in CI and for `01 §4`'s offline seeding.
+    expect(bindings.categories).toBeInstanceOf(FileCategorySource);
   });
 
   it('gives a placement its own scope on the filesystem', () => {
@@ -174,6 +190,46 @@ describe('the bindings themselves', () => {
     const bindings = defaultBindings(PRODUCTION);
     expect(bindings.store('Health, Fitness & Wellness', VERSIONS)).toBeInstanceOf(PgPipelineStore);
     expect(bindings.snapshots).toBeInstanceOf(BucketSnapshotSink);
+  });
+
+  it('reads categories from Postgres in production, never from the committed files', () => {
+    // The one that would otherwise be silent. `cjr/` ships with the deployment
+    // and reads fine — it simply cannot see a placement, because `brief §1.2`
+    // appends a `products` row and bumps `category_snapshot_version` and a
+    // committed `products.json` has neither. The result is a board computed over
+    // the wrong population, with no error anywhere.
+    const bindings = defaultBindings(PRODUCTION);
+    expect(bindings.categories).toBeInstanceOf(PgCategorySource);
+    expect(bindings.categories).not.toBeInstanceOf(FileCategorySource);
+  });
+
+  it('resolves the SAME sink for the write path and the board read path', () => {
+    // The gap this closes: `deliver` published through `SnapshotSink` while
+    // `/boards/<slug>` called `readFile`, so a placement in production was
+    // invisible on the public board and nothing failed. One factory, both sides.
+    expect(defaultSnapshotSink(PRODUCTION)).toBeInstanceOf(BucketSnapshotSink);
+    expect(defaultSnapshotSink(LOCAL)).toBeInstanceOf(FileSnapshotSink);
+  });
+
+  it('refuses a bucketless production sink, except during next build', () => {
+    // A running server with no bucket cannot publish and cannot read, and the
+    // startup assertion refuses to boot it. `next build` is the one caller that
+    // is production-flavoured with nothing provisioned — it sets
+    // `NODE_ENV=production` on a laptop — and prerendering a board there must not
+    // require a bucket.
+    const { PIT_SNAPSHOT_BUCKET_URL: _omitted, ...noBucket } = PRODUCTION;
+    expect(() => defaultSnapshotSink(noBucket)).toThrow(PipelineBindingError);
+    expect(defaultSnapshotSink({ ...noBucket, NEXT_PHASE: 'phase-production-build' })).toBeInstanceOf(FileSnapshotSink);
+  });
+
+  it('fails at STARTUP when the category source has no database, not at the first paid run', () => {
+    // `PgCategorySource` needs `DATABASE_URL`, and the moment that fact would
+    // otherwise surface is the first `bindings.categories.load()` — inside an
+    // Inngest step, on a submission somebody paid for. `assertBindingsConfigured`
+    // runs from `instrumentation.register()`, once, before the first request.
+    const { DATABASE_URL: _omitted, ...noDatabase } = PRODUCTION;
+    expect(() => assertBindingsConfigured(noDatabase)).toThrow(PipelineBindingError);
+    expect(bindingProblems(noDatabase).some((problem) => problem.includes('DATABASE_URL'))).toBe(true);
   });
 
   it('keys a placement on its own job row in Postgres, under the category\'s slug', () => {

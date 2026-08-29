@@ -25,6 +25,8 @@ import {
 } from '@/lib/pipeline/inngest';
 import { CallMeter, RecordingStepRunner } from '@/lib/pipeline/local';
 import type { RunnerBindings, RunScope } from '@/lib/pipeline/service';
+import { MemoryPlacementClaims, PlacementInFlightError } from '@/lib/pipeline/claims';
+import { isTerminalFailure } from '@/lib/pipeline/errors';
 import { MemorySnapshotSink } from '@/lib/pipeline/snapshot';
 import { MemoryPipelineStore, placementScope, type PipelineStore } from '@/lib/pipeline/store';
 import { PIPELINE_STEPS } from '@/lib/pipeline/types';
@@ -49,9 +51,15 @@ import { newProduct, NEW_ID, SEED_SIZE } from './helpers/place.js';
  * phases are different documents under the same version stamp, and they are kept
  * apart by being addressed differently.
  */
-function memoryBindings(): { bindings: RunnerBindings; stores: Map<string, MemoryPipelineStore>; snapshots: MemorySnapshotSink } {
+function memoryBindings(): {
+  bindings: RunnerBindings;
+  stores: Map<string, MemoryPipelineStore>;
+  snapshots: MemorySnapshotSink;
+  claims: MemoryPlacementClaims;
+} {
   const stores = new Map<string, MemoryPipelineStore>();
   const snapshots = new MemorySnapshotSink();
+  const claims = new MemoryPlacementClaims();
 
   const store = (category: string): PipelineStore => {
     const existing = stores.get(category);
@@ -64,7 +72,9 @@ function memoryBindings(): { bindings: RunnerBindings; stores: Map<string, Memor
   return {
     stores,
     snapshots,
+    claims,
     bindings: {
+      claims,
       categories: new MemoryCategorySource([
         {
           category: CATEGORY,
@@ -219,5 +229,165 @@ describe('one submission, end to end through the function body', () => {
       prompt_version: 'jury-v1',
       persona_version: 'personas-v1',
     });
+  });
+});
+
+describe('one submission buys one placement', () => {
+  /**
+   * `jobIdempotencyKey` from `@the-pit/payments`, as a submission would carry it.
+   *
+   * The real one is a SHA-256 over `(accountId, normalizedUrl, descriptionHash,
+   * cycleId)`. Only two properties matter here and both are the payments
+   * package's: the same submission produces the same key, and a re-pitch in a
+   * LATER cycle produces a different one.
+   */
+  const KEY = 'a'.repeat(64);
+  const RE_PITCH_KEY = 'b'.repeat(64);
+
+  /** One placement, metered, so a second one is visible as calls rather than as prose. */
+  async function place(
+    bindings: RunnerBindings,
+    data: Partial<PlacementRequestedData> = {},
+  ): Promise<{ outcome: Awaited<ReturnType<typeof executePlacement>>; calls: number }> {
+    const meter = new CallMeter(new FixtureClient(makeScript()));
+    const outcome = await executePlacement(
+      { slug: CATEGORY_SLUG, product: newProduct(), ...data },
+      bindings,
+      new RecordingStepRunner(),
+      undefined,
+      meter,
+    );
+    return { outcome, calls: meter.total };
+  }
+
+  it('runs ONE pipeline for two events carrying the same key, and resolves to the first', async () => {
+    // The gap. `place-product` serializes placements against each other per slug,
+    // which does not stop a genuinely new event for the same submission entering
+    // the queue — a retried webhook, a re-POSTed status page, a replay fired in
+    // the window between a successful `rank` and a failed `deliver`. The customer
+    // is charged once (`brief §2.3` consumes an attempt only on delivery) and the
+    // inference is bought twice.
+    //
+    // 11 then 0 is the whole assertion: 6 juror calls + 1 clustering + 4 forced
+    // choices, and then nothing. A pipeline that ran again reads 11 and 11.
+    const { bindings, snapshots } = memoryBindings();
+    await seed(bindings);
+    expect(snapshots.published).toHaveLength(1);
+
+    const first = await place(bindings, { idempotencyKey: KEY });
+    expect(first.calls).toBe(11);
+    if (first.outcome.status !== 'placed') throw new Error('expected a placement');
+
+    // The second event carries the bumped population version the first placement
+    // produced — which is what makes it a genuinely different RUN and not an
+    // Inngest retry, and is exactly the shape the double-placement takes
+    // (`brief §1.2` moves every z-score, so the version has to move with it).
+    const second = await place(bindings, { idempotencyKey: KEY, categoryVersion: 'cat-v2' });
+    expect(second.calls).toBe(0);
+    expect(second.outcome).toEqual(first.outcome);
+
+    // And the board was republished once, not twice.
+    expect(snapshots.published).toHaveLength(2);
+  });
+
+  it('still runs twice for two genuinely different submissions, so a re-pitch is not blocked', async () => {
+    // The negative control, and it is not optional: `brief §2.4` lets the same
+    // product be pitched again after the next rebuild, which
+    // `packages/payments/src/listing/repitch.ts` implements. The cycle id is IN
+    // the key precisely so that an identical re-pitch a week later does not
+    // silently resolve to the first job — a guard keyed on the product would have
+    // blocked the one path the brief explicitly allows.
+    const { bindings, snapshots } = memoryBindings();
+    await seed(bindings);
+
+    const first = await place(bindings, { idempotencyKey: KEY });
+    // A re-pitch inserts a NEW product row (`migrations/0002` freezes a scored
+    // product's text, so it cannot be an edit) under a new cycle, therefore a new
+    // key. Both halves have to differ or the test is asserting the resume gate
+    // rather than the guard.
+    const second = await place(bindings, {
+      idempotencyKey: RE_PITCH_KEY,
+      product: newProduct({ id: NEW_ID + 1, url: 'https://example.com/100', normalized_url: 'example.com/100' }),
+    });
+
+    expect(first.calls).toBe(11);
+    expect(second.calls).toBe(11);
+    expect(snapshots.published).toHaveLength(3);
+  });
+
+  it('lets the SAME event retry, because a retry is not a duplicate', async () => {
+    // `brief §2.3`'s free retry has to survive the guard. A retried event carries
+    // the same key AND the same versions, so it addresses the claim it already
+    // owns rather than colliding with someone else's — and it resumes the phases
+    // it already paid for instead of being refused outright.
+    const { bindings } = memoryBindings();
+    await seed(bindings);
+
+    const first = await place(bindings, { idempotencyKey: KEY });
+    expect(first.calls).toBe(11);
+
+    // Same key, same versions: attempt two of ONE event. It resolves to the
+    // outcome attempt one recorded and buys nothing — a finished submission never
+    // runs again, whoever asks.
+    const retry = await place(bindings, { idempotencyKey: KEY });
+    expect(retry.calls).toBe(0);
+    expect(retry.outcome).toEqual(first.outcome);
+  });
+
+  it('lets a FAILED attempt be retried under its own claim', async () => {
+    // The other half of the same rule, and the one that would break `brief §2.3`
+    // if the guard were a blanket: a claim taken before the first step is still
+    // held when that step fails, and the retry has to be allowed through to
+    // resume the phases it already paid for. Nothing was recorded, because a
+    // failure is not an outcome.
+    const { bindings, claims } = memoryBindings();
+    await seed(bindings);
+
+    const versions = phaseVersions((await bindings.categories.load(CATEGORY_SLUG))!);
+    const submission = { key: KEY, slug: CATEGORY_SLUG, versions, productId: NEW_ID };
+    const claimed = await claims.claim(submission);
+    expect(claimed.mine).toBe(true);
+    expect(claimed.outcome).toBeUndefined();
+
+    // The retry re-claims the key it already owns and runs.
+    const retry = await place(bindings, { idempotencyKey: KEY });
+    expect(retry.outcome.status).toBe('placed');
+    expect(retry.calls).toBe(11);
+  });
+
+  it('tells a duplicate to come back when the first placement has not finished', async () => {
+    // Nothing was spent and nothing is decided yet, so the honest answer is "not
+    // now" — an ordinary error, which Inngest retries with backoff. NOT terminal:
+    // the thing that makes the retry succeed is the first placement landing.
+    const { bindings, claims } = memoryBindings();
+    await seed(bindings);
+
+    const versions = phaseVersions((await bindings.categories.load(CATEGORY_SLUG))!);
+    // An owner that claimed and has not recorded — the in-flight state exactly.
+    await claims.claim({ key: KEY, slug: CATEGORY_SLUG, versions, productId: NEW_ID });
+
+    const meter = new CallMeter(new FixtureClient(makeScript()));
+    await expect(
+      executePlacement(
+        { slug: CATEGORY_SLUG, product: newProduct(), idempotencyKey: KEY, categoryVersion: 'cat-v2' },
+        bindings,
+        new RecordingStepRunner(),
+        undefined,
+        meter,
+      ),
+    ).rejects.toBeInstanceOf(PlacementInFlightError);
+
+    expect(meter.total).toBe(0);
+    expect(isTerminalFailure(new PlacementInFlightError('run-1'))).toBe(false);
+  });
+
+  it('places normally when no key is supplied, so an admin placement is not blocked', async () => {
+    // An admin placement has no submission and no payer. Making the key mandatory
+    // would only mean that path invented one.
+    const { bindings } = memoryBindings();
+    await seed(bindings);
+    const outcome = await place(bindings);
+    expect(outcome.outcome.status).toBe('placed');
+    expect(outcome.calls).toBe(11);
   });
 });
