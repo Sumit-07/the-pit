@@ -79,6 +79,13 @@ export interface HandBuilt {
   picks?: unknown[];
   /** Overrides `product_count` INSIDE the payload only. Used to force a disagreement. */
   payloadProductCount?: number;
+  /**
+   * Overrides the payload's `demand_roster_size` — `packages/db/src/seed/
+   * build.ts`'s denominator for `demand_detail.picks`. Defaults to 4, which
+   * agrees with the default `capture: 0.5` and the two default picks below
+   * (2 personas / 4 on the roster = 0.5).
+   */
+  rosterSize?: number;
 }
 
 export function handBuiltVerdict(overrides: HandBuilt = {}): StoredVerdict {
@@ -124,6 +131,7 @@ export function handBuiltVerdict(overrides: HandBuilt = {}): StoredVerdict {
       uniqueness_version: 'v2',
       weights: { merit: 0.65, demand: 0.35, uniqueness_lambda: 0.075 },
       metrics: [{ name: 'Trust Surface', description: 'proof, not promises' }],
+      demand_roster_size: overrides.rosterSize ?? 4,
       verdict: {
         id: 31,
         name: overrides.name ?? 'Runlet',

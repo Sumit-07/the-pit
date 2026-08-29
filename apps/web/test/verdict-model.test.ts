@@ -73,15 +73,33 @@ describe('a verdict the Floor judged', () => {
     }
   });
 
-  it('counts who picked it first and who made it runner-up', async () => {
+  it('counts who picked it first and who made it runner-up, against the roster that could have', async () => {
     const verdict = parseVerdict(await seededVerdictNamed('developer-tools', 'Sequo'));
 
     expect(verdict.floor.kind).toBe('convened');
     if (verdict.floor.kind !== 'convened') throw new Error('unreachable');
     expect(verdict.floor.firstPicks).toBe(5);
     expect(verdict.floor.secondPicks).toBe(0);
+    // `cjr/runs/developer-tools/ranking.json`'s top-level `personas` has 6
+    // entries — the whole panel that answered this run, `01 §6.2`'s `P`. 5 of
+    // them named Sequo first, so the card reads "5 of 6", not a bare "5".
+    expect(verdict.floor.rosterSize).toBe(6);
     expect(verdict.demand).toBeCloseTo(0.6377777, 6);
     expect(verdict.cluster.size).toBe(2);
+  });
+
+  it('carries the same roster size for a product most of the panel declined', async () => {
+    // `cjr/runs/health-fitness-wellness/ranking.json`: Fuel Log's own picks are 2
+    // (both first-choice), against the same 6-persona panel — the mockup's own
+    // worked example, "2 of 6". The other 4 personas answered about this run too;
+    // they just did not pick Fuel Log. That is what a roster denominator is for.
+    const verdict = parseVerdict(await seededVerdictNamed('health-fitness-wellness', 'Fuel Log'));
+
+    expect(verdict.floor.kind).toBe('convened');
+    if (verdict.floor.kind !== 'convened') throw new Error('unreachable');
+    expect(verdict.floor.firstPicks).toBe(2);
+    expect(verdict.floor.secondPicks).toBe(0);
+    expect(verdict.floor.rosterSize).toBe(6);
   });
 });
 
@@ -94,6 +112,19 @@ describe('a verdict the Floor never convened for', () => {
     expect(verdict.demand).toBeUndefined();
     expect(verdict.cuts).toBeCloseTo(25.8333333, 6);
     expect(verdict.rank).toBe(2);
+  });
+
+  it('does not need a roster size at all — there is no numerator to divide', () => {
+    // A solo-cluster row never reads `demand_roster_size`, so a payload missing
+    // it entirely (an older frozen row, or simply no scored product on the
+    // board) still parses. If this ever started requiring the field, a solo
+    // verdict would render "0 of M" the moment the field were absent or zero —
+    // exactly the misreading `DECISIONS.md` S3 exists to prevent.
+    const row = handBuiltVerdict({ demandStatus: 'solo_cluster' });
+    delete (row.payload as Record<string, unknown>)['demand_roster_size'];
+
+    const verdict = parseVerdict(row);
+    expect(verdict.floor).toEqual({ kind: 'solo', clusterSize: 1 });
   });
 
   it('is the common case on both seeded boards', async () => {
@@ -177,5 +208,21 @@ describe('a payload that is not a verdict', () => {
 
   it('refuses an empty scorecard rather than rendering a blank card', () => {
     expect(() => parseVerdict(handBuiltVerdict({ scorecard: [] }))).toThrow(/scorecard is empty/);
+  });
+
+  it('refuses a scored floor with no roster size to divide by', () => {
+    // Older frozen rows predate `demand_roster_size` (`packages/db/src/seed/
+    // build.ts`). A page that rendered "5 of undefined" would be worse than one
+    // that refuses to render at all.
+    const row = handBuiltVerdict({ demandStatus: 'scored' });
+    delete (row.payload as Record<string, unknown>)['demand_roster_size'];
+
+    expect(() => parseVerdict(row)).toThrow(/demand_roster_size is not a finite number/);
+  });
+
+  it('refuses a roster size that could not have convened', () => {
+    const row = handBuiltVerdict({ demandStatus: 'scored', rosterSize: 0 });
+
+    expect(() => parseVerdict(row)).toThrow(/demand_roster_size 0 is not a roster that could have convened/);
   });
 });

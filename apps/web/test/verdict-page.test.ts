@@ -87,6 +87,13 @@ describe('a solo cluster', () => {
     expect(html).toContain('no buyers convened');
     expect(html).toContain('n/a &mdash; solo cluster');
     expect(html).not.toContain('<span>0.00</span>');
+    // Above all: never "0 of M" on the "picked you" line. No buyers convened is
+    // a fact about the cluster (nobody was shown this product), not a demand
+    // signal of universal rejection — `DECISIONS.md` S3's whole point. A "0 of
+    // 6" would read as the latter to a customer who never sees the code that
+    // produced it. (The rank stamp legitimately says "of 48 products" nearby —
+    // this checks the picked-you line specifically, not the whole page.)
+    expect(html).not.toMatch(/picked you<\/span><span>\d+ of \d+<\/span>/);
   });
 
   it('still shows the cluster it was judged inside', async () => {
@@ -99,10 +106,13 @@ describe('a solo cluster', () => {
 });
 
 describe('the Floor, when it convened', () => {
-  it('names each persona beside the reason they gave', async () => {
+  it('names each persona beside the reason they gave, and states the roster they were picked against', async () => {
     const html = await renderSeeded('developer-tools', 'Sequo');
 
-    expect(html).toContain('5 first &middot; 0 runner-up');
+    // `platform-surfaces-mockup.html`'s own phrasing: "Panel picked you — N of M".
+    // 5 personas named Sequo first, out of the 6-persona panel that answered
+    // this run (`cjr/runs/developer-tools/ranking.json`'s top-level `personas`).
+    expect(html).toContain('<span>The Buyers picked you</span><span>5 of 6</span>');
     // Every pick block pairs a chip with a reason and a persona.
     const picks = [...html.matchAll(/<div class="pick">.*?<\/div>/gs)];
     expect(picks.length).toBeGreaterThan(0);
@@ -111,6 +121,19 @@ describe('the Floor, when it convened', () => {
       expect(block).toMatch(/<span class="who">&mdash; .+?<\/span>/);
     }
     expect(html).toContain('demand 0.64');
+  });
+
+  it('renders "N of M" for a product most of the panel declined, not just N', async () => {
+    // The mockup's own worked example is "2 of 6" — Fuel Log on the
+    // health-fitness-wellness board matches it exactly: 2 personas picked it
+    // (both first-choice) out of the same 6-persona panel. Without the
+    // denominator this would misleadingly read as just "2".
+    const html = await renderVerdictPage(
+      parseVerdict(await seededVerdictNamed('health-fitness-wellness', 'Fuel Log')),
+      { origin: 'https://thepit.show' },
+    );
+
+    expect(html).toContain('<span>The Floor picked you</span><span>2 of 6</span>');
   });
 });
 

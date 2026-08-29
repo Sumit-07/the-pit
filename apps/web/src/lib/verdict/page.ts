@@ -286,7 +286,7 @@ function summaryLines(verdict: Verdict): string {
       : `<span class="none">no ${labels.buyers} convened</span>`;
   const picked =
     verdict.floor.kind === 'convened'
-      ? `<span>${verdict.floor.firstPicks} first &middot; ${verdict.floor.secondPicks} runner-up</span>`
+      ? `<span>${verdict.floor.firstPicks + verdict.floor.secondPicks} of ${verdict.floor.rosterSize}</span>`
       : `<span class="none">n/a &mdash; solo cluster</span>`;
 
   return [

@@ -518,6 +518,43 @@ describe('the frozen verdict pages (brief Part 6)', () => {
     );
   });
 
+  it('carries the roster size a pick count needs to mean anything', () => {
+    // `demand_detail.picks` on its own is a numerator with no denominator: "2
+    // personas picked you" reads as strong or weak depending on whether 4 or 40
+    // were asked. `demand_roster_size` is that denominator, and it is a
+    // category-level fact (same on every row of the board) rather than a
+    // per-product one, so it lives on the payload beside `product_count`, not
+    // inside `verdict`. The fixture's panel has 4 personas — Beta's own
+    // `capture: 0.5` with 2 picks already agrees with that (2 / 4 = 0.5).
+    const rows = buildSeedRows(INPUT);
+
+    for (const verdict of rows.verdicts) {
+      const payload = verdict.payload as { demand_roster_size: number };
+      expect(payload.demand_roster_size).toBe(4);
+    }
+  });
+
+  it('sources the roster size from the run itself, not from whatever panel file happens to be installed now', () => {
+    // `panel` (here `PANEL`) is `cjr/references/personas/<slug>.json` as it
+    // reads TODAY — it can gain or lose personas after a board was produced.
+    // `ranking.personas` is what THIS run actually asked, frozen inside
+    // `ranking.json` itself. A verdict must freeze the second, not the first,
+    // or an unrelated later edit to the install file would silently change a
+    // number on an already-issued verdict.
+    const driftedPanel: PersonaPanel = {
+      ...PANEL,
+      personas: [...PANEL.personas, { name: 'Yara', description: 'added later', needs: [], price_sensitivity: 'low' }],
+    };
+
+    const rows = buildSeedRows({ ...INPUT, panel: driftedPanel });
+
+    for (const verdict of rows.verdicts) {
+      const payload = verdict.payload as { demand_roster_size: number };
+      // Still 4 — RANKING.personas, not driftedPanel.personas (which is 5 now).
+      expect(payload.demand_roster_size).toBe(4);
+    }
+  });
+
   it('leaves a seeded verdict with no run, no payer and no pitch number', () => {
     // `brief` Part 7 seeds listings as UNCLAIMED. Nobody pitched them, so there
     // is no ordinal to print — `ListingSnapshot.attemptNumber` in
