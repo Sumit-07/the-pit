@@ -39,9 +39,9 @@ import {
 } from '@the-pit/db';
 import { FixtureDodoTransport, seededCategoryClassifier, type DodoTransport } from '@the-pit/payments';
 
-import { capabilityDeps } from '@/lib/auth/config';
+import { capabilityDeps, secureCookies, sessionKeyring } from '@/lib/auth/config';
 import { candidateCategories, listingLookup } from '@/lib/checkout/bindings';
-import type { CheckoutHandlerDeps } from '@/lib/checkout/handlers';
+import { submitPageDepsFrom, type CheckoutHandlerDeps, type SubmitPageDeps } from '@/lib/checkout/handlers';
 import { HttpDodoTransport } from '@/lib/checkout/transport';
 import { dodoConfig, PaymentsNotWiredError } from '@/lib/payments/config';
 
@@ -93,6 +93,50 @@ export function dodoTransport(): DodoTransport {
 
   transport = new HttpDodoTransport({ apiKey, mode: dodoConfig().mode });
   return transport;
+}
+
+/**
+ * The session keyring, or nothing, for a page that is not gated on one.
+ *
+ * `sessionKeyring()` throws when `SESSION_SECRET` is unset, and on `/submit`
+ * that is not an error: with no secret nobody can hold a valid session, which is
+ * precisely the guest checkout `brief §2.1` specifies. Swallowed here rather
+ * than in `submitterAccountId`, so the handler keeps taking a keyring it can
+ * trust and the "is this an error?" judgement is made once, at the seam that
+ * knows which page is asking.
+ *
+ * `POST /api/checkout` does NOT go through this. It resolves its keyring from
+ * `capabilityDeps()` below, and a broken one there still throws.
+ */
+function optionalKeyring(): Pick<SubmitPageDeps, 'keyring' | 'secureCookies'> {
+  try {
+    return { keyring: sessionKeyring(), secureCookies: secureCookies() };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * `GET /submit` — resolved from NOTHING.
+ *
+ * No `hasDatabaseUrl()` check, no `database()`, no `dodoConfig()`, no
+ * `dodoTransport()`. The form is a static document and the category roster is
+ * read from the snapshot sink, so the correct number of environment variables
+ * required to render the page that takes someone's money is zero. `/boards` was
+ * moved off the database for exactly this reason; this is the same fault on the
+ * highest-value read path in the product.
+ *
+ * `registerCheckoutDeps()` still wins, so a test that installed a full set of
+ * checkout dependencies sees the roster it installed rather than the real one.
+ *
+ * None of this weakens `PaymentsNotWiredError`: `checkoutDeps()` below is
+ * unchanged and still throws on a missing `DATABASE_URL` at the first `POST`,
+ * and `instrumentation.ts` still fails the boot on an unbindable pipeline. The
+ * only thing that moved is which requests have to pay for that wiring.
+ */
+export function submitPageDeps(): SubmitPageDeps {
+  if (registered !== null) return submitPageDepsFrom(registered);
+  return { candidateCategories, ...optionalKeyring() };
 }
 
 export function checkoutDeps(): CheckoutHandlerDeps {

@@ -52,7 +52,12 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ListingLookup } from '@/lib/checkout/guards';
-import { handleCheckoutCreate, handleSubmitPage, type CheckoutHandlerDeps } from '@/lib/checkout/handlers';
+import {
+  handleCheckoutCreate,
+  handleSubmitPage,
+  submitPageDepsFrom,
+  type CheckoutHandlerDeps,
+} from '@/lib/checkout/handlers';
 import type { PendingSubmission, PlacementQueue } from '@/lib/payments/enqueue';
 import { enqueuePlacementForPayment } from '@/lib/payments/enqueue';
 import { handleDodoWebhookRequest, type DodoWebhookDeps } from '@/lib/payments/webhook-handlers';
@@ -321,7 +326,9 @@ describe('guest checkout: nothing sits between a visitor and their purchase', ()
   });
 
   it('renders the form to a signed-out visitor with no mention of signing in', async () => {
-    const page = await (await handleSubmitPage(new Request(`${ORIGIN}/submit`), deps)).text();
+    const page = await (
+      await handleSubmitPage(new Request(`${ORIGIN}/submit`), submitPageDepsFrom(deps))
+    ).text();
 
     expect(page).toContain('name="url"');
     expect(page).toContain('name="description"');

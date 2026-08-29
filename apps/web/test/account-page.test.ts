@@ -99,6 +99,8 @@ function listing(overrides: Partial<AccountListing> = {}): AccountListing {
 let reads: RecordingReads;
 let identity: MemoryAuthStore;
 let deps: AccountHandlerDeps;
+/** How many times the handler asked for a store handle. Zero when signed out. */
+let storeCalls: number;
 let capability: CapabilityHandlerDeps;
 let slug: string;
 
@@ -108,12 +110,18 @@ beforeEach(() => {
   slug = mintCapabilitySlug();
   identity.seedAccount(PAYER, ACCOUNT_ID, slug);
 
+  storeCalls = 0;
   deps = {
-    origin: ORIGIN,
     keyring: KEYRING,
     secureCookies: true,
-    reads,
-    identities: identity,
+    stores: () => {
+      // Counted, not just recorded: the signed-out path must not resolve the
+      // stores AT ALL, which is a stronger claim than "it read nothing from
+      // them" — a deployment with no DATABASE_URL throws here, and a 500 on the
+      // logged-out page is what that used to mean.
+      storeCalls += 1;
+      return { origin: ORIGIN, reads, identities: identity };
+    },
   };
   capability = {
     origin: ORIGIN,
@@ -153,6 +161,10 @@ describe('with no session', () => {
     // The store was not touched. Not "the numbers are absent from the HTML" —
     // that would still pass if the handler fetched them and dropped them.
     expect(reads.calls).toEqual([]);
+    // Stronger: it was never even RESOLVED. `accountDeps()` used to open both
+    // stores before the handler read the cookie, so a deployment with no
+    // DATABASE_URL served a 500 here instead of this page.
+    expect(storeCalls).toBe(0);
     expect(page.body).not.toContain('Runlet');
     expect(page.body).not.toContain('$5.00');
     expect(page.body).not.toContain(PAYER);

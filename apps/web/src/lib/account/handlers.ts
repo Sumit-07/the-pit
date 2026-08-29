@@ -29,14 +29,44 @@ import { readSession, type IdentityStore, type SessionKeyring } from '@the-pit/a
 import { renderAccountPage, renderSignedOutPage } from '@/lib/account/page';
 import { loadAccountView, type AccountReads } from '@/lib/account/view';
 
-export interface AccountHandlerDeps {
-  readonly keyring: SessionKeyring;
-  /** `false` only on `http://localhost`; see `@the-pit/auth`'s cookie module. */
-  readonly secureCookies?: boolean;
+/**
+ * The stores the SIGNED-IN page reads, and only it.
+ *
+ * Every one of these is backed by Postgres in a deployment, and none of them is
+ * touched on the signed-out path — so they are resolved behind `stores()` below
+ * rather than handed in already open.
+ */
+export interface AccountStores {
   /** Absolute origin, for the capability URL the page displays. */
   readonly origin: string;
   readonly reads: AccountReads;
   readonly identities: IdentityStore;
+}
+
+export interface AccountHandlerDeps {
+  readonly keyring: SessionKeyring;
+  /** `false` only on `http://localhost`; see `@the-pit/auth`'s cookie module. */
+  readonly secureCookies?: boolean;
+  /**
+   * The stores, resolved only once a session has verified — a THUNK, and that is
+   * the whole point.
+   *
+   * The module header already promised that the signed-out path touches no
+   * store. It was true of the handler and false of the route: `accountDeps()`
+   * called `capabilityDeps()` and `accountStore()` eagerly, both of which throw
+   * without a `DATABASE_URL`, so a logged-out visitor to a deployment with no
+   * database got a 500 instead of the 401 page that tells them which doors
+   * exist. Rendering the signed-out state is a function of a cookie and nothing
+   * else, and now the type says so: on that path this function is never called,
+   * so there is no handle to fail to open.
+   *
+   * It is a deferral and not a weakening. `accountStore()` still throws
+   * `PaymentsNotWiredError` on the first signed-in render, which is the first
+   * request that actually needs a row — a signed-in page that showed an empty
+   * balance because a store was missing would be indistinguishable, to the
+   * customer, from a balance of zero.
+   */
+  readonly stores: () => AccountStores;
 }
 
 /**
@@ -74,10 +104,13 @@ export async function handleAccountPage(request: Request, deps: AccountHandlerDe
     return html(renderSignedOutPage(), 401);
   }
 
+  // Past the gate, and only past it: this is the first line in the function that
+  // can open a database handle.
+  const stores = deps.stores();
   const view = await loadAccountView(verified.session, {
-    reads: deps.reads,
-    identities: deps.identities,
-    origin: deps.origin,
+    reads: stores.reads,
+    identities: stores.identities,
+    origin: stores.origin,
   });
 
   return html(renderAccountPage(view), 200);

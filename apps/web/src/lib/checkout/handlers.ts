@@ -106,7 +106,47 @@ export interface SubmissionWriter {
   }): Promise<string>;
 }
 
-export interface CheckoutHandlerDeps {
+/**
+ * Reading the cookie, and nothing else.
+ *
+ * Both halves of this module want a session and neither is gated on one, so the
+ * two fields are named once here rather than duplicated on both dependency sets.
+ * Every field is optional because "we do not know who this is" is the ordinary
+ * state of a guest checkout — see `submitterAccountId`.
+ */
+interface SessionSource {
+  readonly keyring?: SessionKeyring;
+  readonly secureCookies?: boolean;
+}
+
+/**
+ * What `GET /submit` needs. It is deliberately NOT `CheckoutHandlerDeps`.
+ *
+ * The form is a static document: four fields, a price, and a `<select>` whose
+ * options are the categories that have a board. Rendering it writes nothing,
+ * charges nothing and reads no row — the roster comes from the snapshot sink,
+ * which is JSON on a disk or behind a CDN (`lib/boards/source.ts`), and the
+ * session is optional in the strong sense below.
+ *
+ * So this type holds no `DodoConfig`, no `DodoTransport`, no `SubmissionWriter`
+ * and no `ListingLookup`, and `lib/checkout/config.ts` can therefore resolve it
+ * with no `DATABASE_URL` and no `DODO_WEBHOOK_SECRET`. That is the point: the
+ * page that takes someone's money must render on a deployment where the write
+ * path is still being wired, and `brief §2.1` promises nothing sits between a
+ * visitor and their purchase. A missing binding must be reported at the moment
+ * money would move — which is `handleCheckoutCreate` below, and `POST` only —
+ * and never by 500-ing the form.
+ *
+ * The absence of the write dependencies is the guarantee, the same way the
+ * absence of an `AttemptsLedger` from `CheckoutHandlerDeps` is: a `GET` handler
+ * that held a `SubmissionWriter` would be a `GET` handler that could write one.
+ */
+export interface SubmitPageDeps extends SessionSource {
+  /** Every category on offer. See `lib/checkout/bindings.ts`; no database. */
+  readonly candidateCategories: () => Promise<readonly string[]>;
+}
+
+export interface CheckoutHandlerDeps extends SessionSource {
   readonly config: DodoConfig;
   readonly transport: DodoTransport;
   readonly submissions: SubmissionWriter;
@@ -121,6 +161,15 @@ export interface CheckoutHandlerDeps {
   readonly secureCookies?: boolean;
   /** Injected so the cycle arithmetic is testable at a fixed instant. */
   readonly now?: () => Date;
+}
+
+/** The `GET` half of a `CheckoutHandlerDeps`, for the `POST` that re-renders the form. */
+export function submitPageDepsFrom(deps: CheckoutHandlerDeps): SubmitPageDeps {
+  return {
+    candidateCategories: () => deps.guards.candidateCategories(),
+    ...(deps.keyring === undefined ? {} : { keyring: deps.keyring }),
+    ...(deps.secureCookies === undefined ? {} : { secureCookies: deps.secureCookies }),
+  };
 }
 
 /**
@@ -208,7 +257,7 @@ function tierFor(id: string): PriceTier | null {
  * deployment with no keyring at all — every one of them means "we do not know who
  * this is", which is the ordinary state of a guest checkout and not an error.
  */
-function submitterAccountId(request: Request, deps: CheckoutHandlerDeps): string | null {
+function submitterAccountId(request: Request, deps: SessionSource): string | null {
   if (deps.keyring === undefined) return null;
   try {
     const verified = readSession({
@@ -224,12 +273,12 @@ function submitterAccountId(request: Request, deps: CheckoutHandlerDeps): string
 }
 
 async function pageView(
-  deps: CheckoutHandlerDeps,
+  candidateCategories: () => Promise<readonly string[]>,
   values: SubmitFormValues,
   signedIn: boolean,
 ): Promise<SubmitPageView> {
   return {
-    categories: await deps.guards.candidateCategories(),
+    categories: await candidateCategories(),
     tiers: PRICE_TIERS,
     values,
     descriptionLimit: SANITIZE_LIMIT,
@@ -267,10 +316,17 @@ function refuse(
   return html(renderRejectionPage({ rejection, nextRebuild, form }), 422);
 }
 
-/** `GET /submit` — the form. Reachable by anybody, signed in or not. */
-export async function handleSubmitPage(request: Request, deps: CheckoutHandlerDeps): Promise<Response> {
+/**
+ * `GET /submit` — the form. Reachable by anybody, signed in or not, and by a
+ * deployment whose write path is not wired.
+ *
+ * Takes `SubmitPageDeps` and not `CheckoutHandlerDeps`, so there is no
+ * expression in this function that could reach a database handle, a Dodo client
+ * or the submissions table. See the type.
+ */
+export async function handleSubmitPage(request: Request, deps: SubmitPageDeps): Promise<Response> {
   const signedIn = submitterAccountId(request, deps) !== null;
-  const view = await pageView(deps, emptyFormFrom(request), signedIn);
+  const view = await pageView(deps.candidateCategories, emptyFormFrom(request), signedIn);
   return html(renderSubmitPage(view), 200);
 }
 
@@ -308,7 +364,11 @@ export async function handleCheckoutCreate(request: Request, deps: CheckoutHandl
   const now = (deps.now ?? (() => new Date()))();
   const values = await readValues(request);
   const accountId = submitterAccountId(request, deps);
-  const form = await pageView(deps, values, accountId !== null);
+  const form = await pageView(
+    () => deps.guards.candidateCategories(),
+    values,
+    accountId !== null,
+  );
 
   const tier = tierFor(values.tier);
   if (tier === null) {

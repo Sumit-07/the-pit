@@ -1,0 +1,387 @@
+/**
+ * The form renders on a server with nothing wired, and the money path does not.
+ *
+ * Two faults, one boundary. `GET /submit` called `checkoutDeps()`, which throws
+ * `PaymentsNotWiredError` without a `DATABASE_URL` — so the single page a
+ * visitor has to see before they can pay answered 500 on any deployment whose
+ * database was not yet bound. That is a read path pulling in a write path's
+ * wiring, the same fault `/boards` was fixed for, on the highest-value read in
+ * the product. `brief §2.1` promises nothing sits between a visitor and their
+ * purchase; a 500 is the largest possible something.
+ *
+ * So every test here runs with `DATABASE_URL`, `DODO_WEBHOOK_SECRET` and
+ * `DODO_API_KEY` deleted from the environment, and asserts both halves:
+ *
+ *   GET  /submit        200, with a rendered form            <- was 500
+ *   POST /api/checkout  PaymentsNotWiredError naming DATABASE_URL  <- unchanged
+ *   GET  /account       401, the signed-out page             <- was 500
+ *
+ * The `POST` assertions are as important as the `GET` ones. Making the form
+ * render is only correct if the refusal it used to inherit is still raised where
+ * money would actually move; a "fix" that made `checkoutDeps()` lazy or
+ * tolerant would move a boot-time failure to the first paid request, which is
+ * the failure `instrumentation.ts` exists to prevent.
+ *
+ * ## Nothing here opens a handle, and that is checked rather than assumed
+ *
+ * `createDatabase` is replaced with a function that throws. `hasDatabaseUrl`,
+ * the schema and everything else in `@the-pit/db` are the real ones, so the
+ * refusal path is genuine — but any code on the `GET` path that reached for a
+ * connection detonates by name instead of quietly succeeding against whatever
+ * `DATABASE_URL` happened to be exported into the test run.
+ *
+ * ## The fields are asserted by NAME, not by copy
+ *
+ * `name="url"`, `name="name"`, `name="description"`, `name="category"` and
+ * `name="tier"` are the form's contract with `POST /api/checkout` — they are
+ * what `readValues` reads. Labels, headings and prices are being reworked
+ * elsewhere and are not asserted, with one exception: the two tier VALUES and
+ * their amounts come from `PRICE_TIERS` in `@the-pit/payments`, which is
+ * `brief §2.3`'s rule and not the theme's.
+ *
+ * Hand-derived, from `packages/payments/src/money.ts`:
+ *
+ *   single   500 cents   formatUsd -> "$5.00"    checked by default
+ *   triple  1500 cents   formatUsd -> "$15.00"
+ */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+/**
+ * Every `createDatabase` in the app comes through here. A `GET` that opened a
+ * pool would throw this message rather than pass for the wrong reason.
+ */
+vi.mock('@the-pit/db', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@the-pit/db')>();
+  return {
+    ...actual,
+    createDatabase: (): never => {
+      throw new Error('a /submit render opened a database connection');
+    },
+  };
+});
+
+// Statically imported, all of it. The app graph reaches `@the-pit/engine` and
+// costs seconds to load the first time; paying that inside a `beforeEach` makes
+// the first test in the file fail on the hook timeout and nothing else.
+import { acceptAllClassifier, PRICE_TIERS, seededCategoryClassifier } from '@the-pit/payments';
+import * as payments from '@the-pit/payments';
+
+import { POST as checkoutPost } from '@/app/api/checkout/route';
+import { GET as accountGet } from '@/app/account/route';
+import { GET as submitGet } from '@/app/submit/route';
+import { accountDeps } from '@/lib/account/config';
+import { handleAccountPage } from '@/lib/account/handlers';
+import { resetAuthWiring } from '@/lib/auth/config';
+import { checkoutDeps, resetCheckoutWiring, submitPageDeps } from '@/lib/checkout/config';
+import { PaymentsNotWiredError, resetPaymentsWiring } from '@/lib/payments/config';
+
+/** Long enough for `assertUsableKeyring`; the same shape the other suites use. */
+const KEYRING_SECRET = 'test-secret-0123456789abcdef0123456789abcdef0123456789abcdef01';
+
+const ORIGIN = 'https://thepit.show';
+
+/** Everything the money path is wired from, and the session secret beside it. */
+const MANAGED = [
+  'DATABASE_URL',
+  'DODO_WEBHOOK_SECRET',
+  'DODO_API_KEY',
+  'DODO_MODE',
+  'DODO_PRODUCT_SINGLE',
+  'DODO_PRODUCT_TRIPLE',
+  'SESSION_SECRET',
+  'SESSION_SECRET_PREVIOUS',
+  'AUTH_DEV_MEMORY_STORE',
+  'APP_ORIGIN',
+] as const;
+
+const saved = new Map<string, string | undefined>();
+
+function resetWiring(): void {
+  resetCheckoutWiring();
+  resetPaymentsWiring();
+  resetAuthWiring();
+}
+
+beforeEach(() => {
+  for (const key of MANAGED) {
+    saved.set(key, process.env[key]);
+    delete process.env[key];
+  }
+  process.env['APP_ORIGIN'] = ORIGIN;
+  resetWiring();
+});
+
+afterEach(() => {
+  for (const [key, value] of saved) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  saved.clear();
+  resetWiring();
+});
+
+/** Call a route export that may throw synchronously or reject. One shape either way. */
+async function attempt(call: () => Promise<Response>): Promise<{ response?: Response; error?: unknown }> {
+  try {
+    return { response: await call() };
+  } catch (error) {
+    return { error };
+  }
+}
+
+async function renderSubmit(url = `${ORIGIN}/submit`): Promise<{ status: number; body: string }> {
+  const result = await attempt(() => submitGet(new Request(url)));
+  if (result.error !== undefined) {
+    throw new Error(
+      `GET /submit threw instead of rendering: ${
+        result.error instanceof Error ? `${result.error.name}: ${result.error.message}` : String(result.error)
+      }`,
+    );
+  }
+  const response = result.response as Response;
+  return { status: response.status, body: await response.text() };
+}
+
+// ---------------------------------------------------------------------------
+// GET /submit — the form, on a server with no database.
+// ---------------------------------------------------------------------------
+
+describe('GET /submit renders with no DATABASE_URL', () => {
+  it('answers 200 through the real route module', async () => {
+    expect(process.env['DATABASE_URL']).toBeUndefined();
+
+    const page = await renderSubmit();
+
+    expect(page.status).toBe(200);
+  });
+
+  it('renders a document and not an empty body', async () => {
+    // A 200 with nothing in it is not a rendered form. This is the assertion
+    // that makes the status above mean something.
+    const page = await renderSubmit();
+
+    expect(page.body.length).toBeGreaterThan(1000);
+    expect(page.body).toContain('<!doctype html>');
+    expect(page.body).toContain('</html>');
+  });
+
+  it('carries the four fields brief §2.1 promises: URL, name, description, category', async () => {
+    const page = await renderSubmit();
+
+    // The names `readValues` reads. Not the labels, which are being retyped.
+    expect(page.body).toContain('name="url"');
+    expect(page.body).toContain('name="name"');
+    expect(page.body).toContain('name="description"');
+    expect(page.body).toContain('name="category"');
+
+    // And each one is the control it has to be for a no-JavaScript post.
+    expect(page.body).toMatch(/<input[^>]*type="url"[^>]*name="url"/);
+    expect(page.body).toMatch(/<textarea[^>]*name="description"/);
+    expect(page.body).toMatch(/<select[^>]*name="category"/);
+  });
+
+  it('carries the tier selector, both tiers, with single pre-selected', async () => {
+    const page = await renderSubmit();
+
+    const radios = [...page.body.matchAll(/<input type="radio" name="tier" value="([a-z]+)"( checked)?>/g)];
+    expect(radios.map((match) => match[1])).toEqual(['single', 'triple']);
+    // `emptyFormFrom` defaults to `single` when the query string says nothing.
+    expect(radios[0]?.[2]).toBe(' checked');
+    expect(radios[1]?.[2]).toBeUndefined();
+
+    // $5 and $15, from `brief §2.3` — one price on the page per tier on offer.
+    expect(PRICE_TIERS.map((tier) => tier.amountCents)).toEqual([500, 1500]);
+    expect(page.body).toContain('$5.00');
+    expect(page.body).toContain('$15.00');
+  });
+
+  it('posts to the checkout route, with no script anywhere on the page', async () => {
+    const page = await renderSubmit();
+
+    expect(page.body).toContain('<form method="post" action="/api/checkout">');
+    expect(page.body).not.toContain('<script');
+  });
+
+  it('prefills from the query string without needing anything wired', async () => {
+    // The "pitch this" link from a board lands here. It is a read of `req.url`
+    // and nothing else, and it must survive the unwired case too.
+    const page = await renderSubmit(`${ORIGIN}/submit?url=https%3A%2F%2Fashgrove.dev&tier=triple`);
+
+    expect(page.status).toBe(200);
+    expect(page.body).toContain('value="https://ashgrove.dev"');
+    const radios = [...page.body.matchAll(/<input type="radio" name="tier" value="([a-z]+)"( checked)?>/g)];
+    expect(radios[1]?.[2]).toBe(' checked');
+  });
+
+  it('renders as a guest when SESSION_SECRET is missing rather than failing', async () => {
+    // No secret means no cookie can be valid, which is the ordinary guest
+    // checkout — not an error, and certainly not a 500 on the buying path.
+    expect(process.env['SESSION_SECRET']).toBeUndefined();
+
+    const page = await renderSubmit();
+
+    expect(page.status).toBe(200);
+    expect(page.body).toContain('name="url"');
+  });
+
+  it('resolves its dependencies with no config, and holds none of the write path', () => {
+    const deps = submitPageDeps() as unknown as Record<string, unknown>;
+
+    expect(typeof deps['candidateCategories']).toBe('function');
+    // The absence IS the guarantee. A GET handler holding any of these would be
+    // a GET handler that could open a checkout or write a submissions row.
+    expect(deps['transport']).toBeUndefined();
+    expect(deps['submissions']).toBeUndefined();
+    expect(deps['config']).toBeUndefined();
+    expect(deps['guards']).toBeUndefined();
+  });
+
+  it('lists categories from the snapshot sink, which is JSON and not a table', async () => {
+    // Reaching a database here throws the mocked `createDatabase` message.
+    const categories = await submitPageDeps().candidateCategories();
+
+    expect(Array.isArray(categories)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/checkout — unchanged, and still loud.
+// ---------------------------------------------------------------------------
+
+describe('POST /api/checkout still refuses loudly when the database is unwired', () => {
+  async function post(): Promise<{ response?: Response; error?: unknown }> {
+    const body = new URLSearchParams({
+      url: 'https://ashgrove.dev',
+      name: 'Ashgrove',
+      description: 'Turns meeting notes into a shared action list without anyone typing one.',
+      category: 'developer-tools',
+      tier: 'single',
+    });
+    return await attempt(() =>
+      checkoutPost(
+        new Request(`${ORIGIN}/api/checkout`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body,
+        }),
+      ),
+    );
+  }
+
+  it('raises PaymentsNotWiredError — the same error type, by name', async () => {
+    const result = await post();
+
+    expect(result.response).toBeUndefined();
+    expect(result.error).toBeInstanceOf(PaymentsNotWiredError);
+    expect((result.error as Error).name).toBe('PaymentsNotWiredError');
+  });
+
+  it('names DATABASE_URL in the message, so the deploy knows what is missing', async () => {
+    const result = await post();
+
+    expect((result.error as Error).message).toContain('DATABASE_URL is not set');
+  });
+
+  it('opens no Dodo session and writes no row, because it never gets that far', async () => {
+    // The refusal is at the dependency seam, before the handler runs at all.
+    // Nothing was parsed, nothing was checked, and nothing was charged.
+    const result = await post();
+
+    expect(result.error).toBeDefined();
+    expect(result.response).toBeUndefined();
+  });
+
+  it('is the SAME resolver the form deliberately does not use', () => {
+    expect(() => checkoutDeps()).toThrow(/DATABASE_URL is not set/);
+    // Same environment, same module, same instant. One throws and one does not,
+    // and that is the whole fix.
+    expect(() => submitPageDeps()).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /account — a session read, not a database read.
+// ---------------------------------------------------------------------------
+
+describe('GET /account renders its signed-out state with no DATABASE_URL', () => {
+  beforeEach(() => {
+    // The gate itself. `/account` is a function of a cookie, and verifying one
+    // needs a secret — that requirement stays.
+    process.env['SESSION_SECRET'] = KEYRING_SECRET;
+  });
+
+  it('answers 401 to a request with no cookie instead of 500', async () => {
+    const result = await attempt(() => accountGet(new Request(`${ORIGIN}/account`)));
+
+    expect(result.error).toBeUndefined();
+    expect(result.response?.status).toBe(401);
+  });
+
+  it('renders the signed-out page, with no balance and no capability URL on it', async () => {
+    const response = await accountGet(new Request(`${ORIGIN}/account`));
+    const body = await response.text();
+
+    expect(body).toContain('<!doctype html>');
+    expect(body).not.toContain('$5.00');
+  });
+
+  it('never resolves the stores on the signed-out path', async () => {
+    let resolved = 0;
+
+    const response = await handleAccountPage(new Request(`${ORIGIN}/account`), {
+      keyring: [KEYRING_SECRET],
+      stores: () => {
+        resolved += 1;
+        throw new Error('the signed-out page resolved a store');
+      },
+    });
+
+    expect(response.status).toBe(401);
+    expect(resolved).toBe(0);
+  });
+
+  it('still refuses at the first signed-in render — deferred, not weakened', () => {
+    // The thunk exists and is unresolved; calling it is what a verified session
+    // does, and with no database that is still a named failure.
+    expect(() => accountDeps().stores()).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The package barrel.
+// ---------------------------------------------------------------------------
+
+describe('@the-pit/payments exports its classifier from the barrel', () => {
+  it('exports seededCategoryClassifier as a working CategoryClassifier', () => {
+    expect(payments.seededCategoryClassifier).toBeDefined();
+    expect(typeof payments.seededCategoryClassifier.classify).toBe('function');
+  });
+
+  it('classifies offline, with no key and no network', async () => {
+    const verdict = await seededCategoryClassifier.classify({
+      name: 'Ashgrove',
+      description: 'A command line tool that formats and lints your TypeScript source files.',
+      chosenCategory: 'developer-tools',
+      candidateCategories: ['developer-tools', 'ai-writing-tools'],
+    });
+
+    expect(['match', 'mismatch', 'uncertain']).toContain(verdict.verdict);
+    expect(typeof verdict.confidence).toBe('number');
+  });
+
+  it('also exports the model and the factory that arrived with it', () => {
+    // The other symbols from the same merge. A missing barrel line is a
+    // build-time error only where something imports it, so they are named here.
+    expect(typeof payments.createNearestCentroidClassifier).toBe('function');
+    expect(payments.SEEDED_CATEGORY_MODEL).toBeDefined();
+    expect(typeof payments.buildCategoryModel).toBe('function');
+    expect(typeof payments.scoreCategories).toBe('function');
+    expect(typeof payments.tokenizeProduct).toBe('function');
+  });
+
+  it('is the classifier the checkout guards default to', () => {
+    // Not `acceptAllClassifier` — `DECISIONS.md` S12's free rank lever stays shut.
+    expect(seededCategoryClassifier).not.toBe(acceptAllClassifier);
+  });
+});
