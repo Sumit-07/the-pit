@@ -15,6 +15,15 @@ export { createDatabase } from './client.js';
 
 export { DATABASE_URL_ENV, hasDatabaseUrl, MissingDatabaseUrlError, requireDatabaseUrl } from './config.js';
 
+export type {
+  AttemptRowContext,
+  DeliveredVerdict,
+  LedgerEntry,
+  LedgerEntryReason,
+  VerdictRowContext,
+} from './identity.js';
+export { attemptRow, PAYMENTS_IDENTITY_MAPPING, verdictRow, verdictSlug } from './identity.js';
+
 export type { Migration } from './migrations.js';
 export { MIGRATIONS_DIR, readMigrations } from './migrations.js';
 

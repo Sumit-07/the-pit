@@ -446,3 +446,116 @@ describe('deterministic ids', () => {
     expect(() => deterministicUuid('product')).toThrow(/key part/);
   });
 });
+
+describe('the frozen verdict pages (brief Part 6)', () => {
+  it('writes one verdict per ranked product, stamped with the board it was issued against', () => {
+    // Hand-derived from the fixture: two ranked products, so two verdicts, each
+    // carrying `product_count = 2`. `DECISIONS.md` §1.2 moves every z-score on
+    // the next placement, so the count and the timestamp are what make a rank
+    // mean anything six weeks later.
+    const rows = buildSeedRows(INPUT);
+
+    expect(rows.verdicts).toHaveLength(2);
+    for (const verdict of rows.verdicts) expect(verdict.productCount).toBe(2);
+    expect(new Set(rows.verdicts.map((v) => v.productId)).size).toBe(2);
+  });
+
+  it('gives each verdict its own public URL, distinct from its id', () => {
+    // The slug is the address in someone's tweet; the uuid is an internal key.
+    // Keeping them different means the public page cannot address internal rows.
+    const rows = buildSeedRows(INPUT);
+    const slugs = rows.verdicts.map((v) => v.publicSlug as string);
+
+    expect(new Set(slugs).size).toBe(2);
+    for (const verdict of rows.verdicts) {
+      expect(verdict.publicSlug).not.toBe(verdict.id);
+      // `verdicts_public_slug_shape`, asserted with no database in sight.
+      expect(verdict.publicSlug).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+      expect((verdict.publicSlug as string).length).toBeGreaterThanOrEqual(12);
+    }
+  });
+
+  it('freezes what brief Part 6 says the page must carry', () => {
+    // Every deduction with its reason and the juror who took it, the cluster the
+    // product was judged inside, and which Floor personas picked it. Alpha's
+    // three deductions and Beta's two picks are the fixture's, hand-checked.
+    const rows = buildSeedRows(INPUT);
+    const alphaId = deterministicUuid('product', 'widget-tools', '0');
+    const betaId = deterministicUuid('product', 'widget-tools', '1');
+
+    const alpha = rows.verdicts.find((v) => v.productId === alphaId)?.payload as {
+      verdict: { scorecard: { deductions: { points: number; role: string }[] }[]; cluster: { id: string } };
+      product_count: number;
+    };
+    expect(alpha.verdict.scorecard[0]?.deductions.map((d) => [d.role, d.points])).toEqual([
+      ['The Release Engineer', 20],
+      ['The Release Engineer', 10],
+      ['The Docs Writer', 50],
+    ]);
+    expect(alpha.verdict.cluster.id).toBe('c1-widgets');
+
+    const beta = rows.verdicts.find((v) => v.productId === betaId)?.payload as {
+      verdict: { demand_detail: { picks: { persona: string; pick: string }[] } };
+    };
+    expect(beta.verdict.demand_detail.picks.map((p) => [p.persona, p.pick])).toEqual([
+      ['Priya', 'first'],
+      ['Deniz', 'second'],
+    ]);
+  });
+
+  it('does not survive a rebuild of the board, which is the point of freezing it', () => {
+    // Same products, same panels, a NEW population version — `brief §1.3`'s
+    // cache key axis. The old verdict keeps its own id and slug; the rebuild
+    // produces different ones, so both rows can coexist and the old link still
+    // resolves. If the ids matched, a rebuild would collide with, and therefore
+    // have to overwrite, a page somebody had already shared.
+    const first = buildSeedRows(INPUT);
+    const rebuilt = buildSeedRows({ ...INPUT, categorySnapshotVersion: 'seed-2' });
+
+    expect(new Set(first.verdicts.map((v) => v.id))).not.toEqual(new Set(rebuilt.verdicts.map((v) => v.id)));
+    expect(new Set(first.verdicts.map((v) => v.publicSlug))).not.toEqual(
+      new Set(rebuilt.verdicts.map((v) => v.publicSlug)),
+    );
+  });
+
+  it('leaves a seeded verdict with no run, no payer and no pitch number', () => {
+    // `brief` Part 7 seeds listings as UNCLAIMED. Nobody pitched them, so there
+    // is no ordinal to print — `ListingSnapshot.attemptNumber` in
+    // `@the-pit/payments` is 0 for exactly this case — and no job or account row
+    // exists to name.
+    const rows = buildSeedRows(INPUT);
+
+    for (const verdict of rows.verdicts) {
+      expect(verdict.jobId).toBeNull();
+      expect(verdict.accountId).toBeNull();
+      expect(verdict.attemptNumber).toBeNull();
+    }
+  });
+});
+
+describe('accounts', () => {
+  it('creates none for an unclaimed board, because there is nobody to create', () => {
+    // Not a stub. `products_source_submitter` refuses a `seeded` product with a
+    // submitter, so a seeded board genuinely has no payer; inventing one would
+    // fabricate a customer and hand `POST /auth/request` a live address to mail.
+    const rows = buildSeedRows(INPUT);
+
+    expect(rows.accounts).toEqual([]);
+    for (const product of rows.products) expect(product.submittedByEmail).toBeNull();
+  });
+
+  it('creates an account for every payer a verdict names, and no others', () => {
+    // The invariant that has to hold whatever the input carries:
+    // `verdicts.account_id` is a foreign key, and `insertSeedRows` writes
+    // accounts before verdicts, so a verdict naming a payer the seed did not
+    // create would fail the insert rather than the review.
+    const rows = buildSeedRows(INPUT);
+    const created = new Set(rows.accounts.map((account) => account.id));
+    const named = new Set(
+      rows.verdicts.map((verdict) => verdict.accountId).filter((id): id is string => typeof id === 'string'),
+    );
+
+    for (const id of named) expect(created.has(id)).toBe(true);
+    expect(created.size).toBe(rows.accounts.length);
+  });
+});

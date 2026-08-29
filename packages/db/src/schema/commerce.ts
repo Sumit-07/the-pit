@@ -10,10 +10,14 @@
  *   transaction that writes the verdict and marks it delivered. Not on job start,
  *   not on pipeline completion." And: "Failures are free retries."
  *
- * There is no `accounts` table at this phase. `brief §2.1` has no login at
- * submission and identifies a returning payer solely by a magic link to the email
- * Dodo verified, so the lowercased email is the account key. Both tables check
- * that it is lowercase, so one payer cannot become two balances.
+ * Both tables key the payer with `account_id`, a foreign key onto `accounts`.
+ * They originally carried a lowercased `account_email` instead, on the reasoning
+ * that `brief §2.1` has no login at submission and identifies a returning payer
+ * only by a magic link to the address Dodo verified. The address is still the
+ * identity — it is UNIQUE on `accounts` for exactly that reason — but a copy of
+ * it on every table is a foreign key with no referent, and nothing stopped
+ * `attempts` holding a balance for an address `orders` had never seen. See
+ * `schema/accounts.ts`.
  */
 
 import { sql } from 'drizzle-orm';
@@ -32,6 +36,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
+import { accounts } from './accounts.js';
 import { attemptKind, orderStatus } from './enums.js';
 import { jobs } from './jobs.js';
 import { products } from './products.js';
@@ -65,8 +70,14 @@ export const orders = pgTable(
     /** The provider's payment id. Several events share it; not unique. */
     providerPaymentId: text('provider_payment_id'),
 
-    /** The email Dodo collected and verified. The account key (`brief §2.1`). */
-    accountEmail: text('account_email').notNull(),
+    /**
+     * Who paid. Resolved from the email Dodo collected and verified, which the
+     * webhook handler upserts into `accounts` before it writes this row
+     * (`brief §2.1`).
+     */
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
 
     /** Gross, in the smallest currency unit. `brief §2.3`: $5 or $15. */
     amountCents: integer('amount_cents').notNull(),
@@ -123,13 +134,12 @@ export const orders = pgTable(
       .on(t.provider, t.providerPaymentId)
       .where(sql`attempts_granted > 0`),
 
-    index('orders_account_email_idx').on(t.accountEmail, t.createdAt),
+    index('orders_account_idx').on(t.accountId, t.createdAt),
     index('orders_payment_idx').on(t.provider, t.providerPaymentId),
 
     check('orders_amount_positive', sql`${t.amountCents} > 0`),
     check('orders_attempts_granted_non_negative', sql`${t.attemptsGranted} >= 0`),
     check('orders_currency_shape', sql`${t.currency} ~ '^[A-Z]{3}$'`),
-    check('orders_email_lowercase', sql`${t.accountEmail} = lower(${t.accountEmail})`),
 
     /**
      * Only a paid order grants anything. A refunded or disputed event that
@@ -155,7 +165,7 @@ export const orders = pgTable(
  * can be decremented twice by two concurrent deliveries of the same job, can be
  * decremented by a retry that should have been free, and once wrong carries no
  * record of how it got there. A ledger cannot: the balance is
- * `sum(delta) WHERE account_email = $1`, every row names the order that bought it
+ * `sum(delta) WHERE account_id = $1`, every row names the order that bought it
  * or the job that spent it, and six database-level guards make the failure modes
  * unrepresentable rather than merely unlikely.
  *
@@ -199,8 +209,10 @@ export const attempts = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
 
-    /** The account key: the lowercased email the payment carried (`brief §2.1`). */
-    accountEmail: text('account_email').notNull(),
+    /** Whose balance this row moves. `accountId` in `@the-pit/payments`. */
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
 
     kind: attemptKind('kind').notNull(),
 
@@ -265,10 +277,8 @@ export const attempts = pgTable(
       .where(sql`kind = 'grant'`),
 
     /** The balance read: `sum(delta)` for one account. */
-    index('attempts_account_idx').on(t.accountEmail, t.createdAt),
+    index('attempts_account_idx').on(t.accountId, t.createdAt),
     index('attempts_order_idx').on(t.orderId),
-
-    check('attempts_email_lowercase', sql`${t.accountEmail} = lower(${t.accountEmail})`),
 
     /** A row that moves nothing is noise in the integrity record. */
     check('attempts_delta_non_zero', sql`${t.delta} <> 0`),

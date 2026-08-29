@@ -12,6 +12,32 @@ import type { PGlite } from '@electric-sql/pglite';
 /** SHA-256 of the empty string — a valid `products.description_hash` shape. */
 export const A_HASH = '0'.repeat(64);
 
+/**
+ * An account, as the tests need to see it.
+ *
+ * Both halves are carried because the schema now uses both: `orders`, `attempts`
+ * and `verdicts` key on `accounts.id`, while `jobs`, `products` and `tokens`
+ * still hold the lowercased address. A fixture that returned only one of them
+ * would force every caller to re-derive the other.
+ */
+export interface TestAccount {
+  readonly id: string;
+  readonly email: string;
+}
+
+/** The address every fixture uses when the test does not care which payer it is. */
+export const A_PAYER = 'payer@example.com';
+
+export async function insertAccount(pg: PGlite, email: string = A_PAYER): Promise<TestAccount> {
+  const result = await pg.query<{ id: string }>(
+    `INSERT INTO accounts (email) VALUES ($1)
+     ON CONFLICT (email) DO UPDATE SET email = excluded.email
+     RETURNING id`,
+    [email],
+  );
+  return { id: required(result.rows[0]?.id, 'accounts.id'), email };
+}
+
 export async function insertCategory(pg: PGlite, slug = 'developer-tools'): Promise<string> {
   const result = await pg.query<{ id: string }>(
     `INSERT INTO categories (slug, name, type, prompt_version, persona_version, category_snapshot_version)
@@ -52,7 +78,7 @@ export async function insertCluster(pg: PGlite, categoryId: string, key = 'c1-th
 export async function insertJob(
   pg: PGlite,
   categoryId: string,
-  options: { delivered?: boolean; productId?: string; email?: string } = {},
+  options: { delivered?: boolean; productId?: string; account?: TestAccount } = {},
 ): Promise<string> {
   const delivered = options.delivered ?? false;
   const result = await pg.query<{ id: string }>(
@@ -64,7 +90,7 @@ export async function insertJob(
     [
       categoryId,
       options.productId ?? (await insertProduct(pg, categoryId, 900 + Math.floor(Math.random() * 90))),
-      options.email ?? 'payer@example.com',
+      options.account?.email ?? A_PAYER,
       delivered ? 'succeeded' : 'running',
       delivered ? new Date().toISOString() : null,
     ],
@@ -75,12 +101,13 @@ export async function insertJob(
 /** A paid order granting `attemptsGranted` attempts. */
 export async function insertOrder(
   pg: PGlite,
-  options: { eventId?: string; paymentId?: string; email?: string; attemptsGranted?: number } = {},
+  account: TestAccount,
+  options: { eventId?: string; paymentId?: string; attemptsGranted?: number } = {},
 ): Promise<string> {
   const unique = Math.random().toString(36).slice(2);
   const result = await pg.query<{ id: string }>(
     `INSERT INTO orders
-       (provider_event_id, provider_payment_id, account_email, amount_cents, currency, attempts_granted, status, raw_event)
+       (provider_event_id, provider_payment_id, account_id, amount_cents, currency, attempts_granted, status, raw_event)
      VALUES ($1, $2, $3, 500, 'USD', $4, 'paid', '{}'::jsonb)
      RETURNING id`,
     [
@@ -89,7 +116,7 @@ export async function insertOrder(
       // and one payment grants once (`orders_payment_grant_uk`), so each fixture
       // order is its own payment.
       options.paymentId ?? `pay_${unique}`,
-      options.email ?? 'payer@example.com',
+      account.id,
       options.attemptsGranted ?? 1,
     ],
   );
@@ -106,23 +133,52 @@ export async function insertOrder(
 export async function grantAttempt(
   pg: PGlite,
   orderId: string,
-  email = 'payer@example.com',
+  account: TestAccount,
   delta = 1,
 ): Promise<void> {
   await pg.query(
-    `INSERT INTO attempts (account_email, kind, delta, idempotency_key, order_id)
+    `INSERT INTO attempts (account_id, kind, delta, idempotency_key, order_id)
      VALUES ($1, 'grant', $2, 'dodo:event:' || $3::text, $3::uuid)`,
-    [email, delta, orderId],
+    [account.id, delta, orderId],
   );
 }
 
 /** Consume one attempt against a delivered job, keyed the way the payments ledger keys it. */
-export async function consumeAttempt(pg: PGlite, jobId: string, email = 'payer@example.com'): Promise<void> {
+export async function consumeAttempt(pg: PGlite, jobId: string, account: TestAccount): Promise<void> {
   await pg.query(
-    `INSERT INTO attempts (account_email, kind, delta, idempotency_key, job_id)
+    `INSERT INTO attempts (account_id, kind, delta, idempotency_key, job_id)
      VALUES ($1, 'consume', -1, 'delivery:run:' || $2::text, $2::uuid)`,
-    [email, jobId],
+    [account.id, jobId],
   );
+}
+
+/**
+ * A delivered verdict for a product, with the minimum every constraint needs.
+ *
+ * `attemptNumber` defaults to null — the seeded, unclaimed shape — because that
+ * is what the majority of rows in this database are; a paid verdict has to say
+ * so, which is `verdicts_paid_verdict_is_a_pitch`.
+ */
+export async function insertVerdict(
+  pg: PGlite,
+  productId: string,
+  options: { slug?: string; jobId?: string; account?: TestAccount; attemptNumber?: number; productCount?: number } = {},
+): Promise<string> {
+  const slug = options.slug ?? `verdict${Math.random().toString(36).slice(2).padEnd(10, '0')}`;
+  const result = await pg.query<{ id: string }>(
+    `INSERT INTO verdicts (public_slug, product_id, job_id, account_id, attempt_number, payload, product_count)
+     VALUES ($1, $2, $3, $4, $5, '{"verdict":{}}'::jsonb, $6)
+     RETURNING id`,
+    [
+      slug,
+      productId,
+      options.jobId ?? null,
+      options.account?.id ?? null,
+      options.attemptNumber ?? null,
+      options.productCount ?? 1,
+    ],
+  );
+  return required(result.rows[0]?.id, 'verdicts.id');
 }
 
 function required(value: string | undefined, what: string): string {

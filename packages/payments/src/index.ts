@@ -24,6 +24,16 @@
  * | §2.5 normalized URL | `normalizeSubmissionUrl`, wrapping the engine's `normalizeUrl` |
  * | `DECISIONS.md` S12 category, pre-payment | `checkSubmission` + the `SubmissionClearance` brand |
  * | `DECISIONS.md` S8 | left OPEN as `RepitchPolicy`, a required argument with no default |
+ *
+ * ## Storage vocabulary
+ *
+ * Nothing here names a table or a column. The four ids this package passes
+ * around — `accountId`, `runId`, `listingId`, `verdictId` — are `accounts.id`,
+ * `jobs.id`, `products.id` and `verdicts.id` in `@the-pit/db`, and the mapping
+ * lives once, at that boundary, in `packages/db/src/identity.ts`. It re-declares
+ * `AttemptEntry` and `VerdictWrite` structurally and asserts mutual assignability
+ * against the real types, so a field changed here fails that package's typecheck
+ * rather than silently writing the wrong column.
  */
 
 export * from './hash.js';

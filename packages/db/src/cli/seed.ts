@@ -59,6 +59,8 @@ function report(slug: string, rows: SeedRows): void {
     `  demand_votes      ${rows.demandVotes.length}`,
     `  rankings          ${rows.rankings.length}`,
     `  flagged_injection ${rows.flaggedInjections.length}`,
+    `  verdicts          ${rows.verdicts.length}`,
+    `  accounts          ${rows.accounts.length}`,
   ];
   for (const warning of rows.warnings) lines.push(`  WARNING ${warning}`);
   process.stdout.write(`${lines.join('\n')}\n`);

@@ -17,6 +17,7 @@
 
 import type { Database } from '../client.js';
 import {
+  accounts,
   categories,
   clusterMembers,
   clusters,
@@ -28,6 +29,7 @@ import {
   rankings,
   scoreRows,
   snapshots,
+  verdicts,
 } from '../schema/index.js';
 import type { SeedRows } from './build.js';
 
@@ -43,10 +45,17 @@ export interface SeedCounts {
   demandVotes: number;
   rankings: number;
   flaggedInjections: number;
+  verdicts: number;
+  accounts: number;
 }
 
 export async function insertSeedRows(db: Database, rows: SeedRows): Promise<SeedCounts> {
   return db.transaction(async (tx) => {
+    // Accounts first: `verdicts.account_id` points at them, and a paid listing's
+    // payer has to exist before the listing's verdict page can name them. Empty
+    // for the two seeded boards, which are unclaimed (`brief` Part 7).
+    if (rows.accounts.length > 0) await tx.insert(accounts).values(rows.accounts).onConflictDoNothing();
+
     await tx.insert(categories).values(rows.category).onConflictDoNothing();
     await tx.insert(juryVersions).values(rows.juryVersion).onConflictDoNothing();
     await tx.insert(personaVersions).values(rows.personaVersion).onConflictDoNothing();
@@ -63,6 +72,11 @@ export async function insertSeedRows(db: Database, rows: SeedRows): Promise<Seed
       await tx.insert(flaggedInjections).values(batch).onConflictDoNothing();
     }
 
+    // Last, and after `products`: a verdict names the listing it judges, and its
+    // own table refuses UPDATE, so a re-run must collide on the primary key and
+    // do nothing rather than attempt to correct anything.
+    for (const batch of chunk(rows.verdicts)) await tx.insert(verdicts).values(batch).onConflictDoNothing();
+
     return {
       products: rows.products.length,
       scoreRows: rows.scoreRows.length,
@@ -71,6 +85,8 @@ export async function insertSeedRows(db: Database, rows: SeedRows): Promise<Seed
       demandVotes: rows.demandVotes.length,
       rankings: rows.rankings.length,
       flaggedInjections: rows.flaggedInjections.length,
+      verdicts: rows.verdicts.length,
+      accounts: rows.accounts.length,
     };
   });
 }

@@ -43,7 +43,16 @@ export type AttemptEntryReason =
     }
   | {
       readonly kind: 'consume';
-      /** The run whose verdict was delivered in this same transaction. */
+      /**
+       * The run whose verdict was delivered in this same transaction.
+       *
+       * These three ids are the schema's `jobs.id`, `verdicts.id` and
+       * `products.id`. This package keeps the brief's words — `§2.3` says "run"
+       * and `§2.4` says "listing" — and `@the-pit/db`'s `src/identity.ts` maps
+       * them to column names in one place, with a compile-time check that the
+       * two vocabularies still describe the same shape. Nothing here should
+       * learn a table name.
+       */
       readonly runId: string;
       readonly verdictId: string;
       readonly listingId: string;
@@ -145,6 +154,11 @@ export type WithDeliveryTx = <T>(body: (tx: DeliveryTx) => Promise<T>) => Promis
 /**
  * The verdict as the ledger needs to see it — an opaque, already-rendered
  * payload plus the keys that tie it to a listing and a run.
+ *
+ * `verdictId`, `listingId`, `runId` and `accountId` are `verdicts.id`,
+ * `products.id`, `jobs.id` and `accounts.id` in `@the-pit/db`; `verdictRow`
+ * there turns this into the row, and supplies the two things this module must
+ * not know — the public slug and the board's product count.
  *
  * `payload` is `unknown` rather than the engine's `Ranking` on purpose: this
  * module must not grow an opinion about verdict CONTENT. The moment it can read

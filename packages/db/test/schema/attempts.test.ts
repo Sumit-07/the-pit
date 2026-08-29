@@ -24,10 +24,12 @@ import { expectRejection, migratedDatabase, type TestDatabase } from '../support
 import {
   consumeAttempt,
   grantAttempt,
+  insertAccount,
   insertCategory,
   insertJob,
   insertOrder,
   insertProduct,
+  type TestAccount,
 } from '../support/rows.js';
 
 let database: TestDatabase;
@@ -40,46 +42,56 @@ afterAll(async () => {
   await database?.close();
 });
 
-/** A fresh account per test, so one test's balance never leaks into another's. */
+/**
+ * A fresh account per test, so one test's balance never leaks into another's.
+ *
+ * A row, not a string. `accounts.id` is what `orders`, `attempts` and `verdicts`
+ * key on; the address is still the identity the payment carried, and `jobs` still
+ * holds it, so the fixture carries both rather than making each test re-derive
+ * one from the other.
+ */
 let counter = 0;
-const anAccount = (): string => `payer${(counter += 1)}@example.com`;
+const anAccount = async (): Promise<TestAccount> => insertAccount(database.pg, `payer${(counter += 1)}@example.com`);
 
-const balanceOf = async (email: string): Promise<number> => {
-  const result = await database.pg.query<{ balance: number }>(`SELECT attempt_balance($1) AS balance`, [email]);
+/** The address on the `jobs` rows below, which are not the subject of any test here. */
+const ACCOUNT_EMAIL = 'payer@example.com';
+
+const balanceOf = async (account: TestAccount): Promise<number> => {
+  const result = await database.pg.query<{ balance: number }>(`SELECT attempt_balance($1) AS balance`, [account.id]);
   return Number(result.rows[0]?.balance);
 };
 
 describe('a balance is derived from immutable rows', () => {
   it('sums grants and consumes into a balance', async () => {
     // $15 = 3 attempts (`brief §2.3`). One grant event, one row worth three.
-    const email = anAccount();
+    const account = await anAccount();
     const categoryId = await insertCategory(database.pg, `bal-${counter}`);
-    const order = await insertOrder(database.pg, { email, attemptsGranted: 3 });
-    await grantAttempt(database.pg, order, email, 3);
+    const order = await insertOrder(database.pg, account, { attemptsGranted: 3 });
+    await grantAttempt(database.pg, order, account, 3);
 
-    const job = await insertJob(database.pg, categoryId, { delivered: true, email });
-    await consumeAttempt(database.pg, job, email);
+    const job = await insertJob(database.pg, categoryId, { delivered: true, account });
+    await consumeAttempt(database.pg, job, account);
 
-    expect(await balanceOf(email)).toBe(2);
+    expect(await balanceOf(account)).toBe(2);
   });
 
   it('refuses an UPDATE, so a balance cannot be rewritten in place', async () => {
-    const email = anAccount();
-    const order = await insertOrder(database.pg, { email });
-    await grantAttempt(database.pg, order, email);
+    const account = await anAccount();
+    const order = await insertOrder(database.pg, account);
+    await grantAttempt(database.pg, order, account);
 
-    const message = await expectRejection(database.pg, `UPDATE attempts SET delta = 5 WHERE account_email = $1`, [
-      email,
+    const message = await expectRejection(database.pg, `UPDATE attempts SET delta = 5 WHERE account_id = $1`, [
+      account.id,
     ]);
     expect(message).toMatch(/append-only/);
   });
 
   it('refuses a DELETE, so a consume cannot be erased and re-spent', async () => {
-    const email = anAccount();
-    const order = await insertOrder(database.pg, { email });
-    await grantAttempt(database.pg, order, email);
+    const account = await anAccount();
+    const order = await insertOrder(database.pg, account);
+    await grantAttempt(database.pg, order, account);
 
-    const message = await expectRejection(database.pg, `DELETE FROM attempts WHERE account_email = $1`, [email]);
+    const message = await expectRejection(database.pg, `DELETE FROM attempts WHERE account_id = $1`, [account.id]);
     expect(message).toMatch(/append-only/);
   });
 
@@ -87,37 +99,37 @@ describe('a balance is derived from immutable rows', () => {
     // The `adjustment` arm exists so append-only is a workable policy and not
     // just a prohibition. It has to name a person: free text is acceptable on
     // this arm and on no other.
-    const email = anAccount();
-    const order = await insertOrder(database.pg, { email });
-    await grantAttempt(database.pg, order, email);
+    const account = await anAccount();
+    const order = await insertOrder(database.pg, account);
+    await grantAttempt(database.pg, order, account);
 
     await database.pg.query(
-      `INSERT INTO attempts (account_email, kind, delta, idempotency_key, note, actor)
+      `INSERT INTO attempts (account_id, kind, delta, idempotency_key, note, actor)
        VALUES ($1, 'adjustment', 1, $2, 'support credit after a provider outage', 'ops@thepit.show')`,
-      [email, `adjust:${email}:1`],
+      [account.id, `adjust:${account.id}:1`],
     );
 
-    expect(await balanceOf(email)).toBe(2);
+    expect(await balanceOf(account)).toBe(2);
   });
 
   it('refuses an adjustment with nobody behind it', async () => {
-    const email = anAccount();
+    const account = await anAccount();
     const message = await expectRejection(
       database.pg,
-      `INSERT INTO attempts (account_email, kind, delta, idempotency_key) VALUES ($1, 'adjustment', 1, $2)`,
-      [email, `adjust:${email}:orphan`],
+      `INSERT INTO attempts (account_id, kind, delta, idempotency_key) VALUES ($1, 'adjustment', 1, $2)`,
+      [account.id, `adjust:${account.id}:orphan`],
     );
     expect(message).toMatch(/attempts_adjustment_has_reason/);
   });
 
   it('refuses a row that moves nothing', async () => {
-    const email = anAccount();
-    const order = await insertOrder(database.pg, { email });
+    const account = await anAccount();
+    const order = await insertOrder(database.pg, account);
     const message = await expectRejection(
       database.pg,
-      `INSERT INTO attempts (account_email, kind, delta, idempotency_key, order_id)
+      `INSERT INTO attempts (account_id, kind, delta, idempotency_key, order_id)
        VALUES ($1, 'grant', 0, $2, $3)`,
-      [email, `zero:${email}`, order],
+      [account.id, `zero:${account.id}`, order],
     );
     expect(message).toMatch(/attempts_delta_non_zero|attempts_kind_matches_delta/);
   });
@@ -125,26 +137,26 @@ describe('a balance is derived from immutable rows', () => {
   it('refuses a kind that disagrees with its delta', async () => {
     // A grant that decrements, and a consume that takes two attempts for one
     // verdict, are both refused.
-    const email = anAccount();
+    const account = await anAccount();
     const categoryId = await insertCategory(database.pg, `disagree-${counter}`);
-    const order = await insertOrder(database.pg, { email });
-    const job = await insertJob(database.pg, categoryId, { delivered: true, email });
+    const order = await insertOrder(database.pg, account);
+    const job = await insertJob(database.pg, categoryId, { delivered: true, account });
 
     expect(
       await expectRejection(
         database.pg,
-        `INSERT INTO attempts (account_email, kind, delta, idempotency_key, order_id)
+        `INSERT INTO attempts (account_id, kind, delta, idempotency_key, order_id)
          VALUES ($1, 'grant', -1, $2, $3)`,
-        [email, `bad-grant:${email}`, order],
+        [account.id, `bad-grant:${account.id}`, order],
       ),
     ).toMatch(/attempts_kind_matches_delta/);
 
     expect(
       await expectRejection(
         database.pg,
-        `INSERT INTO attempts (account_email, kind, delta, idempotency_key, job_id)
+        `INSERT INTO attempts (account_id, kind, delta, idempotency_key, job_id)
          VALUES ($1, 'consume', -2, $2, $3)`,
-        [email, `bad-consume:${email}`, job],
+        [account.id, `bad-consume:${account.id}`, job],
       ),
     ).toMatch(/attempts_kind_matches_delta/);
   });
@@ -155,17 +167,17 @@ describe('one row per money event (the payments AttemptsStore contract)', () => 
     // `AttemptsStore` in `@the-pit/payments`: "`idempotency_key` is UNIQUE. Both
     // money paths — granting on a retried webhook and consuming on a retried
     // delivery — are protected by that one index, and by nothing else."
-    const email = anAccount();
-    const order = await insertOrder(database.pg, { email });
-    const insert = `INSERT INTO attempts (account_email, kind, delta, idempotency_key, order_id)
+    const account = await anAccount();
+    const order = await insertOrder(database.pg, account);
+    const insert = `INSERT INTO attempts (account_id, kind, delta, idempotency_key, order_id)
                     VALUES ($1, 'grant', 1, 'dodo:event:evt_shared', $2)`;
 
-    await database.pg.query(insert, [email, order]);
-    const other = await insertOrder(database.pg, { email });
-    const message = await expectRejection(database.pg, insert, [email, other]);
+    await database.pg.query(insert, [account.id, order]);
+    const other = await insertOrder(database.pg, account);
+    const message = await expectRejection(database.pg, insert, [account.id, other]);
 
     expect(message).toMatch(/attempts_idempotency_key_uk/);
-    expect(await balanceOf(email)).toBe(1);
+    expect(await balanceOf(account)).toBe(1);
   });
 
   it('keeps grant keys and consume keys in separate namespaces', async () => {
@@ -173,17 +185,17 @@ describe('one row per money event (the payments AttemptsStore contract)', () => 
     // precisely so a provider id and a run id cannot silently deduplicate
     // against each other. Two money events sharing one key would be a customer
     // charged for a verdict nobody granted.
-    const email = anAccount();
+    const account = await anAccount();
     const categoryId = await insertCategory(database.pg, `ns-${counter}`);
-    const order = await insertOrder(database.pg, { email });
-    const job = await insertJob(database.pg, categoryId, { delivered: true, email });
+    const order = await insertOrder(database.pg, account);
+    const job = await insertJob(database.pg, categoryId, { delivered: true, account });
 
-    await grantAttempt(database.pg, order, email);
-    await consumeAttempt(database.pg, job, email);
+    await grantAttempt(database.pg, order, account);
+    await consumeAttempt(database.pg, job, account);
 
     const keys = await database.pg.query<{ idempotency_key: string }>(
-      `SELECT idempotency_key FROM attempts WHERE account_email = $1 ORDER BY idempotency_key`,
-      [email],
+      `SELECT idempotency_key FROM attempts WHERE account_id = $1 ORDER BY idempotency_key`,
+      [account.id],
     );
     expect(keys.rows.map((row) => row.idempotency_key.split(':')[0])).toEqual(['delivery', 'dodo']);
   });
@@ -193,26 +205,26 @@ describe('an attempt is consumed only on delivery (brief §2.3)', () => {
   it('refuses a consume against a job that has not been delivered', async () => {
     // The "not on job start, not on pipeline completion" clause. The worker
     // cannot charge until `jobs.delivered_at` is set.
-    const email = anAccount();
+    const account = await anAccount();
     const categoryId = await insertCategory(database.pg, `undelivered-${counter}`);
-    const order = await insertOrder(database.pg, { email });
-    await grantAttempt(database.pg, order, email);
+    const order = await insertOrder(database.pg, account);
+    await grantAttempt(database.pg, order, account);
 
-    const job = await insertJob(database.pg, categoryId, { delivered: false, email });
+    const job = await insertJob(database.pg, categoryId, { delivered: false, account });
     const message = await expectRejection(
       database.pg,
-      `INSERT INTO attempts (account_email, kind, delta, idempotency_key, job_id)
+      `INSERT INTO attempts (account_id, kind, delta, idempotency_key, job_id)
        VALUES ($1, 'consume', -1, $2, $3)`,
-      [email, `delivery:run:${job}`, job],
+      [account.id, `delivery:run:${job}`, job],
     );
     expect(message).toMatch(/has not been delivered/);
   });
 
   it('leaves the balance untouched when a job fails — failures are free retries', async () => {
-    const email = anAccount();
+    const account = await anAccount();
     const categoryId = await insertCategory(database.pg, `freeretry-${counter}`);
-    const order = await insertOrder(database.pg, { email });
-    await grantAttempt(database.pg, order, email);
+    const order = await insertOrder(database.pg, account);
+    await grantAttempt(database.pg, order, account);
 
     const product = await insertProduct(database.pg, categoryId, 0);
     await database.pg.query(
@@ -220,42 +232,42 @@ describe('an attempt is consumed only on delivery (brief §2.3)', () => {
                          prompt_version, persona_version, category_snapshot_version, engine_version,
                          failure_code, retryable, retry_count)
        VALUES ('placement', 'failed', $1, $2, $3, 'v1', 'v1', 'snap-1', '0.1.0', 'model_call', true, 1)`,
-      [categoryId, product, email],
+      [categoryId, product, ACCOUNT_EMAIL],
     );
 
-    expect(await balanceOf(email)).toBe(1);
+    expect(await balanceOf(account)).toBe(1);
   });
 
   it('charges a delivered job exactly once, however many times delivery fires', async () => {
     // Dodo is not the only thing that retries. A worker restart, a duplicated
     // queue message, or a rerun of the delivery step must not bill twice.
-    const email = anAccount();
+    const account = await anAccount();
     const categoryId = await insertCategory(database.pg, `once-${counter}`);
-    const order = await insertOrder(database.pg, { email, attemptsGranted: 2 });
-    await grantAttempt(database.pg, order, email, 2);
+    const order = await insertOrder(database.pg, account, { attemptsGranted: 2 });
+    await grantAttempt(database.pg, order, account, 2);
 
-    const job = await insertJob(database.pg, categoryId, { delivered: true, email });
-    await consumeAttempt(database.pg, job, email);
+    const job = await insertJob(database.pg, categoryId, { delivered: true, account });
+    await consumeAttempt(database.pg, job, account);
 
     const message = await expectRejection(
       database.pg,
-      `INSERT INTO attempts (account_email, kind, delta, idempotency_key, job_id)
+      `INSERT INTO attempts (account_id, kind, delta, idempotency_key, job_id)
        VALUES ($1, 'consume', -1, $2, $3)`,
       // A DIFFERENT idempotency key, so the second guard is the one under test
       // rather than the first.
-      [email, `delivery:retry:${job}`, job],
+      [account.id, `delivery:retry:${job}`, job],
     );
 
     expect(message).toMatch(/attempts_one_consume_per_job_uk/);
-    expect(await balanceOf(email)).toBe(1);
+    expect(await balanceOf(account)).toBe(1);
   });
 
   it('refuses a consume that names no job', async () => {
-    const email = anAccount();
+    const account = await anAccount();
     const message = await expectRejection(
       database.pg,
-      `INSERT INTO attempts (account_email, kind, delta, idempotency_key) VALUES ($1, 'consume', -1, $2)`,
-      [email, `orphan-consume:${email}`],
+      `INSERT INTO attempts (account_id, kind, delta, idempotency_key) VALUES ($1, 'consume', -1, $2)`,
+      [account.id, `orphan-consume:${account.id}`],
     );
     expect(message).toMatch(/attempts_consume_has_job/);
   });
@@ -263,11 +275,11 @@ describe('an attempt is consumed only on delivery (brief §2.3)', () => {
 
 describe('a grant is worth exactly what the tier bought', () => {
   it('refuses a grant that names no order', async () => {
-    const email = anAccount();
+    const account = await anAccount();
     const message = await expectRejection(
       database.pg,
-      `INSERT INTO attempts (account_email, kind, delta, idempotency_key) VALUES ($1, 'grant', 1, $2)`,
-      [email, `orphan-grant:${email}`],
+      `INSERT INTO attempts (account_id, kind, delta, idempotency_key) VALUES ($1, 'grant', 1, $2)`,
+      [account.id, `orphan-grant:${account.id}`],
     );
     expect(message).toMatch(/attempts_grant_has_order/);
   });
@@ -275,41 +287,41 @@ describe('a grant is worth exactly what the tier bought', () => {
   it('refuses more attempts than the order paid for', async () => {
     // `brief §2.3`: "$5 = 1 attempt. $15 = 3 attempts + fit report." A handler
     // that read the wrong tier is caught here rather than in a support ticket.
-    const email = anAccount();
-    const order = await insertOrder(database.pg, { email, attemptsGranted: 1 });
+    const account = await anAccount();
+    const order = await insertOrder(database.pg, account, { attemptsGranted: 1 });
 
     const message = await expectRejection(
       database.pg,
-      `INSERT INTO attempts (account_email, kind, delta, idempotency_key, order_id)
+      `INSERT INTO attempts (account_id, kind, delta, idempotency_key, order_id)
        VALUES ($1, 'grant', 4, $2, $3)`,
-      [email, `dodo:event:${order}`, order],
+      [account.id, `dodo:event:${order}`, order],
     );
     expect(message).toMatch(/paid for/);
   });
 
   it('refuses fewer, too — the ledger and the receipt agree or neither is evidence', async () => {
-    const email = anAccount();
-    const order = await insertOrder(database.pg, { email, attemptsGranted: 3 });
+    const account = await anAccount();
+    const order = await insertOrder(database.pg, account, { attemptsGranted: 3 });
 
     const message = await expectRejection(
       database.pg,
-      `INSERT INTO attempts (account_email, kind, delta, idempotency_key, order_id)
+      `INSERT INTO attempts (account_id, kind, delta, idempotency_key, order_id)
        VALUES ($1, 'grant', 1, $2, $3)`,
-      [email, `dodo:event:${order}`, order],
+      [account.id, `dodo:event:${order}`, order],
     );
     expect(message).toMatch(/paid for/);
   });
 
   it('refuses a second grant against one order', async () => {
-    const email = anAccount();
-    const order = await insertOrder(database.pg, { email });
-    await grantAttempt(database.pg, order, email);
+    const account = await anAccount();
+    const order = await insertOrder(database.pg, account);
+    await grantAttempt(database.pg, order, account);
 
     const message = await expectRejection(
       database.pg,
-      `INSERT INTO attempts (account_email, kind, delta, idempotency_key, order_id)
+      `INSERT INTO attempts (account_id, kind, delta, idempotency_key, order_id)
        VALUES ($1, 'grant', 1, $2, $3)`,
-      [email, `dodo:event:duplicate:${order}`, order],
+      [account.id, `dodo:event:duplicate:${order}`, order],
     );
     expect(message).toMatch(/attempts_one_grant_per_order_uk/);
   });
@@ -317,15 +329,15 @@ describe('a grant is worth exactly what the tier bought', () => {
 
 describe('a balance cannot go negative', () => {
   it('refuses a consume with no attempt to spend', async () => {
-    const email = anAccount();
+    const account = await anAccount();
     const categoryId = await insertCategory(database.pg, `overdraft-${counter}`);
-    const job = await insertJob(database.pg, categoryId, { delivered: true, email });
+    const job = await insertJob(database.pg, categoryId, { delivered: true, account });
 
     const message = await expectRejection(
       database.pg,
-      `INSERT INTO attempts (account_email, kind, delta, idempotency_key, job_id)
+      `INSERT INTO attempts (account_id, kind, delta, idempotency_key, job_id)
        VALUES ($1, 'consume', -1, $2, $3)`,
-      [email, `delivery:run:${job}`, job],
+      [account.id, `delivery:run:${job}`, job],
     );
     expect(message).toMatch(/cannot be negative/);
   });
@@ -335,9 +347,9 @@ describe('a balance cannot go negative', () => {
     // the verdict", not in a particular statement order within it. Every guard
     // that reads another row is a CONSTRAINT trigger judged at COMMIT for
     // exactly this reason.
-    const email = anAccount();
+    const account = await anAccount();
     const categoryId = await insertCategory(database.pg, `deferred-${counter}`);
-    const order = await insertOrder(database.pg, { email });
+    const order = await insertOrder(database.pg, account);
     const product = await insertProduct(database.pg, categoryId, 0);
 
     await database.pg.exec('BEGIN');
@@ -345,24 +357,24 @@ describe('a balance cannot go negative', () => {
       `INSERT INTO jobs (kind, status, category_id, product_id, account_email,
                          prompt_version, persona_version, category_snapshot_version, engine_version)
        VALUES ('placement', 'running', $1, $2, $3, 'v1', 'v1', 'snap-1', '0.1.0') RETURNING id`,
-      [categoryId, product, email],
+      [categoryId, product, ACCOUNT_EMAIL],
     );
     const job = jobResult.rows[0]?.id ?? '';
 
     // The consume is written BEFORE the job is marked delivered and BEFORE the
     // grant exists. Both are legal because the transaction ends up consistent.
-    await consumeAttempt(database.pg, job, email);
-    await grantAttempt(database.pg, order, email);
+    await consumeAttempt(database.pg, job, account);
+    await grantAttempt(database.pg, order, account);
     await database.pg.query(`UPDATE jobs SET status = 'succeeded', delivered_at = now() WHERE id = $1`, [job]);
     await database.pg.exec('COMMIT');
 
-    expect(await balanceOf(email)).toBe(0);
+    expect(await balanceOf(account)).toBe(0);
   });
 
   it('rolls the whole transaction back when the job is never delivered', async () => {
-    const email = anAccount();
+    const account = await anAccount();
     const categoryId = await insertCategory(database.pg, `rollback-${counter}`);
-    const order = await insertOrder(database.pg, { email });
+    const order = await insertOrder(database.pg, account);
     const product = await insertProduct(database.pg, categoryId, 0);
 
     await database.pg.exec('BEGIN');
@@ -370,15 +382,15 @@ describe('a balance cannot go negative', () => {
       `INSERT INTO jobs (kind, status, category_id, product_id, account_email,
                          prompt_version, persona_version, category_snapshot_version, engine_version)
        VALUES ('placement', 'running', $1, $2, $3, 'v1', 'v1', 'snap-1', '0.1.0') RETURNING id`,
-      [categoryId, product, email],
+      [categoryId, product, ACCOUNT_EMAIL],
     );
-    await grantAttempt(database.pg, order, email);
-    await consumeAttempt(database.pg, jobResult.rows[0]?.id ?? '', email);
+    await grantAttempt(database.pg, order, account);
+    await consumeAttempt(database.pg, jobResult.rows[0]?.id ?? '', account);
 
     const message = await expectRejection(database.pg, 'COMMIT');
     expect(message).toMatch(/has not been delivered/);
 
     await expectRejection(database.pg, 'ROLLBACK');
-    expect(await balanceOf(email)).toBe(0);
+    expect(await balanceOf(account)).toBe(0);
   });
 });

@@ -114,6 +114,49 @@ describe.each(BOARDS)('$slug', ({ slug, type, products }) => {
     expect(rows.attempts).toEqual([]);
     for (const product of rows.products) expect(product.source).toBe('seeded');
   });
+
+  it(`writes ${products} frozen verdict pages, one per ranked product`, async () => {
+    // `brief` Part 6 gives every listing on the board a public permanent URL.
+    // The count is the board's own size, which is `DECISIONS.md` S4's figure and
+    // is also what each card is stamped with (`brief` Part 5).
+    const input = await loadSeedInput(slug, WORKDIR);
+    const rows = buildSeedRows(input);
+
+    expect(rows.verdicts).toHaveLength(products);
+    expect(new Set(rows.verdicts.map((v) => v.publicSlug)).size).toBe(products);
+    expect(new Set(rows.verdicts.map((v) => v.productId)).size).toBe(products);
+    for (const verdict of rows.verdicts) expect(verdict.productCount).toBe(products);
+  });
+
+  it('freezes each verdict against the exact board row it was issued from', async () => {
+    // Not a projection: the whole `RankedProduct` is embedded, so every deduction
+    // with its reason and juror, the cluster judged inside, and the Floor's picks
+    // survive verbatim. `DECISIONS.md` §1.2 means re-deriving them later gives
+    // different numbers, which is why the page cannot be rendered live.
+    const input = await loadSeedInput(slug, WORKDIR);
+    const rows = buildSeedRows(input);
+
+    const byProduct = new Map(rows.verdicts.map((v) => [v.productId, v.payload as { verdict: unknown }]));
+    for (const row of input.ranking.ranking) {
+      const productId = rows.products.find((p) => p.engineId === row.id)?.id;
+      expect(byProduct.get(productId as string)?.verdict).toEqual(row);
+    }
+  });
+
+  it('marks every seeded verdict unclaimed, and creates no accounts', async () => {
+    // `brief` Part 7: cold-start listings are "marked clearly as unclaimed".
+    // Nobody paid, nobody pitched, and there is no address to create an account
+    // from — `products_source_submitter` forbids a seeded row from having one.
+    const input = await loadSeedInput(slug, WORKDIR);
+    const rows = buildSeedRows(input);
+
+    expect(rows.accounts).toEqual([]);
+    for (const verdict of rows.verdicts) {
+      expect(verdict.accountId).toBeNull();
+      expect(verdict.jobId).toBeNull();
+      expect(verdict.attemptNumber).toBeNull();
+    }
+  });
 });
 
 /**

@@ -113,6 +113,66 @@ describe('the seeded database', () => {
     expect(await count(`SELECT count(*) AS count FROM orders`)).toBe(0);
     expect(await count(`SELECT count(*) AS count FROM tokens`)).toBe(0);
     expect(await count(`SELECT count(*) AS count FROM jobs`)).toBe(0);
+    // And no accounts: `brief` Part 7 seeds listings as UNCLAIMED, and
+    // `products_source_submitter` refuses a seeded row with a submitter, so
+    // there is no verified address for the seed to make an account from.
+    expect(await count(`SELECT count(*) AS count FROM accounts`)).toBe(0);
+  });
+
+  it('gives all 92 listings a public verdict page (brief Part 6)', async () => {
+    // 48 + 44 from `DECISIONS.md` S4. This is the cold-start content: every
+    // board row resolves to a permanent URL that works logged out, with no job,
+    // no payer and no pitch ordinal behind it.
+    expect(await count(`SELECT count(*) AS count FROM verdicts`)).toBe(48 + 44);
+    expect(await count(`SELECT count(*) AS count FROM verdicts WHERE job_id IS NOT NULL`)).toBe(0);
+    expect(await count(`SELECT count(*) AS count FROM verdicts WHERE account_id IS NOT NULL`)).toBe(0);
+    expect(await count(`SELECT count(*) AS count FROM verdicts WHERE attempt_number IS NOT NULL`)).toBe(0);
+    expect(
+      await count(`SELECT count(*) AS count FROM (SELECT DISTINCT public_slug FROM verdicts) t`),
+    ).toBe(48 + 44);
+  });
+
+  it('stamps each verdict with the size of the board it was issued against', async () => {
+    // `brief` Part 5's product count. Read per category, because the two boards
+    // are different sizes and a verdict that borrowed the other board's count
+    // would put a rank against the wrong denominator.
+    const rows = await pg.query<{ slug: string; product_count: number; n: string }>(
+      `SELECT c.slug, v.product_count, count(*) AS n
+         FROM verdicts v
+         JOIN products p ON p.id = v.product_id
+         JOIN categories c ON c.id = p.category_id
+        GROUP BY c.slug, v.product_count ORDER BY c.slug`,
+    );
+    expect(rows.rows.map((row) => [row.slug, Number(row.product_count), Number(row.n)])).toEqual([
+      ['developer-tools', 48, 48],
+      ['health-fitness-wellness', 44, 44],
+    ]);
+  });
+
+  it('refuses to rewrite a seeded verdict, so a cold-start URL is as permanent as a paid one', async () => {
+    // The append-only guard, exercised against real seeded rows rather than a
+    // fixture. `DECISIONS.md` §1.2 moves the board under these pages on the very
+    // first placement; the freeze is what keeps them honest.
+    const slug = await pg.query<{ public_slug: string }>(`SELECT public_slug FROM verdicts LIMIT 1`);
+    let message: string | null = null;
+    try {
+      await pg.query(`UPDATE verdicts SET product_count = 1 WHERE public_slug = $1`, [
+        slug.rows[0]?.public_slug ?? '',
+      ]);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toMatch(/append-only/);
+  });
+
+  it('serves a shared link from the slug index alone', async () => {
+    // The public page is a lookup on `public_slug` and touches neither the
+    // account nor the board — `brief §2.1`: "verdict URLs public", balance and
+    // history behind the session.
+    const plan = await pg.query<{ 'QUERY PLAN': string }>(
+      `EXPLAIN SELECT payload FROM verdicts WHERE public_slug = 'nothing-resolves-here'`,
+    );
+    expect(plan.rows.map((row) => row['QUERY PLAN']).join('\n')).toContain('verdicts_public_slug_uk');
   });
 
   it('is idempotent: re-seeding writes nothing new', async () => {
@@ -125,6 +185,9 @@ describe('the seeded database', () => {
     }
     expect(await count(`SELECT count(*) AS count FROM score_rows`)).toBe(before);
     expect(await count(`SELECT count(*) AS count FROM products`)).toBe(48 + 44);
+    // Including the append-only table: a re-seed must collide on the primary key
+    // and do nothing, because `verdicts` has no UPDATE path to fall back on.
+    expect(await count(`SELECT count(*) AS count FROM verdicts`)).toBe(48 + 44);
   });
 
   it('has a usable normalized_url on every row', async () => {

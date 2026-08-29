@@ -21,11 +21,16 @@ afterAll(async () => {
 });
 
 /**
- * The sixteen tables Phase 2 is required to deliver, plus nothing. An extra table
- * is as much a defect as a missing one: it means a concept was modelled twice, or
- * that something another agent owns leaked in here.
+ * The eighteen tables, plus nothing. An extra table is as much a defect as a
+ * missing one: it means a concept was modelled twice, or that something another
+ * agent owns leaked in here.
+ *
+ * Sixteen were Phase 2's. `accounts` and `verdicts` are `0003`'s: the identity
+ * `brief §2.1` describes without naming, and the frozen delivered verdict
+ * `brief` Part 6 requires to stay addressable while the board moves under it.
  */
 const REQUIRED_TABLES = [
+  'accounts',
   'attempts',
   'categories',
   'cluster_members',
@@ -42,10 +47,11 @@ const REQUIRED_TABLES = [
   'score_rows',
   'snapshots',
   'tokens',
+  'verdicts',
 ];
 
 describe('tables', () => {
-  it('creates exactly the sixteen required tables', async () => {
+  it('creates exactly the eighteen required tables', async () => {
     const tables = await tablesOf(database.pg);
     expect(tables).toEqual(REQUIRED_TABLES);
   });

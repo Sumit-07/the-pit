@@ -15,7 +15,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { expectRejection, migratedDatabase, type TestDatabase } from '../support/pg.js';
-import { insertCategory, insertJob, insertProduct } from '../support/rows.js';
+import { insertAccount, insertCategory, insertJob, insertProduct } from '../support/rows.js';
 
 let database: TestDatabase;
 
@@ -205,24 +205,30 @@ describe('the pitch that was scored is frozen', () => {
 
 describe('one payment grants attempts once', () => {
   const INSERT = `INSERT INTO orders
-      (provider, provider_event_id, provider_payment_id, account_email, amount_cents, currency,
+      (provider, provider_event_id, provider_payment_id, account_id, amount_cents, currency,
        attempts_granted, status, raw_event)
-    VALUES ('dodo', $1, $2, 'p@example.com', 500, 'USD', $3, $4, '{}'::jsonb)`;
+    VALUES ('dodo', $1, $2, $5, 500, 'USD', $3, $4, '{}'::jsonb)`;
+
+  let payer: string;
+
+  beforeAll(async () => {
+    payer = (await insertAccount(database.pg, 'p@example.com')).id;
+  });
 
   it('refuses a second granting event for one payment, even under a fresh event id', async () => {
     // The gap the event-id key alone leaves: a retry re-enveloped with a new id,
     // or an authorize/settle pair that both report the charge.
-    await database.pg.query(INSERT, ['evt_a1', 'pay_A', 1, 'paid']);
+    await database.pg.query(INSERT, ['evt_a1', 'pay_A', 1, 'paid', payer]);
 
-    const message = await expectRejection(database.pg, INSERT, ['evt_a2', 'pay_A', 1, 'paid']);
+    const message = await expectRejection(database.pg, INSERT, ['evt_a2', 'pay_A', 1, 'paid', payer]);
     expect(message).toMatch(/orders_payment_grant_uk/);
   });
 
   it('still records a non-granting event on the same payment', async () => {
     // A refund grants nothing, falls outside the partial index, and must still be
     // recordable: `brief §2.2` prices refunds and disputes.
-    await database.pg.query(INSERT, ['evt_b1', 'pay_B', 1, 'paid']);
-    await database.pg.query(INSERT, ['evt_b2', 'pay_B', 0, 'refunded']);
+    await database.pg.query(INSERT, ['evt_b1', 'pay_B', 1, 'paid', payer]);
+    await database.pg.query(INSERT, ['evt_b2', 'pay_B', 0, 'refunded', payer]);
 
     const result = await database.pg.query<{ count: string }>(
       `SELECT count(*) AS count FROM orders WHERE provider_payment_id = 'pay_B'`,
@@ -233,7 +239,7 @@ describe('one payment grants attempts once', () => {
   it('refuses a granting order that names no payment', async () => {
     // NULLs are all distinct to a unique index, so a grant with no payment id
     // would be exempt from the rule above.
-    const message = await expectRejection(database.pg, INSERT, ['evt_c1', null, 1, 'paid']);
+    const message = await expectRejection(database.pg, INSERT, ['evt_c1', null, 1, 'paid', payer]);
     expect(message).toMatch(/orders_grant_names_payment/);
   });
 });

@@ -22,6 +22,13 @@
       "when": 1788024037455,
       "tag": "0002_append_only_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788024038455,
+      "tag": "0003_accounts_and_verdicts",
+      "breakpoints": true
     }
   ]
 }

@@ -65,8 +65,10 @@ import type {
 } from '@the-pit/engine';
 import { categorySlug, digest } from '@the-pit/engine';
 
+import { verdictSlug } from '../identity.js';
 import { normalizeUrl } from '../normalized-url.js';
 import type {
+  accounts,
   attempts,
   categories,
   clusterMembers,
@@ -79,6 +81,7 @@ import type {
   rankings,
   scoreRows,
   snapshots,
+  verdicts,
 } from '../schema/index.js';
 import { deterministicUuid } from './ids.js';
 
@@ -95,6 +98,27 @@ export interface SeedRows {
   snapshot: typeof snapshots.$inferInsert;
   rankings: (typeof rankings.$inferInsert)[];
   flaggedInjections: (typeof flaggedInjections.$inferInsert)[];
+  /**
+   * One frozen verdict page per ranked product — `brief` Part 6's "public
+   * permanent URL, shareable, works logged out". See `buildVerdicts`.
+   */
+  verdicts: (typeof verdicts.$inferInsert)[];
+  /**
+   * The payers behind this category's listings, derived from
+   * `products.submitted_by_email`.
+   *
+   * EMPTY for the two Phase 1 boards, and that is the schema saying something
+   * true rather than a stub: `products_source_submitter` requires a `seeded` row
+   * to have a null submitter, and `brief` Part 7 seeds those rows as UNCLAIMED
+   * ("mark clearly as unclaimed, offer one-click opt-out"). A seed that invented
+   * an account for them would fabricate a payer for money nobody spent, and give
+   * `POST /auth/request` a live address to mail.
+   *
+   * It is derived from the product rows rather than written as a literal `[]` so
+   * that the rule is stated once — an account exists because a listing names a
+   * payer — instead of being an assumption a later change could silently break.
+   */
+  accounts: (typeof accounts.$inferInsert)[];
   /** Always empty: a seeded product was never bought. Present so the shape is total. */
   attempts: (typeof attempts.$inferInsert)[];
   /** Where the raw votes came from. See the header. */
@@ -155,6 +179,19 @@ export function buildSeedRows(input: SeedInput): SeedRows {
 
   const productId = (engineId: number): string => deterministicUuid('product', slug, String(engineId));
   const clusterId = (key: string): string => deterministicUuid('cluster', slug, ranking.uniqueness_version, key);
+  const verdictId = (engineId: number): string =>
+    deterministicUuid('verdict', slug, input.categorySnapshotVersion, String(engineId));
+
+  /**
+   * One instant for the whole category, rather than `new Date()` per row.
+   *
+   * `products.placed_at` and `verdicts.delivered_at` describe the same event —
+   * this board being published — and `brief` Part 5 stamps that timestamp on
+   * every verdict card. A per-row clock would spread one publication over a few
+   * milliseconds and make the cards disagree about when the board they cite was
+   * taken.
+   */
+  const seededAt = new Date();
 
   // --- categories, and the two frozen panels ---------------------------------
 
@@ -205,7 +242,7 @@ export function buildSeedRows(input: SeedInput): SeedRows {
     source: 'seeded',
     status: 'placed',
     submittedByEmail: null,
-    placedAt: new Date(),
+    placedAt: seededAt,
   }));
 
   const knownEngineIds = new Set(productSet.products.map((p) => p.id));
@@ -287,6 +324,48 @@ export function buildSeedRows(input: SeedInput): SeedRows {
     jobId: null,
   }));
 
+  // --- the identities behind the listings ------------------------------------
+  //
+  // Derived from the product rows rather than declared, so this stays correct if
+  // a seed input ever carries a paid listing. For the two Phase 1 boards it is
+  // empty: `brief` Part 7 seeds unclaimed rows, and `products_source_submitter`
+  // refuses a `seeded` product with a submitter, so there is nobody to create.
+  // Inventing a placeholder account here would fabricate a payer and hand
+  // `POST /auth/request` a live address to mail.
+
+  const accountRows: (typeof accounts.$inferInsert)[] = [...new Set(
+    productRows
+      .map((product) => product.submittedByEmail)
+      .filter((email): email is string => typeof email === 'string' && email !== ''),
+  )].map((email) => ({ id: deterministicUuid('account', email), email }));
+
+  const accountIdByEmail = new Map(accountRows.map((account) => [account.email, account.id as string]));
+  const submitterByEngineId = new Map(
+    productRows.map((product) => [product.engineId, product.submittedByEmail ?? null]),
+  );
+
+  // --- the frozen verdict pages ----------------------------------------------
+
+  const verdictRows: (typeof verdicts.$inferInsert)[] = ranking.ranking.map((row) => {
+    const id = verdictId(row.id);
+    const email = submitterByEngineId.get(row.id) ?? null;
+    const accountId = email === null ? null : (accountIdByEmail.get(email) ?? null);
+    return {
+      id,
+      publicSlug: verdictSlug(id),
+      productId: productId(row.id),
+      // A seeded board was produced by the engine's CLI before any job row
+      // existed, and its listings are unclaimed (`brief` Part 7), so there is
+      // neither a run nor a payer nor a pitch ordinal to record.
+      jobId: null,
+      accountId,
+      attemptNumber: null,
+      payload: verdictPayload(ranking, row, input.categorySnapshotVersion, seededAt),
+      productCount: ranking.ranking.length,
+      deliveredAt: seededAt,
+    };
+  });
+
   return {
     category,
     juryVersion,
@@ -299,9 +378,54 @@ export function buildSeedRows(input: SeedInput): SeedRows {
     snapshot,
     rankings: rankingRows,
     flaggedInjections: flagged,
+    verdicts: verdictRows,
+    accounts: accountRows,
     attempts: [],
     source,
     warnings,
+  };
+}
+
+/**
+ * The document a verdict page renders, frozen.
+ *
+ * `brief` Part 6 enumerates what has to be on it: "every deduction with its
+ * reason and the juror who made it", the cluster the product was judged inside,
+ * which Floor personas picked it, plus Part 5's timestamp and product count.
+ * `RankedProduct` already carries the first three — `scorecard` with per-role
+ * deductions, `cluster`, `demand_detail.picks` — so the row is embedded whole
+ * rather than projected, which would drop a field the moment the engine adds one.
+ *
+ * The board-level context around it is the part that cannot be recovered later.
+ * `product_count` and `issued_at` say which board the rank refers to;
+ * `DECISIONS.md` §1.2 moves every z-score on the next placement, so without them
+ * a rank of 4 is a number with no denominator. The version stamps make the page
+ * auditable against the panels that produced it (`brief §1.3`).
+ *
+ * `weights` is included because `core` is a blend of merit and demand and the
+ * page shows the blend; `health` is not, because it is a statement about the
+ * PANEL rather than about this product, it is already frozen on the snapshot
+ * row, and copying it onto 48 verdicts would make one board's quality metrics 48
+ * rows that could disagree.
+ */
+function verdictPayload(
+  ranking: Ranking,
+  row: Ranking['ranking'][number],
+  categorySnapshotVersion: string,
+  issuedAt: Date,
+): Record<string, unknown> {
+  return {
+    category: ranking.category,
+    category_type: ranking.type,
+    product_count: ranking.ranking.length,
+    issued_at: issuedAt.toISOString(),
+    category_snapshot_version: categorySnapshotVersion,
+    prompt_version: ranking.prompt_version,
+    persona_version: ranking.demand_version,
+    uniqueness_version: ranking.uniqueness_version,
+    weights: ranking.weights,
+    metrics: ranking.metrics,
+    verdict: row,
   };
 }
 
