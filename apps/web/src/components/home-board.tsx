@@ -40,7 +40,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { HOME_LEGEND } from '@/lib/boards/copy';
 import type { HomeBoard as HomeBoardData, TickerLine } from '@/lib/boards/home';
 import { depthOf, rank2, stampUtc } from '@/lib/boards/view';
-import { BoardHead, RowLead, RowNumbers } from '@/components/board-parts';
+import { BoardHead, CutMeter, RowLead, RowNumbers } from '@/components/board-parts';
 
 /** `brief` Part 6: "Categories auto-rotate every 7s". */
 const ROTATE_MS = 7000;
@@ -120,9 +120,11 @@ export function HomeBoard({ boards, ticker }: HomeBoardProps): ReactNode {
           ))}
         </div>
         {/*
-          The progress bar is the rotation's own clock, made visible. Its `key`
-          restarts the 7s fill on every switch; without `animate` it never fills,
-          because without `animate` nothing rotates.
+          The progress bar is the rotation's own clock, made visible, and it is
+          drawn as the board's top edge — the same visual verb as the cut meter
+          inside every row, so the page has one grammar for a line being consumed.
+          Its `key` restarts the 7s fill on every switch; without `animate` it
+          never fills, because without `animate` nothing rotates.
         */}
         <div className="prog" aria-hidden="true">
           <i className={animate && boards.length > 1 ? 'run' : ''} key={`${current}-${cycle}`} />
@@ -147,6 +149,7 @@ export function HomeBoard({ boards, ticker }: HomeBoardProps): ReactNode {
                 {row.soloCluster ? <span className="flag" aria-hidden="true" /> : null}
                 <span className="rk">{rank2(row.rank)}</span>
                 <RowLead row={row} />
+                <CutMeter row={row} />
                 <RowNumbers row={row} set="home" />
               </span>
             </div>

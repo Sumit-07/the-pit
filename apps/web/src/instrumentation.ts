@@ -21,9 +21,18 @@
  *   locally would be told their laptop is an unconfigured production deployment.
  *   The check still runs on the deployed server's first cold start, which is
  *   before any request and therefore before any spend.
+ *
+ * The import is `@/lib/pipeline/bindings` and NOT `@/lib/pipeline/service`, which
+ * is where this check used to live. Next compiles instrumentation in its own pass,
+ * and `serverExternalPackages` is not applied to it — so `service.ts`'s
+ * `@the-pit/engine` import dragged `node:crypto` into a bundle that cannot express
+ * it, the pass failed with `UnhandledSchemeError`, and every route in the app
+ * served a 500 for a compile error in a file none of them import. The check reads
+ * environment variables; it needs neither the engine nor a database driver, and
+ * `bindings.ts` is the graph that has neither.
  */
 
-import { assertBindingsConfigured } from '@/lib/pipeline/service';
+import { assertBindingsConfigured } from '@/lib/pipeline/bindings';
 
 export function register(): void {
   if (process.env['NEXT_RUNTIME'] !== 'nodejs') return;

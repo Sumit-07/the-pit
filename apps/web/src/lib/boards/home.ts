@@ -11,19 +11,26 @@
  *
  * So this module cuts the boards down to the eight rows each that the homepage
  * shows, keeping exactly the fields the row renders: the rank, the name, the
- * marks, the heaviest cut with its juror, and the small numbers. The full ledger
- * lives one click away at `/boards/<slug>`, where it is rendered whole.
+ * marks, the heaviest cut with its juror, the small numbers, and the five
+ * per-metric losses the cut meter is drawn from. The full ledger lives one click
+ * away at `/boards/<slug>`, where it is rendered whole.
+ *
+ * The meter's slice is deliberately narrow. It needs each metric's loss — that is
+ * the segment width, and the widths have to be exact or the bar is a lie — plus
+ * the single heaviest reason on that metric for the segment's `title`. Every other
+ * deduction is dropped, which is the difference between a few kilobytes and a few
+ * hundred: a row on this page averages thirty reasons and shows one.
  *
  * Nothing here re-ranks or re-derives. It slices `BoardView`, which sliced the
  * stored ranking, which the engine computed.
  */
 
-import type { BoardView, RowView } from './view';
+import type { BoardView, MetricView, RowView } from './view';
 
 /** How many rows the homepage board shows. `the-pit-home.html` shows eight. */
 export const HOME_ROWS = 8;
 
-/** A homepage row: the same fields `RowLead` and `RowNumbers` read, and no others. */
+/** A homepage row: the fields `RowLead`, `CutMeter` and `RowNumbers` read, and no others. */
 export type HomeRow = Pick<
   RowView,
   'rank' | 'name' | 'cuts' | 'composite' | 'core' | 'demand' | 'soloCluster' | 'tiebroken' | 'headline' | 'soloNote'
@@ -31,10 +38,33 @@ export type HomeRow = Pick<
   /** `RowView` fields the homepage never renders, present so the shared row components typecheck. */
   url: string;
   deductionCount: number;
-  metrics: never[];
+  /** Trimmed to what the meter draws: each metric's loss, and its worst reason for the tooltip. */
+  metrics: MetricView[];
   cluster: RowView['cluster'];
   flagged: never[];
 };
+
+/**
+ * A metric, cut down to the meter.
+ *
+ * `cuts` is load-bearing — it is the segment's width, and `view.ts` has already
+ * sorted the metrics heaviest-first, so the order is the order the meter draws in.
+ * `deductions` keeps one entry, the heaviest, because that is the only one the
+ * segment's `title` quotes. `deductionCount` on the row still counts all of them,
+ * so the caption under the bar does not shrink with the payload.
+ */
+function toMeterMetric(metric: MetricView): MetricView {
+  const worst = metric.deductions.at(0);
+  return {
+    metric: metric.metric,
+    score: metric.score,
+    spread: metric.spread,
+    cuts: metric.cuts,
+    jurors: metric.jurors,
+    substituted: [],
+    deductions: worst === undefined ? [] : [worst],
+  };
+}
 
 /** One category as the homepage rail holds it. */
 export interface HomeBoard {
@@ -82,7 +112,7 @@ function toHomeRow(row: RowView): HomeRow {
     ...(row.soloNote === undefined ? {} : { soloNote: row.soloNote }),
     url: row.url,
     deductionCount: row.deductionCount,
-    metrics: [],
+    metrics: row.metrics.map(toMeterMetric),
     cluster: row.cluster,
     flagged: [],
   };

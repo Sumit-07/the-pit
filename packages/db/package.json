@@ -7,7 +7,8 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js",
-    "./schema": "./dist/schema/index.js"
+    "./schema": "./dist/schema/index.js",
+    "./config": "./dist/config.js"
   },
   "files": [
     "dist",

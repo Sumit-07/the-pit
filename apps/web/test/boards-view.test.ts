@@ -191,11 +191,33 @@ describe('the homepage slice', () => {
     const home = toHomeBoard(view(), 2);
     expect(home.rows).toHaveLength(2);
     expect(home.rows[0]?.headline?.role).toBe('The Seed Investor');
-    expect(home.rows[0]?.metrics).toEqual([]);
     expect(home.soloCount).toBe(1);
     expect(home.productCount).toBe(3);
     // The whole point of the slice: no juror prose from rows 3+ in the payload.
     expect(JSON.stringify(home)).not.toContain('Cron with a graph');
+  });
+
+  it('carries the meter\u2019s per-metric losses, and no more of the ledger than that', () => {
+    // The rule this replaced an `expect(metrics).toEqual([])` with. The homepage
+    // now draws the cut meter, whose segment widths ARE the per-metric losses, so
+    // the slice cannot be empty here. What it still must not carry is the ledger:
+    // a row averages thirty reasons on the real boards and the payload keeps one
+    // per metric, for the segment's tooltip.
+    const full = view();
+    const home = toHomeBoard(full, 2);
+
+    const row = home.rows[0];
+    const source = full.rows[0];
+    expect(row?.metrics.map((metric) => metric.cuts)).toEqual(source?.metrics.map((metric) => metric.cuts));
+
+    for (const metric of row?.metrics ?? []) {
+      expect(metric.deductions.length).toBeLessThanOrEqual(1);
+    }
+    // The count under the bar still counts every reason, not the ones kept.
+    expect(row?.deductionCount).toBe(source?.deductionCount);
+    expect(row?.deductionCount).toBeGreaterThan(
+      (row?.metrics ?? []).reduce((total, metric) => total + metric.deductions.length, 0),
+    );
   });
 
   it('builds the strip from real cuts, heaviest first, each with its juror', () => {

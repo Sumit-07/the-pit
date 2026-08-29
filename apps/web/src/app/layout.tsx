@@ -8,10 +8,12 @@ import './pit.css';
  * "You can't outbid the pit", the sub is "Everyone walks in at 100. Fewest cuts
  * wins." The connective word is *cuts*, and it belongs on every surface.
  *
- * The shell now carries the type, because the surfaces that use it exist. It is
- * `the-pit-home.html`'s stack, unchanged — Archivo Black for display, Barlow for
- * body, IBM Plex Mono for everything numeric — loaded with plain `<link>` tags
- * rather than `next/font`, for two reasons:
+ * The shell carries the type. It is one sans and one mono: **Archivo** — the
+ * grotesque, never Archivo Black — from 400 to 800, and **IBM Plex Mono** on
+ * numbers only. There is deliberately no display face: the personality is weight,
+ * scale and tracking, which is what lets the same family shout at 74px in the hero
+ * and stay quiet at 14px in a juror's reason. They are loaded with plain `<link>`
+ * tags rather than `next/font`, for two reasons:
  *
  * 1. `next/font/google` fetches at **build** time. `pnpm -r build` has to work on
  *    a machine with no network, and a homepage that cannot be built offline is a
@@ -36,9 +38,11 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   // `brief` Part 6: the board occupies most of the page, above the fold on
   // mobile. Everything that renders it starts from a correctly scaled viewport.
+  // `themeColor` is `--paper`, the page's real ground, so a mobile browser's
+  // chrome matches the surface under it instead of a colour nothing else uses.
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#120E0C',
+  themeColor: '#EDEFF3',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -49,7 +53,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
         />
       </head>
       <body>{children}</body>

@@ -157,14 +157,18 @@ export function CategoryBoard({ board }: { board: BoardView }): ReactNode {
       <StatStrip board={board} />
 
       <p className="legend">
+        <b>The bar under every row is the hundred points that product walked in with.</b> The grey head is
+        what survived; each block after it is one metric&rsquo;s share of the loss, heaviest first, and the
+        blocks add up to the number on the right. Open a row and the same bar splits again by juror.
+        <br />
         <b>Cuts</b> is 100 minus the mean metric score &mdash; every product walks in at 100 in front of{' '}
         {labels.critics}, and this is what came off. The points inside a ledger are each juror&rsquo;s own
         deduction off their own 100, so six jurors cutting 20 for the same omission is one 20-point cut on
         the board, not 120.
         <br />
-        <b>Solo cluster</b> (gold edge) means nobody from {labels.buyers} was ever shown this product beside
-        a substitute, so its rank is merit alone. <b>Moved</b> means demand and scarcity pulled the row off
-        its pure-merit position.
+        <b>Solo cluster</b> means nobody from {labels.buyers} was ever shown this product beside a
+        substitute, so its rank is merit alone &mdash; {board.soloCount} of {board.productCount} rows here.{' '}
+        <b>Moved</b> means demand and scarcity pulled the row off its pure-merit position.
       </p>
 
       <div className="board">

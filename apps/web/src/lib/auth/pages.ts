@@ -28,22 +28,43 @@
 
 import { escapeHtml } from '@the-pit/auth';
 
-/** `brief` Part 5 fixes the voice. Everyone walks in at 100; fewest cuts wins. */
-const STYLE = [
-  'margin:0;min-height:100vh;display:grid;place-items:center;',
-  'background:#0b0b0c;color:#e8e8ea;',
-  'font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif',
-].join('');
+import { BASE, FONT_LINKS, TOKENS } from '@/lib/theme';
 
-const CARD = 'max-width:32rem;padding:2rem;text-align:left';
-const BUTTON = [
-  'display:inline-block;padding:.75rem 1.25rem;border:0;border-radius:4px;',
-  'background:#e8e8ea;color:#0b0b0c;font:inherit;font-weight:600;cursor:pointer',
-].join('');
-const FIELD = [
-  'display:block;width:100%;padding:.75rem;margin:0 0 1rem;border-radius:4px;',
-  'border:1px solid #3a3a3e;background:#141416;color:inherit;font:inherit',
-].join('');
+/**
+ * The magic-link screens, on the same theme as everything else.
+ *
+ * These four pages used to carry a palette of their own — `#0b0b0c` on `#e8e8ea`,
+ * system-ui, inline `style=` attributes — which made them the only screens in the
+ * product that looked like a different product. They now render `lib/theme.ts`,
+ * so a person who arrives here from a receipt lands somewhere they recognise.
+ *
+ * Still one file, still no script: `brief §2.1`'s GET-renders-a-button defence
+ * works because rendering this page consumes nothing, and a page that needed
+ * JavaScript to show its button would be a page a mail scanner could see and a
+ * human could not.
+ */
+const CSS = `${TOKENS}${BASE}
+body{min-height:100vh;display:grid;place-items:center;padding:32px 18px}
+main{width:100%;max-width:30rem;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r3);box-shadow:var(--e3);padding:32px 30px;position:relative;overflow:hidden}
+main::before{content:"";position:absolute;left:0;top:0;height:3px;width:38%;background:var(--cut)}
+main h1{font-size:26px;font-weight:700;letter-spacing:-.026em;margin:0 0 10px}
+main p{font-size:14.5px;line-height:1.62;color:var(--dim);margin:0 0 20px}
+main p:last-child{margin-bottom:0}
+main label{display:block;margin:0 0 7px;font-family:var(--mono);font-size:10px;
+  font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+main input[type=email]{margin:0 0 18px}
+main a{color:var(--ink);font-weight:600;text-decoration:none;
+  border-bottom:1px solid var(--line);padding-bottom:1px}
+main a:hover{border-bottom-color:var(--ink)}
+main h2{font-size:17px;font-weight:700;letter-spacing:-.015em;margin:0 0 10px}
+main .urlline{font-family:var(--mono);font-size:12.5px;overflow-wrap:anywhere}
+main .fine{font-size:13px;color:var(--dimmer)}
+main .list{margin:0 0 18px;padding-left:1.2rem;font-size:14px;line-height:1.7;color:var(--dim)}
+main .list li{font-family:var(--mono);font-size:12.5px;overflow-wrap:anywhere}
+`;
+
+const BUTTON_CLASS = 'act prime';
 
 function document_(title: string, body: string): string {
   return [
@@ -58,8 +79,10 @@ function document_(title: string, body: string): string {
     // loads.
     '<meta name="robots" content="noindex,nofollow">',
     `<title>${escapeHtml(title)} — The Pit</title>`,
+    FONT_LINKS,
+    `<style>${CSS}</style>`,
     '</head>',
-    `<body style="${STYLE}"><main style="${CARD}">${body}</main></body>`,
+    `<body><main>${body}</main></body>`,
     '</html>',
   ].join('');
 }
@@ -69,13 +92,13 @@ export function signInPage(): string {
   return document_(
     'Sign in',
     [
-      '<h1 style="font-size:1.5rem;margin:0 0 .5rem">Sign in to The Pit</h1>',
-      '<p style="margin:0 0 1.5rem;opacity:.75">We will send a link to the address on your receipt. ',
+      '<h1>Sign in to The Pit</h1>',
+      '<p>We will send a link to the address on your receipt. ',
       'There is no password — there never was one.</p>',
       '<form method="post" action="/auth/request">',
-      `<label for="email" style="display:block;margin:0 0 .5rem">Email</label>`,
-      `<input id="email" name="email" type="email" autocomplete="email" required style="${FIELD}">`,
-      `<button type="submit" style="${BUTTON}">Send me a link</button>`,
+      `<label for="email">Email</label>`,
+      `<input id="email" name="email" type="email" autocomplete="email" required>`,
+      `<button type="submit" class="${BUTTON_CLASS}">Send me a link</button>`,
       '</form>',
     ].join(''),
   );
@@ -90,9 +113,9 @@ export function requestResultPage(message: string): string {
   return document_(
     'Check your inbox',
     [
-      '<h1 style="font-size:1.5rem;margin:0 0 .5rem">Check your inbox</h1>',
-      `<p style="margin:0 0 1.5rem">${escapeHtml(message)}</p>`,
-      '<p style="margin:0;opacity:.75">The link works once and stops working after 15 minutes.</p>',
+      '<h1>Check your inbox</h1>',
+      `<p>${escapeHtml(message)}</p>`,
+      '<p>The link works once and stops working after 15 minutes.</p>',
     ].join(''),
   );
 }
@@ -110,12 +133,12 @@ export function verifyButtonPage(token: string): string {
   return document_(
     'Confirm sign-in',
     [
-      '<h1 style="font-size:1.5rem;margin:0 0 .5rem">One more press</h1>',
-      '<p style="margin:0 0 1.5rem;opacity:.75">Mail scanners open every link in a message. ',
+      '<h1>One more press</h1>',
+      '<p>Mail scanners open every link in a message. ',
       'This one does nothing until you press the button, so yours is still waiting for you.</p>',
       '<form method="post" action="/auth/verify">',
       `<input type="hidden" name="token" value="${escapeHtml(token)}">`,
-      `<button type="submit" style="${BUTTON}">Sign me in</button>`,
+      `<button type="submit" class="${BUTTON_CLASS}">Sign me in</button>`,
       '</form>',
     ].join(''),
   );
@@ -133,10 +156,10 @@ export function verifyRejectedPage(): string {
   return document_(
     'That link has expired',
     [
-      '<h1 style="font-size:1.5rem;margin:0 0 .5rem">That link no longer works</h1>',
-      '<p style="margin:0 0 1.5rem;opacity:.75">Sign-in links last 15 minutes and work once. ',
+      '<h1>That link no longer works</h1>',
+      '<p>Sign-in links last 15 minutes and work once. ',
       'Ask for a fresh one and it will be in your inbox in a moment.</p>',
-      `<p style="margin:0"><a href="/auth/sign-in" style="color:#e8e8ea">Send me a new link</a></p>`,
+      `<p><a href="/auth/sign-in">Send me a new link</a></p>`,
     ].join(''),
   );
 }
@@ -146,9 +169,9 @@ export function verifyRateLimitedPage(): string {
   return document_(
     'Too many attempts',
     [
-      '<h1 style="font-size:1.5rem;margin:0 0 .5rem">Too many attempts</h1>',
-      '<p style="margin:0 0 1.5rem;opacity:.75">Give it a few minutes and try your link again.</p>',
-      `<p style="margin:0"><a href="/auth/sign-in" style="color:#e8e8ea">Send me a new link</a></p>`,
+      '<h1>Too many attempts</h1>',
+      '<p>Give it a few minutes and try your link again.</p>',
+      `<p><a href="/auth/sign-in">Send me a new link</a></p>`,
     ].join(''),
   );
 }
@@ -175,15 +198,15 @@ export function capabilityHandoffPage(input: { url: string; email: string }): st
   return document_(
     'Payment received',
     [
-      '<h1 style="font-size:1.5rem;margin:0 0 .5rem">Payment received</h1>',
-      '<p style="margin:0 0 1.5rem;opacity:.75">Your run starts the moment the payment settles.</p>',
-      '<h2 style="font-size:1.1rem;margin:0 0 .5rem">Bookmark this — it is your account</h2>',
-      '<p style="margin:0 0 1rem;opacity:.75">No password, no expiry. It is how you reach your ',
+      '<h1>Payment received</h1>',
+      '<p>Your run starts the moment the payment settles.</p>',
+      '<h2>Bookmark this — it is your account</h2>',
+      '<p>No password, no expiry. It is how you reach your ',
       'remaining attempts, your history, and a re-pitch.</p>',
-      `<p style="margin:0 0 1.5rem;word-break:break-all"><a href="${safeUrl}" style="color:#e8e8ea">${safeUrl}</a></p>`,
-      `<p style="margin:0 0 1.5rem;font-size:.9rem;opacity:.6">We have also emailed it to ${escapeHtml(input.email)} as a backup. `,
+      `<p class="urlline"><a href="${safeUrl}">${safeUrl}</a></p>`,
+      `<p class="fine">We have also emailed it to ${escapeHtml(input.email)} as a backup. `,
       'Treat the link like a key: anyone who has it can reach your account, and you can replace it from your account page at any time.</p>',
-      '<p style="margin:0;font-size:.9rem;opacity:.6">Your verdict page will be public and shareable on its own. ',
+      '<p class="fine">Your verdict page will be public and shareable on its own. ',
       'You do not need this link to show anyone your results.</p>',
     ].join(''),
   );
@@ -202,13 +225,13 @@ export function capabilityUnavailablePage(): string {
   return document_(
     'Payment received',
     [
-      '<h1 style="font-size:1.5rem;margin:0 0 .5rem">Payment received</h1>',
-      '<p style="margin:0 0 1.5rem;opacity:.75">Your run starts the moment the payment settles.</p>',
-      '<p style="margin:0 0 1.5rem">We cannot show your account link on this page any more — it is only ',
+      '<h1>Payment received</h1>',
+      '<p>Your run starts the moment the payment settles.</p>',
+      '<p>We cannot show your account link on this page any more — it is only ',
       'shown for a short while after payment, so that a link left in a browser history does not become a way in.</p>',
-      '<p style="margin:0 0 1rem;opacity:.75">It was emailed to the address on your receipt. If that has not arrived, ',
+      '<p>It was emailed to the address on your receipt. If that has not arrived, ',
       'ask for a sign-in link instead.</p>',
-      `<p style="margin:0"><a href="/auth/sign-in" style="color:#e8e8ea">Email me a sign-in link</a></p>`,
+      `<p><a href="/auth/sign-in">Email me a sign-in link</a></p>`,
     ].join(''),
   );
 }
@@ -225,10 +248,10 @@ export function capabilityRejectedPage(): string {
   return document_(
     'That link no longer works',
     [
-      '<h1 style="font-size:1.5rem;margin:0 0 .5rem">That link no longer works</h1>',
-      '<p style="margin:0 0 1.5rem;opacity:.75">Account links stop working when they are replaced. ',
+      '<h1>That link no longer works</h1>',
+      '<p>Account links stop working when they are replaced. ',
       'If you replaced yours, use the new one; otherwise sign in with the address on your receipt.</p>',
-      `<p style="margin:0"><a href="/auth/sign-in" style="color:#e8e8ea">Email me a sign-in link</a></p>`,
+      `<p><a href="/auth/sign-in">Email me a sign-in link</a></p>`,
     ].join(''),
   );
 }
@@ -238,8 +261,8 @@ export function capabilityRateLimitedPage(): string {
   return document_(
     'Too many attempts',
     [
-      '<h1 style="font-size:1.5rem;margin:0 0 .5rem">Too many attempts</h1>',
-      '<p style="margin:0 0 1.5rem;opacity:.75">Give it a few minutes and try your link again.</p>',
+      '<h1>Too many attempts</h1>',
+      '<p>Give it a few minutes and try your link again.</p>',
     ].join(''),
   );
 }
@@ -250,11 +273,11 @@ export function capabilityRotatedPage(url: string): string {
   return document_(
     'New account link',
     [
-      '<h1 style="font-size:1.5rem;margin:0 0 .5rem">Here is your new account link</h1>',
-      '<p style="margin:0 0 1rem;opacity:.75">The old one stopped working the moment this page loaded. ',
+      '<h1>Here is your new account link</h1>',
+      '<p>The old one stopped working the moment this page loaded. ',
       'Replace your bookmark.</p>',
-      `<p style="margin:0 0 1.5rem;word-break:break-all"><a href="${safeUrl}" style="color:#e8e8ea">${safeUrl}</a></p>`,
-      '<p style="margin:0;font-size:.9rem;opacity:.6">Anyone still signed in on another device stays signed in until ',
+      `<p class="urlline"><a href="${safeUrl}">${safeUrl}</a></p>`,
+      '<p class="fine">Anyone still signed in on another device stays signed in until ',
       'their session expires. Replacing the link stops new sign-ins through the old one.</p>',
     ].join(''),
   );
@@ -279,32 +302,32 @@ export function oauthNoPurchasePage(input: {
   ignoredEmails: readonly string[];
 }): string {
   const list = (emails: readonly string[]): string =>
-    `<ul style="margin:0 0 1rem;padding-left:1.2rem">${emails
+    `<ul class="list">${emails
       .map((email) => `<li>${escapeHtml(email)}</li>`)
       .join('')}</ul>`;
 
   const checked =
     input.verifiedEmails.length === 0
-      ? '<p style="margin:0 0 1rem;opacity:.75">GitHub did not give us a single verified address to check.</p>'
-      : `<p style="margin:0 0 .5rem;opacity:.75">We checked these verified addresses:</p>${list(input.verifiedEmails)}`;
+      ? '<p>GitHub did not give us a single verified address to check.</p>'
+      : `<p>We checked these verified addresses:</p>${list(input.verifiedEmails)}`;
 
   const ignored =
     input.ignoredEmails.length === 0
       ? ''
-      : `<p style="margin:0 0 .5rem;opacity:.75">We ignored these, because GitHub has not confirmed you own them:</p>${list(
+      : `<p>We ignored these, because GitHub has not confirmed you own them:</p>${list(
           input.ignoredEmails,
         )}`;
 
   return document_(
     'No purchase found',
     [
-      '<h1 style="font-size:1.5rem;margin:0 0 .5rem">No purchase found</h1>',
+      '<h1>No purchase found</h1>',
       checked,
       ignored,
-      '<p style="margin:0 0 1.5rem">There is no account here yet — accounts are made by a purchase, not by signing in. ',
+      '<p>There is no account here yet — accounts are made by a purchase, not by signing in. ',
       'If you have paid, the receipt email has your account link in it; open that and connect GitHub afterwards, ',
       'and this will work next time.</p>',
-      `<p style="margin:0"><a href="/auth/sign-in" style="color:#e8e8ea">Email me a sign-in link instead</a></p>`,
+      `<p><a href="/auth/sign-in">Email me a sign-in link instead</a></p>`,
     ].join(''),
   );
 }
@@ -314,11 +337,11 @@ export function oauthRejectedPage(): string {
   return document_(
     'That sign-in did not complete',
     [
-      '<h1 style="font-size:1.5rem;margin:0 0 .5rem">That sign-in did not complete</h1>',
-      '<p style="margin:0 0 1.5rem;opacity:.75">Either it took too long, or GitHub did not confirm it. ',
+      '<h1>That sign-in did not complete</h1>',
+      '<p>Either it took too long, or GitHub did not confirm it. ',
       'Nothing has changed on your account.</p>',
-      `<p style="margin:0 0 1rem"><a href="/auth/github/start" style="color:#e8e8ea">Try GitHub again</a></p>`,
-      `<p style="margin:0"><a href="/auth/sign-in" style="color:#e8e8ea">Email me a sign-in link instead</a></p>`,
+      `<p><a href="/auth/github/start">Try GitHub again</a></p>`,
+      `<p><a href="/auth/sign-in">Email me a sign-in link instead</a></p>`,
     ].join(''),
   );
 }
@@ -328,8 +351,8 @@ export function oauthRateLimitedPage(): string {
   return document_(
     'Too many attempts',
     [
-      '<h1 style="font-size:1.5rem;margin:0 0 .5rem">Too many attempts</h1>',
-      '<p style="margin:0 0 1.5rem;opacity:.75">Give it a few minutes and try again.</p>',
+      '<h1>Too many attempts</h1>',
+      '<p>Give it a few minutes and try again.</p>',
     ].join(''),
   );
 }
@@ -339,9 +362,9 @@ export function oauthNotConfiguredPage(): string {
   return document_(
     'GitHub sign-in is not available',
     [
-      '<h1 style="font-size:1.5rem;margin:0 0 .5rem">GitHub sign-in is not available</h1>',
-      '<p style="margin:0 0 1.5rem;opacity:.75">It is not switched on here. The other two ways in still work.</p>',
-      `<p style="margin:0"><a href="/auth/sign-in" style="color:#e8e8ea">Email me a sign-in link</a></p>`,
+      '<h1>GitHub sign-in is not available</h1>',
+      '<p>It is not switched on here. The other two ways in still work.</p>',
+      `<p><a href="/auth/sign-in">Email me a sign-in link</a></p>`,
     ].join(''),
   );
 }

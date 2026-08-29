@@ -264,9 +264,11 @@ describe('the downloadable artifact', () => {
     expect(html).not.toContain('<img');
     expect(html).not.toContain('<iframe');
 
-    // The palette is `the-pit-home.html`'s, inline.
-    expect(html).toContain('--ground:#120E0C');
-    expect(html).toContain('--blade:#E2482C');
+    // The palette is `lib/theme.ts`'s five values, inline — the same theme every
+    // other surface renders, so a saved copy is not a different product.
+    expect(html).toContain('--paper:#EDEFF3');
+    expect(html).toContain('--ink:#101317');
+    expect(html).toContain('--cut:#9C1B2F');
 
     // The only external reference is the site's typeface, and every family
     // declares a real local fallback — so a copy saved and opened offline loses
@@ -274,9 +276,11 @@ describe('the downloadable artifact', () => {
     const stylesheets = [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map(([, href]) => href ?? '');
     expect(stylesheets).toHaveLength(1);
     expect(stylesheets[0]).toContain('fonts.googleapis.com');
-    expect(html).toContain('--disp:"Archivo Black","Arial Black"');
-    expect(html).toContain('--body:"Barlow","Helvetica Neue"');
+    // One sans and one mono, each with a real local fallback.
+    expect(html).toContain('--sans:"Archivo","Helvetica Neue"');
     expect(html).toContain('--mono:"IBM Plex Mono",ui-monospace');
+    // And no display face: the personality is weight, scale and tracking.
+    expect(html).not.toContain('Archivo Black');
   });
 
   it('offers itself for download, and its links survive being saved', async () => {

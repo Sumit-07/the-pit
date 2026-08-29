@@ -1,11 +1,14 @@
 /**
  * The homepage — the public face of The Pit.
  *
- * `brief` Part 6 is the specification and `the-pit-home.html` is the design. This
- * route is the founder's page, rebuilt over the real seeded boards: the same
- * palette, the same compact hero, the same rolling category rail with its 7s
- * progress bar, the same board-as-a-pit with rows darkening as they descend, the
- * same three panels and the same closer. Nothing has been restyled or modernised.
+ * `brief` Part 6 is the specification. The structure it fixes is unchanged — a
+ * compact hero, a rolling category rail with its 7s progress bar, the board
+ * occupying most of the page, the three panels, the closer — and the surface
+ * treatment is new: `app/pit.css` and `lib/theme.ts` carry a five-value theme on a
+ * real surface stack, one sans, one mono, and no display face. `brief` Part 6's
+ * "rows darken as they descend (the pit is literal)" is read as depth in that
+ * stack rather than as mud in the palette: the first row is a lifted white card
+ * and the last is flush with the floor.
  *
  * ## Copy
  *
@@ -118,6 +121,17 @@ export default async function Home(): Promise<ReactNode> {
         />
       )}
 
+      {/*
+        Three panels, and each one ends with `brief` Part 4's own column: **affects
+        rank**, yes or no. That line is the section's whole job — the page can only
+        claim money buys nothing if it says out loud what does. Three feature cards
+        without it would be decoration on a page whose argument is a mechanism.
+
+        The label is "Affects rank" and never "your rank": `brief` Part 5 forbids
+        promising a rank, and `test/boards-copy.test.ts` holds the homepage to it
+        with a regex. The panel weighting is a property of the panel, not an offer
+        to the reader.
+      */}
       <section>
         <div className="three">
           <div className="card six">
@@ -127,6 +141,10 @@ export default async function Home(): Promise<ReactNode> {
               They start you at a hundred and take it apart. Every point comes off with a reason short
               enough to sting, and the reason is on the board next to the cut.
             </p>
+            <div className="moves">
+              <span>Affects rank</span>
+              <b>65% of it</b>
+            </div>
           </div>
           <div className="card floor">
             <h3>The Floor</h3>
@@ -135,6 +153,10 @@ export default async function Home(): Promise<ReactNode> {
               Six customers shown you beside your closest substitutes and made to pick one. No abstaining,
               no ties. Alone in your cluster, nobody is shown you at all, and the board says so.
             </p>
+            <div className="moves">
+              <span>Affects rank</span>
+              <b>35% of it</b>
+            </div>
           </div>
           <div className="card mob">
             <h3>The Mob</h3>
@@ -143,6 +165,10 @@ export default async function Home(): Promise<ReactNode> {
               Everyone walking past, given the same choice the floor gets. Where they disagree is the whole
               point.
             </p>
+            <div className="moves">
+              <span>Affects rank</span>
+              <b>Never &middot; own board</b>
+            </div>
           </div>
         </div>
       </section>

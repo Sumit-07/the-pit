@@ -18,17 +18,23 @@
  *
  * ## Where the design comes from
  *
- * Structure and hierarchy are the verdict pane of `platform-surfaces-mockup.html`,
- * beat for beat: the dark header strip carrying the category and the name, the
- * oversized rank with "of N products" beside it, the four summary lines, the
- * pull-quote from the sharpest juror with its citation, and the mono footer strip
- * with the timestamp and the versions. The palette is `the-pit-home.html`'s eight
- * custom properties, taken verbatim — the same restatement in the dark palette
- * that `board/page.ts` already made, so the board and the verdict it links to
- * look like one product. Nothing here is a new visual idea.
+ * `lib/theme.ts`, the same five values and two families every other surface uses,
+ * interpolated into this document so a saved copy carries its own theme. The card
+ * keeps the hierarchy the surface has always had — the header strip with the
+ * category and the name, the oversized rank that cannot be printed without its
+ * product count and its date, the summary lines, the pull-quote from the sharpest
+ * juror, the mono footer with the versions — and states all of it on paper instead
+ * of in the dark.
  *
- * The card ends where the mockup's card ends. Everything below it is the evidence
- * `brief` Part 6 enumerates, in the mockup's own ledger treatment: the metric
+ * The one new element is the same one the boards gained: **the cut meter**. This
+ * product walked in at 100; the graphite head is what survived and every segment
+ * after it is one metric's exact share of the loss. Inside the ledger the same bar
+ * splits again by juror, which is what makes "every deduction shows the juror" a
+ * property of the drawing rather than a caption under it. `components/board-parts.tsx`
+ * carries the full reasoning; this is the same figure in a document that has to
+ * survive being saved to disk.
+ *
+ * Everything below the card is the evidence `brief` Part 6 enumerates: the metric
  * bar, the `-NN reason — juror` line, the picks list with its persona chip.
  *
  * ## Voice
@@ -57,7 +63,9 @@
 
 import { escapeHtml } from '@the-pit/auth';
 
-import type { Verdict, VerdictDeduction } from './model';
+import { BASE, FONT_LINKS, TOKENS } from '@/lib/theme';
+
+import type { Verdict, VerdictDeduction, VerdictMetric } from './model';
 
 /** `brief` Part 5: the domain. Used when a caller does not supply the request's origin. */
 export const PIT_ORIGIN = 'https://thepit.show';
@@ -145,126 +153,137 @@ function productLink(url: string): string {
 /**
  * The site's typeface, and the one external reference on the page.
  *
- * `the-pit-home.html` loads exactly these three families from the same host, and
- * `app/layout.tsx` loads them for every React surface, so a verdict page without
- * them would be the one screen in the product set in Arial. It is a `<link>` and
- * not a `next/font` import because this document is served by a route handler and
- * has to be a single file.
+ * One sans and one mono, from `lib/theme.ts`, which is what `app/layout.tsx`
+ * loads for every React surface — so a verdict page is not the one screen in the
+ * product set in Arial. It is a `<link>` and not a `next/font` import because this
+ * document is served by a route handler and has to be a single file.
  *
  * It does not cost the page its offline guarantee: every family in `CSS` is
  * declared with a real local fallback stack, so a saved copy on a machine with no
  * network loses its typeface and nothing else. There is still no script, no image
  * and no stylesheet the layout depends on.
  */
-const FONTS = [
-  '<link rel="preconnect" href="https://fonts.googleapis.com">',
-  '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
-  '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&amp;' +
-    'family=Barlow:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap">',
-].join('\n');
+const FONTS = FONT_LINKS;
 
-const CSS = `
-:root{
-  --ground:#120E0C; --ground2:#191411; --panel:#211A16; --rule:#33291F; --rule2:#241D18;
-  --bone:#EDE6DE; --muted:#93857A; --blade:#E2482C; --coin:#D9A441; --roar:#5B9EA6;
-  --body:"Barlow","Helvetica Neue",Helvetica,Arial,sans-serif;
-  --disp:"Archivo Black","Arial Black","Helvetica Neue",Impact,sans-serif;
-  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-html{background:var(--ground)}
-body{background:var(--ground);color:var(--bone);font-family:var(--body);
-  -webkit-font-smoothing:antialiased;overflow-x:hidden}
-.wrap{max-width:760px;margin:0 auto;padding:0 14px 56px}
+const CSS = `${TOKENS}${BASE}
+.wrap{max-width:820px}
 
-nav{display:flex;justify-content:space-between;align-items:center;padding:13px 0;
-  border-bottom:1px solid var(--rule)}
-.mark{font-family:var(--disp);font-size:14px;letter-spacing:-.02em;color:var(--bone);text-decoration:none}
-.mark i{color:var(--blade);font-style:normal}
-.navr{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.06em}
+/* ---------- the card ---------- */
+.vcard{background:var(--card);border:1px solid var(--line);border-radius:var(--r3);
+  box-shadow:var(--e3);margin-top:14px;overflow:hidden}
+.vtop{background:var(--ink);color:var(--paper);padding:20px 24px 22px;position:relative}
+.vtop::after{content:"";position:absolute;left:0;bottom:0;height:3px;width:34%;background:var(--cut)}
+.vtop .lbl{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.17em;
+  text-transform:uppercase;color:rgb(255 255 255 / .48)}
+.vtop h1{font-weight:700;font-size:clamp(23px,4.2vw,34px);line-height:1.06;
+  letter-spacing:-.03em;margin-top:9px;overflow-wrap:anywhere}
+.vtop .purl{display:block;margin-top:10px}
+.plink{font-family:var(--mono);font-size:11px;color:rgb(255 255 255 / .5);
+  text-decoration:none;overflow-wrap:anywhere}
+a.plink:hover{color:var(--paper);text-decoration:underline}
+.vtop :focus-visible{outline-color:var(--paper)}
 
-.sh{font-family:var(--mono);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+.vrank{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;
+  padding:20px 24px 18px;border-bottom:1px solid var(--line)}
+.vrank .big{font-weight:800;font-size:54px;line-height:.84;letter-spacing:-.05em;
+  font-variant-numeric:tabular-nums}
+.vrank .of{font-size:13.5px;line-height:1.5;color:var(--dim);max-width:34ch}
+.vrank .of b{display:block;color:var(--ink);font-size:14px;font-weight:600}
+.pitch{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--dim);border:1px solid var(--line);border-radius:999px;
+  padding:4px 10px;align-self:center;margin-left:auto}
 
-/* ---------- the card: platform-surfaces-mockup.html, dark ---------- */
-.vcard{border:1px solid var(--rule);background:var(--ground2);margin-top:22px;overflow:hidden}
-.vtop{background:var(--panel);border-bottom:1px solid var(--rule);padding:13px 16px 12px}
-.vtop .lbl{font-family:var(--mono);font-size:9px;letter-spacing:.17em;text-transform:uppercase;color:var(--muted)}
-.vtop h1{font-family:var(--disp);font-size:clamp(20px,5.2vw,30px);line-height:1.04;
-  letter-spacing:-.03em;margin-top:6px;word-break:break-word}
-.vtop .purl{display:block;margin-top:7px}
-.plink{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-decoration:none;word-break:break-all}
-a.plink:hover{color:var(--bone);text-decoration:underline}
+/* ---------- the cut meter, on the card ---------- */
+.vmeter{padding:18px 24px 20px;border-bottom:1px solid var(--line)}
+.vmeter .cap{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:10.5px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--dimmer)}
+.vmeter .cap b{color:var(--cut);font-weight:600}
+.meter{display:flex;height:14px;border-radius:999px;background:var(--sunk);overflow:hidden;
+  margin-top:9px;box-shadow:inset 0 1px 2px rgb(var(--ink-c) / .08)}
+.meter .kept{background:rgb(var(--ink-c) / .24);height:100%;flex:0 0 auto}
+.meter .seg{background:var(--cut);height:100%;flex:0 0 auto;box-shadow:-1px 0 0 var(--card)}
+.meter .seg.s2{background:rgb(var(--cut-c) / .82)}
+.meter .seg.s3{background:rgb(var(--cut-c) / .66)}
+.meter .seg.s4{background:rgb(var(--cut-c) / .52)}
+.meter .seg.s5{background:rgb(var(--cut-c) / .40)}
+.meter .seg.s6{background:rgb(var(--cut-c) / .30)}
+.vkeys{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:11px;
+  font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+.vkeys span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.vkeys i{display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--cut)}
+.vkeys i.s2{background:rgb(var(--cut-c) / .82)}
+.vkeys i.s3{background:rgb(var(--cut-c) / .66)}
+.vkeys i.s4{background:rgb(var(--cut-c) / .52)}
+.vkeys i.s5{background:rgb(var(--cut-c) / .40)}
+.vkeys i.s6{background:rgb(var(--cut-c) / .30)}
+.vkeys b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
 
-.vrank{display:flex;align-items:baseline;gap:13px;flex-wrap:wrap;
-  padding:17px 16px 14px;border-bottom:1px solid var(--rule2)}
-.vrank .big{font-family:var(--disp);font-size:52px;line-height:.82;letter-spacing:-.05em;color:var(--blade)}
-.vrank .of{font-size:12.5px;line-height:1.45;color:var(--muted)}
-.vrank .of b{display:block;color:var(--bone);font-size:13px;font-weight:600}
-.pitch{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--coin);border:1px solid rgba(217,164,65,.42);padding:2px 6px;align-self:center}
-
-.vbody{padding:13px 16px 16px}
-.vline{display:flex;justify-content:space-between;gap:12px;font-size:12.5px;padding:6px 0;
-  border-bottom:1px solid var(--rule2)}
+.vbody{padding:16px 24px 20px}
+.vline{display:flex;justify-content:space-between;gap:14px;font-size:14px;padding:9px 0;
+  border-bottom:1px solid var(--hair)}
 .vline:last-of-type{border-bottom:0}
-.vline span:first-child{color:var(--muted)}
-.vline span:last-child{font-family:var(--mono);font-weight:600;text-align:right}
-.vline .none{color:var(--coin);font-weight:500}
-.vquote{font-size:13px;line-height:1.55;color:#C9BCB1;border-left:2px solid var(--blade);
-  padding-left:11px;margin-top:14px}
-.vquote cite{display:block;font-style:normal;font-family:var(--mono);font-size:9.5px;
-  color:var(--muted);margin-top:6px;letter-spacing:.04em}
-.vfoot{background:var(--panel);border-top:1px solid var(--rule);padding:9px 16px;
-  font-family:var(--mono);font-size:9.5px;line-height:1.7;color:var(--muted);
-  display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.vline span:first-child{color:var(--dim)}
+.vline span:last-child{font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-weight:600;text-align:right}
+.vline .none{color:var(--dim);font-weight:500}
+.vquote{font-size:16px;line-height:1.5;color:var(--ink);border-left:3px solid var(--cut);
+  padding-left:16px;margin-top:20px;font-weight:500;letter-spacing:-.008em}
+.vquote cite{display:block;font-style:normal;font-family:var(--mono);font-size:10.5px;
+  color:var(--dimmer);margin-top:9px;letter-spacing:.04em}
+.vfoot{background:var(--wash);border-top:1px solid var(--line);padding:12px 24px;
+  font-family:var(--mono);font-size:10.5px;line-height:1.7;color:var(--dimmer);
+  display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 
-.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:13px}
-.act{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-decoration:none;
-  color:var(--bone);border:1px solid var(--rule);padding:7px 11px;background:transparent}
-.act:hover{border-color:var(--muted)}
-.act.prime{background:var(--blade);border-color:var(--blade);color:#150C0A;font-weight:600}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
 
 /* ---------- the evidence ---------- */
-section{margin-top:30px}
-h2{font-family:var(--disp);font-size:15px;letter-spacing:-.02em;text-transform:uppercase}
-.lede{font-size:12.5px;line-height:1.6;color:#B3A79C;margin-top:7px;max-width:64ch}
-.lede b{color:var(--bone);font-weight:600}
-
-.ledger{margin-top:17px;border-top:1px solid var(--rule2);padding-top:12px}
-.ledger-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
-.ledger-h .mt{font-size:13px;font-weight:600}
-.ledger-h .sc{font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap}
-.bar{display:flex;height:8px;overflow:hidden;background:var(--rule2);margin-top:7px}
+.ledger{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
+  box-shadow:var(--e1);padding:15px 17px 13px;margin-top:14px}
+.ledger-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.ledger-h .mt{font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+.ledger-h .sc{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11px;
+  color:var(--dimmer);white-space:nowrap}
+.bar{display:flex;height:10px;border-radius:999px;background:var(--sunk);overflow:hidden;
+  margin-top:10px;box-shadow:inset 0 1px 1px rgb(var(--ink-c) / .07)}
 .bar i{display:block;height:100%}
-.bar i.kept{background:rgba(237,230,222,.20)}
-.bar i.lost{background:var(--blade);opacity:.82}
-.ded{display:flex;gap:10px;font-size:12.5px;line-height:1.55;color:#B3A79C;margin-top:8px}
-.ded .pts{font-family:var(--mono);font-size:11.5px;color:var(--blade);font-weight:600;
-  min-width:32px;text-align:right;padding-top:1px}
-.ded .who{font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap}
-.subs{font-family:var(--mono);font-size:10px;color:var(--coin);margin-top:8px}
+.bar i.kept{background:rgb(var(--ink-c) / .24)}
+.bar i.lost{background:var(--cut)}
+.bar i.j{background:var(--cut);box-shadow:-1px 0 0 var(--card)}
+.bar i.j.s2{background:rgb(var(--cut-c) / .82)}
+.bar i.j.s3{background:rgb(var(--cut-c) / .66)}
+.bar i.j.s4{background:rgb(var(--cut-c) / .52)}
+.bar i.j.s5{background:rgb(var(--cut-c) / .40)}
+.bar i.j.s6{background:rgb(var(--cut-c) / .30)}
+.barcap{display:block;margin-top:7px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer)}
+.ded{display:grid;grid-template-columns:44px minmax(0,1fr);gap:12px;font-size:14px;
+  line-height:1.5;color:var(--dim);margin-top:11px;padding-top:11px;border-top:1px solid var(--hair)}
+.barcap + .ded{border-top:0}
+.ded .pts{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;
+  color:var(--cut);font-weight:600;text-align:right;padding-top:1px}
+.ded .who{font-family:var(--mono);font-size:11px;color:var(--dimmer);white-space:nowrap}
+.subs{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:12px;
+  padding:8px 10px;background:var(--sunk);border-radius:var(--r1)}
 
-.blk{background:var(--ground2);border:1px solid var(--rule);padding:13px 14px;margin-top:14px}
-.blk p{font-size:12.5px;line-height:1.6;color:#B3A79C}
-.blk p+p{margin-top:7px}
-.blk p b{color:var(--bone);font-weight:600}
-.pick{display:flex;gap:10px;font-size:12.5px;line-height:1.55;color:#B3A79C;margin-top:9px}
-.pick .p{font-family:var(--mono);font-size:9.5px;color:var(--roar);white-space:nowrap;
-  border:1px solid rgba(91,158,166,.34);padding:1px 5px;align-self:flex-start}
-.pick .p.second{color:var(--muted);border-color:var(--rule)}
-.pick .who{font-family:var(--mono);font-size:10px;color:var(--muted)}
-.solo{border-left:2px solid var(--coin)}
-.solo p b{color:var(--coin)}
-.dnums{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:11px;
-  padding-top:9px;border-top:1px solid var(--rule2)}
+.pick{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;font-size:14px;
+  line-height:1.5;color:var(--dim);margin-top:11px}
+.pick .p{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--card);background:rgb(var(--ink-c) / .86);
+  border-radius:999px;padding:3px 8px;white-space:nowrap;align-self:start}
+.pick .p.second{background:transparent;color:var(--dim);border:1px solid var(--line)}
+.pick .who{font-family:var(--mono);font-size:11px;color:var(--dimmer)}
+.solo{background:var(--sunk);box-shadow:none}
+.dnums{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11px;
+  color:var(--dimmer);margin-top:14px;padding-top:11px;border-top:1px solid var(--hair)}
 
-footer{margin-top:34px;border-top:1px solid var(--rule);padding-top:16px;
-  font-family:var(--mono);font-size:10.5px;line-height:1.75;color:var(--muted)}
-footer b{color:#C9BCB1;font-weight:500}
-footer a{color:var(--muted)}
-.notfound{border:1px solid var(--rule);background:var(--ground2);padding:24px;margin-top:24px;
-  font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--muted)}
-@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+.notfound{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
+  box-shadow:var(--e1);padding:28px;margin-top:24px;font-size:14px;line-height:1.7;color:var(--dim)}
+
+@media (max-width:640px){
+  .vtop,.vrank,.vmeter,.vbody,.vfoot{padding-left:16px;padding-right:16px}
+  .vrank .big{font-size:44px}
+  .pitch{margin-left:0}
+}
 `;
 
 /** The sharpest juror line, as the card's pull quote. */
@@ -275,6 +294,90 @@ function quote(sharpest: VerdictDeduction): string {
     `<cite>${escapeHtml(sharpest.role)} &middot; &minus;${sharpest.points} on ${escapeHtml(metricLabel(sharpest.metric))}</cite>`,
     '</blockquote>',
   ].join('');
+}
+
+/** The opacity ramp a segment sits on: heaviest solid, the rest stepping back. */
+function segClass(index: number, base: string = 'seg'): string {
+  return index === 0 ? base : `${base} s${Math.min(index + 1, 6)}`;
+}
+
+/**
+ * The cut meter: this product's hundred points, and the metrics that ate them.
+ *
+ * The widths are exact. `cuts = 100 - mean(metric score)`, so a metric contributes
+ * `metricCuts / metricCount` and the segments sum to the bar with nothing left
+ * over. A key names every segment, because this document has no hover on a phone
+ * and no JavaScript anywhere: a bar whose blocks can only be identified by
+ * pointing at them is a bar half the readers cannot read.
+ */
+function cutMeter(verdict: Verdict): string {
+  const count = verdict.metrics.length;
+  const cuts = Math.max(0, Math.min(100, verdict.cuts));
+  const kept = 100 - cuts;
+  if (count === 0) return '';
+
+  const share = (metric: VerdictMetric): number => Math.max(0, metric.cuts) / count;
+
+  const segments = verdict.metrics
+    .map((metric, index) => `<i class="${segClass(index)}" style="width:${share(metric)}%"></i>`)
+    .join('');
+
+  const keys = verdict.metrics
+    .map(
+      (metric, index) =>
+        `<span><i class="${segClass(index, '')}"></i>${escapeHtml(metricLabel(metric.metric))} ` +
+        `<b>&minus;${n1(share(metric))}</b></span>`,
+    )
+    .join('');
+
+  return [
+    '<div class="vmeter">',
+    '<div class="cap">',
+    '<span>Walked in at 100</span>',
+    `<span><b>&minus;${Math.round(cuts)} in cuts</b> &middot; ${Math.round(kept)} left</span>`,
+    '</div>',
+    `<div class="meter"><i class="kept" style="width:${kept}%"></i>${segments}</div>`,
+    `<div class="vkeys">${keys}</div>`,
+    '</div>',
+  ].join('');
+}
+
+/**
+ * One metric's loss, split by the juror who caused it.
+ *
+ * Exact for the same reason the meter above it is: a metric's merged score is the
+ * mean of its jurors' own scores, so juror J's share of the loss is
+ * `J's points / jurorCount`, and the shares sum to the loss. It is what makes the
+ * juror attribution structural - a juror is a measurable width, not a byline.
+ */
+function jurorBar(metric: VerdictMetric): string {
+  const jurors = Math.max(1, metric.jurors);
+  const lost = Math.max(0, Math.min(100, metric.cuts));
+
+  const byRole = new Map<string, number>();
+  for (const deduction of metric.deductions) {
+    byRole.set(deduction.role, (byRole.get(deduction.role) ?? 0) + deduction.points);
+  }
+  const shares = [...byRole.entries()]
+    .map(([role, points]) => ({ role, points, share: points / jurors }))
+    .sort((a, b) => b.share - a.share);
+
+  if (shares.length === 0) {
+    return (
+      '<div class="bar"><i class="kept" style="width:100%"></i></div>' +
+      '<span class="barcap">nothing came off this metric</span>'
+    );
+  }
+
+  const segments = shares
+    .map((entry, index) => `<i class="${segClass(index, 'j')}" style="width:${entry.share}%"></i>`)
+    .join('');
+
+  return (
+    `<div class="bar"><i class="kept" style="width:${100 - lost}%"></i>${segments}</div>` +
+    `<span class="barcap">${shares.length} of ${jurors} jurors cut here &middot; widest block is ` +
+    `${escapeHtml(shares[0]?.role ?? '')}</span>`
+  );
 }
 
 /** The four summary lines of the mockup's card body. */
@@ -326,8 +429,7 @@ function ledger(verdict: Verdict): string {
         `<span class="mt" title="${escapeHtml(metric.metric)}">${escapeHtml(metricLabel(metric.metric))}</span>`,
         `<span class="sc">${n1(metric.score)} / 100 &middot; spread &plusmn;${n1(metric.spread)} &middot; ${metric.jurors} jurors</span>`,
         '</div>',
-        `<div class="bar"><i class="kept" style="width:${n1(Math.max(0, metric.score))}%"></i>`,
-        `<i class="lost" style="width:${n1(Math.max(0, metric.cuts))}%"></i></div>`,
+        jurorBar(metric),
         deductions,
         nothing,
         substituted,
@@ -469,6 +571,8 @@ ${FONTS}
     <span class="of"><b>of ${verdict.productCount} products</b>on ${escapeHtml(stampTime(verdict.issuedAt))}. The board has moved since.</span>
     ${pitch}
   </div>
+
+  ${cutMeter(verdict)}
 
   <div class="vbody">
     ${summaryLines(verdict)}

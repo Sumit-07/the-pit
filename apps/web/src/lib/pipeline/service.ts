@@ -41,14 +41,8 @@ import { createDatabase, requireDatabaseUrl, type Database } from '@the-pit/db';
 
 import { FileCategorySource, type CategorySource } from './catalog';
 import { MemoryPlacementClaims, type PlacementClaims } from './claims';
-import {
-  bucketProblems,
-  PipelineBindingError,
-  SNAPSHOT_PURGE_URL_ENV,
-  storageMode,
-  workdirOf,
-  type Env,
-} from './mode';
+import { PipelineBindingError, storageMode, workdirOf, type Env } from './mode';
+import { assertBindingsConfigured, bindingProblems } from './bindings';
 import { PgPlacementClaims } from './pg-claims';
 import { PgCategorySource } from './pg-catalog';
 import { PgPipelineStore } from './pg-store';
@@ -75,6 +69,19 @@ export {
 } from './mode';
 export type { Env, StorageMode } from './mode';
 export { defaultSnapshotSink } from './sink';
+
+/**
+ * The startup binding check, re-exported from the leaf module that owns it.
+ *
+ * It moved to `./bindings` because `src/instrumentation.ts` is its only caller
+ * and Next compiles instrumentation in a pass where `serverExternalPackages` does
+ * not apply — so the `@the-pit/engine` import below (and the `node:crypto` inside
+ * it) turned a boot check into a build failure that 500'd every route. The check
+ * reads environment variables and needs none of this module's graph; see
+ * `./bindings` for the full account. The names stay here because every caller and
+ * every test already asks for them here.
+ */
+export { assertBindingsConfigured, bindingProblems };
 
 /**
  * Which run's phases a store is for, when it is not the category's own.
@@ -120,69 +127,6 @@ export interface RunnerBindings {
    */
   store: (category: string, versions: PhaseVersions, scope?: RunScope) => PipelineStore;
   snapshots: SnapshotSink;
-}
-
-/**
- * Every reason this environment cannot be bound, in one message.
- *
- * All of them at once rather than the first: someone configuring a deployment
- * should not have to redeploy three times to be told about three variables.
- * Returns the empty array when the binding is sound.
- */
-export function bindingProblems(env: Env = process.env): string[] {
-  const problems: string[] = [];
-
-  let mode: 'filesystem' | 'postgres';
-  try {
-    mode = storageMode(env);
-  } catch (error) {
-    return [error instanceof Error ? error.message : String(error)];
-  }
-  if (mode === 'filesystem') return problems;
-
-  try {
-    requireDatabaseUrl(env);
-  } catch (error) {
-    // `DATABASE_URL` is what `PgPipelineStore` writes phases through AND what
-    // `PgCategorySource` reads the population and the approved panels from. A
-    // deployment missing it cannot see a placement either.
-    problems.push(error instanceof Error ? error.message : String(error));
-  }
-
-  // The bucket half is `mode.ts`'s, because the board READ path needs the same
-  // check and must not import a database driver to make it.
-  problems.push(...bucketProblems(env));
-
-  return problems;
-}
-
-/**
- * Throw unless this environment can be bound. Called once, at server startup.
- *
- * The point of the timing: `brief §2.3` makes a failed run a free retry, but a
- * run that cannot PERSIST is not a failed run — it is a run that spends money and
- * then loses the receipt. Discovering that at the first paid submission is
- * discovering it too late, so it is discovered at boot instead.
- */
-export function assertBindingsConfigured(env: Env = process.env): void {
-  const problems = bindingProblems(env);
-  if (problems.length > 0) {
-    throw new PipelineBindingError(
-      `The run pipeline cannot be bound in this environment (${problems.length} problem(s)):\n\n` +
-        problems.join('\n\n---\n\n'),
-    );
-  }
-
-  if (storageMode(env) === 'postgres' && (env[SNAPSHOT_PURGE_URL_ENV] ?? '') === '') {
-    // A warning, not a failure. Some stores' CDNs revalidate on `Cache-Control`
-    // alone and have no purge API at all, and `BOARD_CACHE_CONTROL` already
-    // carries `stale-while-revalidate`. What it costs is latency on the one
-    // property `02 §4` names, so it is said once, loudly, at startup.
-    console.warn(
-      `[pipeline] ${SNAPSHOT_PURGE_URL_ENV} is not set: a placement rewrites the board object but does not ` +
-        `invalidate its CDN path, so the new board can be up to s-maxage (1 day) late at the edge (02 §4).`,
-    );
-  }
 }
 
 /**
