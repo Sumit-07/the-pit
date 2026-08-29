@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Platform surfaces — board, verdict, fit report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EFF0EC;
+  --card:#FBFBF9;
+  --ink:#15181A;
+  --ink2:#464C52;
+  --muted:#868D95;
+  --rule:#D5D8D2;
+  --rule2:#E6E8E3;
+  --lost:#A33A2C;
+  --kept:#2E5C4F;
+  --pick:#2A5A85;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-family:"Public Sans",sans-serif;
+  -webkit-font-smoothing:antialiased;padding:16px 13px 44px;max-width:900px;margin:0 auto}
+
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.17em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:clamp(22px,5.6vw,34px);
+  line-height:1.02;letter-spacing:-.025em;margin:8px 0 9px}
+.lede{font-size:13.5px;line-height:1.5;color:var(--ink2);max-width:58ch}
+
+/* tabs */
+.tabs{display:flex;gap:0;margin:20px 0 0;border-bottom:1px solid var(--rule)}
+.tab{font-family:"Public Sans",sans-serif;font-size:12.5px;font-weight:600;color:var(--muted);
+  background:none;border:0;border-bottom:2px solid transparent;padding:9px 13px;cursor:pointer;
+  margin-bottom:-1px;transition:color .15s,border-color .15s}
+.tab:hover{color:var(--ink2)}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--lost)}
+.tab:focus-visible{outline:2px solid var(--lost);outline-offset:-2px}
+.pane{display:none;padding-top:20px}
+.pane.on{display:block}
+
+.sect{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:9px}
+.note{font-size:12px;line-height:1.5;color:var(--muted);margin-bottom:16px;max-width:62ch}
+
+/* ---------- BOARD ---------- */
+.catbar{display:flex;gap:6px;overflow-x:auto;padding-bottom:11px;margin-bottom:14px;
+  border-bottom:1px solid var(--rule2);-webkit-overflow-scrolling:touch}
+.cat{font-family:"IBM Plex Mono",monospace;font-size:10.5px;white-space:nowrap;
+  border:1px solid var(--rule);background:var(--card);color:var(--ink2);
+  padding:5px 9px;border-radius:2px;cursor:pointer}
+.cat.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+
+.health{display:flex;gap:18px;flex-wrap:wrap;background:var(--card);border:1px solid var(--rule);
+  padding:10px 12px;border-radius:2px;margin-bottom:16px}
+.health div span{display:block}
+.health .k{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.health .v{font-family:"IBM Plex Mono",monospace;font-size:14px;font-weight:600}
+
+.row{background:var(--card);border:1px solid var(--rule);border-radius:2px;margin-bottom:6px;overflow:hidden}
+.rowhead{display:flex;align-items:center;gap:11px;padding:11px 12px;cursor:pointer;width:100%;
+  background:none;border:0;text-align:left;font-family:inherit}
+.rowhead:hover{background:#F6F6F3}
+.rk{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:17px;
+  letter-spacing:-.03em;min-width:26px;color:var(--ink)}
+.nm{flex:1;min-width:0}
+.nm b{display:block;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nm span{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;margin-top:1px}
+.mini{display:flex;gap:9px;font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--muted)}
+.mini b{display:block;font-size:12px;color:var(--ink);font-weight:600}
+.chev{color:var(--muted);font-size:11px;transition:transform .2s}
+.row.open .chev{transform:rotate(90deg)}
+
+.detail{display:none;padding:0 12px 14px;border-top:1px solid var(--rule2)}
+.row.open .detail{display:block}
+
+/* deduction ledger — the signature element */
+.ledger{margin:13px 0 4px}
+.ledger-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.ledger-h .mt{font-size:12.5px;font-weight:600}
+.ledger-h .sc{font-family:"IBM Plex Mono",monospace;font-size:12px}
+.bar{display:flex;height:9px;border-radius:1px;overflow:hidden;background:var(--rule2)}
+.bar i{display:block;height:100%}
+.bar i.kept{background:var(--kept)}
+.bar i.lost{background:var(--lost);opacity:.85;border-left:1px solid var(--card)}
+.ded{display:flex;gap:8px;font-size:11.5px;line-height:1.45;color:var(--ink2);margin-top:6px}
+.ded .pts{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--lost);
+  font-weight:600;min-width:26px}
+.ded .who{font-family:"IBM Plex Mono",monospace;font-size:9.5px;color:var(--muted);
+  white-space:nowrap;align-self:flex-start;padding-top:1px}
+
+.picks{margin-top:15px;padding-top:12px;border-top:1px dashed var(--rule)}
+.pick{display:flex;gap:8px;font-size:11.5px;line-height:1.45;color:var(--ink2);margin-top:6px}
+.pick .p{font-family:"IBM Plex Mono",monospace;font-size:9.5px;color:var(--pick);
+  border:1px solid rgba(42,90,133,.3);padding:1px 5px;border-radius:2px;
+  white-space:nowrap;align-self:flex-start}
+
+/* ---------- VERDICT CARD ---------- */
+.vcard{background:var(--card);border:1px solid var(--ink);border-radius:2px;max-width:400px;
+  margin:0 auto;position:relative;overflow:hidden}
+.vtop{background:var(--ink);color:var(--paper);padding:13px 16px 12px}
+.vtop .lbl{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.17em;
+  text-transform:uppercase;opacity:.62}
+.vtop h2{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:20px;
+  letter-spacing:-.025em;margin-top:5px}
+.vrank{display:flex;align-items:baseline;gap:10px;padding:17px 16px 13px;border-bottom:1px solid var(--rule2)}
+.vrank .big{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:52px;
+  line-height:.82;letter-spacing:-.045em}
+.vrank .of{font-size:12px;color:var(--muted);line-height:1.4}
+.vrank .of b{display:block;color:var(--ink);font-size:12.5px;font-weight:600}
+.vbody{padding:13px 16px 15px}
+.vline{display:flex;justify-content:space-between;gap:12px;font-size:12.5px;padding:5px 0;
+  border-bottom:1px solid var(--rule2)}
+.vline:last-of-type{border-bottom:0}
+.vline span:first-child{color:var(--muted)}
+.vline span:last-child{font-family:"IBM Plex Mono",monospace;font-weight:600}
+.vquote{font-size:12.5px;line-height:1.5;color:var(--ink2);font-style:italic;
+  border-left:2px solid var(--lost);padding-left:10px;margin:13px 0 4px}
+.vquote cite{display:block;font-style:normal;font-family:"IBM Plex Mono",monospace;
+  font-size:9.5px;color:var(--muted);margin-top:4px}
+.vfoot{background:#F4F4F1;border-top:1px solid var(--rule2);padding:9px 16px;
+  font-family:"IBM Plex Mono",monospace;font-size:9px;color:var(--muted);
+  display:flex;justify-content:space-between;gap:9px;flex-wrap:wrap}
+
+/* ---------- FIT REPORT ---------- */
+.fitgrid{display:grid;grid-template-columns:1fr;gap:11px}
+@media(min-width:640px){.fitgrid{grid-template-columns:1fr 1fr}}
+.fitcol{background:var(--card);border:1px solid var(--rule);border-radius:2px;padding:12px}
+.fitcol h3{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.seg{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--rule2);font-size:12.5px}
+.seg:last-child{border-bottom:0}
+.seg .bd{flex:1;min-width:0}
+.seg .bd b{display:block;font-weight:600}
+.seg .bd span{display:block;font-size:11px;color:var(--muted);margin-top:1px}
+.mark{font-family:"IBM Plex Mono",monospace;font-size:9.5px;padding:2px 6px;border-radius:2px;white-space:nowrap}
+.mark.hit{color:var(--kept);border:1px solid rgba(46,92,79,.32)}
+.mark.miss{color:var(--lost);border:1px solid rgba(163,58,44,.32)}
+.mark.new{color:var(--pick);border:1px solid rgba(42,90,133,.32)}
+.verdictline{background:var(--ink);color:var(--paper);padding:13px 15px;border-radius:2px;
+  margin-top:14px;font-size:13px;line-height:1.5}
+.verdictline b{font-weight:600}
+
+.foot{margin-top:26px;padding-top:15px;border-top:1px solid var(--rule);
+  font-size:12px;line-height:1.55;color:var(--muted)}
+.foot b{color:var(--ink);font-weight:600}
+.foot p{margin-bottom:7px}
+.foot p:last-child{margin-bottom:0}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<span class="eyebrow">Platform surfaces · mockup</span>
+<h1>Three surfaces, one dataset.</h1>
+<p class="lede">The board earns trust and traffic. The verdict is what people pay for. The fit report is what brings them back — and none of it lets anyone buy a rank.</p>
+
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true" data-p="board">Public board</button>
+  <button class="tab" role="tab" aria-selected="false" data-p="verdict">Verdict</button>
+  <button class="tab" role="tab" aria-selected="false" data-p="fit">Fit report</button>
+</div>
+
+<!-- ================= BOARD ================= -->
+<section class="pane on" id="board">
+  <p class="note">Free, cached at the edge, never touches a model at read time. Every row opens into its deduction ledger — the reason the board is worth reading rather than just scanning.</p>
+
+  <div class="catbar">
+    <button class="cat on">Developer Tools</button>
+    <button class="cat">Design</button>
+    <button class="cat">Compliance</button>
+    <button class="cat">Sales &amp; CRM</button>
+    <button class="cat">Health &amp; Fitness</button>
+  </div>
+
+  <div class="health">
+    <div><span class="k">Products</span><span class="v">44</span></div>
+    <div><span class="k">Discrimination</span><span class="v">0.81</span></div>
+    <div><span class="k">Jury spread</span><span class="v">14.2</span></div>
+    <div><span class="k">Jury version</span><span class="v">v3</span></div>
+  </div>
+
+  <div class="row open">
+    <button class="rowhead">
+      <span class="rk">01</span>
+      <span class="nm"><b>Padstack</b><span>Ephemeral preview environments per pull request</span></span>
+      <span class="mini"><span>merit<b>1.42</b></span><span>demand<b>0.91</b></span></span>
+      <span class="chev">▸</span>
+    </button>
+    <div class="detail">
+      <div class="ledger">
+        <div class="ledger-h"><span class="mt">Differentiation</span><span class="sc">88 / 100</span></div>
+        <div class="bar"><i class="kept" style="width:88%"></i><i class="lost" style="width:12%"></i></div>
+        <div class="ded"><span class="pts">−12</span><span>Three direct competitors ship the same core loop</span><span class="who">The Skeptic</span></div>
+      </div>
+      <div class="ledger">
+        <div class="ledger-h"><span class="mt">Buyer clarity</span><span class="sc">71 / 100</span></div>
+        <div class="bar"><i class="kept" style="width:71%"></i><i class="lost" style="width:17%"></i><i class="lost" style="width:12%"></i></div>
+        <div class="ded"><span class="pts">−17</span><span>Never states who signs the invoice</span><span class="who">The Buyer</span></div>
+        <div class="ded"><span class="pts">−12</span><span>Pricing page implies self-serve, copy implies enterprise</span><span class="who">The Buyer</span></div>
+      </div>
+      <div class="picks">
+        <div class="sect" style="margin-bottom:2px">Customer panel · cluster “PR preview envs” (4 apps)</div>
+        <div class="pick"><span class="p">1st · 88</span><span>Only one that doesn't need me to touch CI config.</span></div>
+        <div class="pick"><span class="p">1st · 74</span><span>Cheapest path to getting designers reviewing branches.</span></div>
+        <div class="pick"><span class="p">2nd · 51</span><span>Would pick it if the audit log were there.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <button class="rowhead">
+      <span class="rk">02</span>
+      <span class="nm"><b>Groveline</b><span>Trace every config change back to the deploy that caused it</span></span>
+      <span class="mini"><span>merit<b>1.36</b></span><span>demand<b>0.62</b></span></span>
+      <span class="chev">▸</span>
+    </button>
+    <div class="detail">
+      <div class="ledger">
+        <div class="ledger-h"><span class="mt">Differentiation</span><span class="sc">94 / 100</span></div>
+        <div class="bar"><i class="kept" style="width:94%"></i><i class="lost" style="width:6%"></i></div>
+        <div class="ded"><span class="pts">−6</span><span>Adjacent to existing observability suites</span><span class="who">The Practitioner</span></div>
+      </div>
+      <div class="picks">
+        <div class="sect" style="margin-bottom:2px">Customer panel · solo cluster</div>
+        <div class="pick"><span class="p">no set</span><span>Nothing comparable in category — ranked on merit alone.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <button class="rowhead">
+      <span class="rk">03</span>
+      <span class="nm"><b>Mistdeck</b><span>Turn incident timelines into postmortems automatically</span></span>
+      <span class="mini"><span>merit<b>1.11</b></span><span>demand<b>0.84</b></span></span>
+      <span class="chev">▸</span>
+    </button>
+    <div class="detail">
+      <div class="ledger">
+        <div class="ledger-h"><span class="mt">Craft</span><span class="sc">63 / 100</span></div>
+        <div class="bar"><i class="kept" style="width:63%"></i><i class="lost" style="width:22%"></i><i class="lost" style="width:15%"></i></div>
+        <div class="ded"><span class="pts">−22</span><span>Landing copy is generic AI-product boilerplate</span><span class="who">The Craftsperson</span></div>
+        <div class="ded"><span class="pts">−15</span><span>Demo video shows the happy path only</span><span class="who">The Craftsperson</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= VERDICT ================= -->
+<section class="pane" id="verdict">
+  <p class="note">The paid deliverable, and the object people actually share. Timestamped and product-count-stamped so it stays true after the board moves — a rank that can be contradicted later is worse than no rank.</p>
+
+  <div class="vcard">
+    <div class="vtop">
+      <span class="lbl">Verdict · Developer Tools</span>
+      <h2>Runlet</h2>
+    </div>
+    <div class="vrank">
+      <span class="big">07</span>
+      <span class="of"><b>of 44 products</b>Judged by the standing six</span>
+    </div>
+    <div class="vbody">
+      <div class="vline"><span>Merit composite</span><span>0.74</span></div>
+      <div class="vline"><span>Customer demand</span><span>0.41</span></div>
+      <div class="vline"><span>Panel picked you</span><span>2 of 6</span></div>
+      <div class="vline"><span>Points lost, total</span><span>−97</span></div>
+      <div class="vquote">
+        Solves a real problem, but I could not tell from the page whether it replaces my scheduler or sits beside it.
+        <cite>The Practitioner · −19 on buyer clarity</cite>
+      </div>
+    </div>
+    <div class="vfoot">
+      <span>27 Aug 2026, 14:03 UTC</span>
+      <span>jury v3 · panel v2</span>
+    </div>
+  </div>
+
+  <div class="verdictline" style="max-width:400px;margin:14px auto 0">
+    <b>What they get with it:</b> every deduction with its reason and juror, the similar-app set they were judged inside, and which personas picked them over the alternatives.
+  </div>
+</section>
+
+<!-- ================= FIT ================= -->
+<section class="pane" id="fit">
+  <p class="note">Off-board, never affects rank. The founder declares who they're building for <em>before</em> the reveal; the product is the gap between that and who actually picked them.</p>
+
+  <div class="fitgrid">
+    <div class="fitcol">
+      <h3>You said you're for</h3>
+      <div class="seg"><span class="bd"><b>Platform engineer</b><span>Chose at submission</span></span><span class="mark miss">not picked</span></div>
+      <div class="seg"><span class="bd"><b>Compliance buyer</b><span>Chose at submission</span></span><span class="mark miss">not picked</span></div>
+      <div class="seg"><span class="bd"><b>Engineering manager</b><span>Chose at submission</span></span><span class="mark hit">picked · 66</span></div>
+    </div>
+    <div class="fitcol">
+      <h3>Who actually picked you</h3>
+      <div class="seg"><span class="bd"><b>Solo developer</b><span>1st pick, strength 91</span></span><span class="mark new">unclaimed</span></div>
+      <div class="seg"><span class="bd"><b>Agency lead</b><span>1st pick, strength 78</span></span><span class="mark new">unclaimed</span></div>
+      <div class="seg"><span class="bd"><b>Engineering manager</b><span>2nd pick, strength 66</span></span><span class="mark hit">as expected</span></div>
+    </div>
+  </div>
+
+  <div class="verdictline">
+    <b>One of three segments you aimed at picked you.</b> The two strongest picks came from buyers you didn't name — solo developers and agency leads, both citing setup time rather than the compliance story your page leads with.
+  </div>
+
+  <p class="note" style="margin-top:16px">No rank appears anywhere on this report. The moment it shows a number that looks like a leaderboard position, people screenshot it as one.</p>
+</section>
+
+<div class="foot">
+  <p><b>What holds it together:</b> one canonical jury per category decides the board, so every product on it faced the same six. Custom panels only ever produce off-board reports.</p>
+  <p><b>Where humans enter:</b> visitors make the same forced choice the synthetic personas make, inside the same similar-app sets. That gives you real demand next to modelled demand — and it's the one dataset a competitor can't clone.</p>
+</div>
+
+<script>
+const tabs=[...document.querySelectorAll(".tab")];
+tabs.forEach(t=>t.onclick=()=>{
+  tabs.forEach(x=>x.setAttribute("aria-selected",String(x===t)));
+  document.querySelectorAll(".pane").forEach(p=>p.classList.toggle("on",p.id===t.dataset.p));
+});
+document.querySelectorAll(".rowhead").forEach(h=>
+  h.onclick=()=>h.parentElement.classList.toggle("open"));
+</script>
+</body>
+</html>

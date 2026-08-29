@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Pit — you can't outbid it</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ground:#120E0C; --ground2:#191411; --panel:#211A16; --rule:#33291F; --rule2:#241D18;
+  --bone:#EDE6DE; --muted:#93857A; --blade:#E2482C; --coin:#D9A441; --roar:#5B9EA6;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ground);color:var(--bone);font-family:"Barlow",sans-serif;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden}
+.wrap{max-width:920px;margin:0 auto;padding:0 14px}
+
+nav{display:flex;justify-content:space-between;align-items:center;padding:13px 0;
+  border-bottom:1px solid var(--rule)}
+.mark{font-family:"Archivo Black",sans-serif;font-size:14px;letter-spacing:-.02em}
+.mark i{color:var(--blade);font-style:normal}
+.navr{display:flex;gap:14px;align-items:center}
+.navlink{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--muted);
+  text-decoration:none;letter-spacing:.06em}
+
+/* ---------- compact hero ---------- */
+.hero{padding:30px 0 22px}
+h1{font-family:"Archivo Black",sans-serif;font-size:clamp(31px,8.6vw,58px);line-height:.9;
+  letter-spacing:-.035em;text-transform:uppercase}
+h1 em{font-style:normal;color:var(--blade)}
+.sub{font-size:clamp(14px,3.4vw,18px);line-height:1.3;margin-top:13px;max-width:26ch;font-weight:500;color:#C9BCB1}
+.sub b{color:var(--bone);font-weight:600}
+.herorow{display:flex;flex-wrap:wrap;gap:13px;align-items:center;margin-top:18px}
+.cta{display:inline-flex;align-items:center;gap:8px;
+  font-family:"Archivo Black",sans-serif;font-size:13px;text-transform:uppercase;
+  background:var(--blade);color:#150C0A;border:0;padding:12px 19px;border-radius:1px;cursor:pointer;
+  transition:transform .12s,background .15s}
+.cta:hover{background:#F05639;transform:translateY(-1px)}
+.cta:focus-visible{outline:2px solid var(--bone);outline-offset:3px}
+.cta small{font-family:"IBM Plex Mono",monospace;font-size:10px;opacity:.6;text-transform:none}
+.terms{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--muted);line-height:1.5}
+
+/* ---------- rolling category rail ---------- */
+.rail{margin-top:26px;border-top:1px solid var(--rule);padding-top:14px}
+.railhead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:10px}
+.sh{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted)}
+.cats{display:flex;gap:5px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px}
+.cat{font-family:"IBM Plex Mono",monospace;font-size:10px;white-space:nowrap;cursor:pointer;
+  background:transparent;border:1px solid var(--rule);color:var(--muted);padding:5px 9px;border-radius:1px;
+  transition:color .15s,border-color .15s,background .15s}
+.cat:hover{color:var(--bone);border-color:var(--muted)}
+.cat.on{background:var(--blade);border-color:var(--blade);color:#150C0A;font-weight:600}
+.prog{height:2px;background:var(--rule2);overflow:hidden}
+.prog i{display:block;height:100%;background:var(--blade);width:0}
+.prog i.run{animation:fill 7s linear}
+@keyframes fill{from{width:0}to{width:100%}}
+
+/* ---------- the board: a pit ---------- */
+.board{margin-top:2px}
+.bhead{display:flex;align-items:center;gap:10px;padding:9px 11px;
+  font-family:"IBM Plex Mono",monospace;font-size:8.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--rule)}
+.bhead .c-rk{min-width:24px}
+.bhead .c-nm{flex:1}
+.bhead .c-x{min-width:44px;text-align:right}
+.c-hide{display:none}
+@media(min-width:620px){.c-hide{display:block}}
+
+.brow{display:flex;align-items:center;gap:10px;padding:11px;
+  border-bottom:1px solid var(--rule2);position:relative;
+  animation:rise .42s cubic-bezier(.2,.8,.3,1) backwards}
+@keyframes rise{from{opacity:0;transform:translateY(11px)}}
+.brow::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(to bottom,transparent,rgba(0,0,0,.5));opacity:var(--depth,0)}
+.brow:hover{background:var(--ground2)}
+.rk{font-family:"Archivo Black",sans-serif;font-size:16px;letter-spacing:-.04em;
+  min-width:24px;color:var(--bone);position:relative;z-index:1}
+.brow:nth-child(1) .rk{color:var(--blade);font-size:19px}
+.nm{flex:1;min-width:0;position:relative;z-index:1}
+.nm b{display:block;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nm span{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;margin-top:1px}
+.cell{font-family:"IBM Plex Mono",monospace;font-size:11.5px;min-width:44px;text-align:right;
+  position:relative;z-index:1}
+.cell.cuts{color:var(--blade);font-weight:600}
+.cell.floor{color:var(--coin)}
+.cell.mob{color:var(--roar)}
+.flag{position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--roar)}
+.new-in{background:rgba(226,72,44,.09)}
+.tagnew{font-family:"IBM Plex Mono",monospace;font-size:8px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--blade);border:1px solid rgba(226,72,44,.4);
+  padding:1px 4px;border-radius:1px;margin-left:6px;vertical-align:1px}
+
+.bfoot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:11px 11px 0;
+  font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--muted)}
+.bfoot a{color:var(--blade);text-decoration:none}
+
+/* ---------- ticker ---------- */
+.tickwrap{margin-top:26px;border-top:1px solid var(--rule);padding-top:14px}
+.tick{background:var(--ground2);border-left:2px solid var(--blade);padding:10px 12px;
+  font-family:"IBM Plex Mono",monospace;font-size:11px;height:96px;overflow:hidden}
+.tick div{padding:3px 0;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  animation:slip .3s ease-out}
+@keyframes slip{from{opacity:0;transform:translateX(-6px)}}
+.tick b{color:var(--bone);font-weight:600}
+.tick .d{color:var(--blade)}
+
+/* ---------- three panels ---------- */
+section{padding:32px 0;border-top:1px solid var(--rule)}
+.three{display:grid;grid-template-columns:1fr;gap:11px}
+@media(min-width:700px){.three{grid-template-columns:repeat(3,1fr)}}
+.card{background:var(--ground2);border:1px solid var(--rule);padding:15px}
+.card.six{border-top:3px solid var(--blade)}
+.card.floor{border-top:3px solid var(--coin)}
+.card.mob{border-top:3px solid var(--roar)}
+.card h3{font-family:"Archivo Black",sans-serif;font-size:20px;text-transform:uppercase;
+  letter-spacing:-.025em;margin-bottom:3px}
+.card.six h3{color:var(--blade)}
+.card.floor h3{color:var(--coin)}
+.card.mob h3{color:var(--roar)}
+.card .role{font-family:"IBM Plex Mono",monospace;font-size:9.5px;color:var(--muted);
+  letter-spacing:.09em;text-transform:uppercase;margin-bottom:10px}
+.card p{font-size:13px;line-height:1.48;color:#C9BCB1}
+
+.closer{padding:40px 0 24px;border-top:1px solid var(--rule);text-align:center}
+.closer h2{font-family:"Archivo Black",sans-serif;font-size:clamp(22px,5.8vw,38px);
+  line-height:.98;letter-spacing:-.03em;text-transform:uppercase}
+.closer h2 em{font-style:normal;color:var(--blade)}
+.closer p{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);margin-top:11px}
+footer{padding:15px 0 32px;border-top:1px solid var(--rule);
+  font-family:"IBM Plex Mono",monospace;font-size:9.5px;color:var(--muted);
+  display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav>
+  <span class="mark">THE <i>PIT</i></span>
+  <span class="navr">
+    <a class="navlink" href="#">boards</a>
+    <a class="navlink" href="#">the mob</a>
+  </span>
+</nav>
+
+<div class="hero">
+  <h1>You can't<br>outbid <em>the pit.</em></h1>
+  <p class="sub">Everyone walks in at <b>100</b>. Nobody walks out with it.</p>
+  <div class="herorow">
+    <button class="cta">Throw it in <small>· $5</small></button>
+    <span class="terms">$5 to enter.<br>That's all money does here.</span>
+  </div>
+</div>
+
+<div class="rail">
+  <div class="railhead">
+    <span class="sh">The boards</span>
+    <span class="sh" id="meta">44 products · six v3</span>
+  </div>
+  <div class="cats" id="cats"></div>
+  <div class="prog"><i id="prog"></i></div>
+</div>
+
+<div class="board">
+  <div class="bhead">
+    <span class="c-rk">#</span>
+    <span class="c-nm">Product</span>
+    <span class="c-x">Cuts</span>
+    <span class="c-x c-hide">Floor</span>
+    <span class="c-x c-hide">Mob</span>
+  </div>
+  <div id="rows"></div>
+  <div class="bfoot">
+    <span id="foot">the mob disagrees on 3 of 8</span>
+    <a href="#">full board ↗</a>
+  </div>
+</div>
+
+<div class="tickwrap">
+  <div class="railhead"><span class="sh">Landing now</span></div>
+  <div class="tick" id="ticker"></div>
+</div>
+
+<section>
+  <div class="three">
+    <div class="card six">
+      <h3>The Six</h3>
+      <div class="role">Critics · merit</div>
+      <p>They start you at a hundred and take it apart. Every point comes off with a reason short enough to sting.</p>
+    </div>
+    <div class="card floor">
+      <h3>The Floor</h3>
+      <div class="role">Simulated buyers · demand</div>
+      <p>Six customers shown you beside your closest substitutes and made to pick one. No abstaining, no ties.</p>
+    </div>
+    <div class="card mob">
+      <h3>The Mob</h3>
+      <div class="role">Real people · free</div>
+      <p>Everyone walking past, given the same choice the floor gets. Where they disagree is the whole point.</p>
+    </div>
+  </div>
+</section>
+
+<div class="closer">
+  <h2>Your money's no good <em>down here.</em></h2>
+  <p>same five for everyone · no boosts · no featured slots · no exceptions</p>
+</div>
+
+<footer>
+  <span>THE PIT</span>
+  <span>six v3 · floor v2 · boards rebuilt nightly</span>
+</footer>
+
+</div>
+
+<script>
+const BOARDS=[
+{c:"Developer Tools",n:44,r:[
+ {n:"Padstack",t:"Ephemeral preview environments per pull request",x:29,f:"4/6",m:"58%"},
+ {n:"Groveline",t:"Trace every config change to the deploy that caused it",x:32,f:"—",m:"—"},
+ {n:"Sundeck",t:"Local-first database branching for teams",x:38,f:"3/6",m:"61%",dis:1},
+ {n:"Beltway",t:"Turn flaky tests into ranked quarantine queues",x:44,f:"2/6",m:"19%"},
+ {n:"Quillbase",t:"Typed API clients generated from live traffic",x:51,f:"1/6",m:"44%",dis:1},
+ {n:"Vantabase",t:"Secrets rotation that doesn't need a redeploy",x:63,f:"0/6",m:"12%"},
+ {n:"Mistdeck",t:"Incident timelines into postmortems automatically",x:71,f:"1/6",m:"33%",dis:1},
+ {n:"Runlet",t:"Cron jobs with a real dependency graph",x:97,f:"0/6",m:"8%",nw:1}]},
+{c:"Design",n:31,r:[
+ {n:"Halftone",t:"Version control for design tokens across products",x:24,f:"5/6",m:"71%"},
+ {n:"Papercut",t:"Turn Figma frames into responsive email templates",x:35,f:"3/6",m:"40%"},
+ {n:"Loomstate",t:"Motion specs engineers can actually implement",x:41,f:"2/6",m:"55%",dis:1},
+ {n:"Chalkline",t:"Accessibility audits inside the design file",x:48,f:"3/6",m:"29%",dis:1},
+ {n:"Riverbed",t:"Component usage analytics across every repo",x:56,f:"1/6",m:"31%"},
+ {n:"Foxglove",t:"Brand asset library with expiry dates",x:62,f:"1/6",m:"22%"},
+ {n:"Tinderbox",t:"Moodboards that pull live from your product",x:69,f:"0/6",m:"15%"},
+ {n:"Sablefish",t:"AI mockups from a one-line brief",x:88,f:"0/6",m:"6%"}]},
+{c:"Compliance",n:19,r:[
+ {n:"Ledgerline",t:"Evidence collection that maps to three frameworks at once",x:31,f:"4/6",m:"49%"},
+ {n:"Ironwood",t:"Vendor questionnaires answered from your own policies",x:37,f:"3/6",m:"52%"},
+ {n:"Cairnstone",t:"Continuous access reviews without the spreadsheet",x:45,f:"2/6",m:"38%"},
+ {n:"Bellweather",t:"Policy drift alerts tied to real infrastructure",x:52,f:"2/6",m:"21%"},
+ {n:"Marlstone",t:"SOC 2 readiness scored weekly",x:61,f:"1/6",m:"27%",dis:1},
+ {n:"Thistledown",t:"Subprocessor changes tracked automatically",x:68,f:"1/6",m:"14%"},
+ {n:"Greyfriar",t:"Audit log retention as a service",x:74,f:"0/6",m:"11%"},
+ {n:"Pinfold",t:"Compliance chatbot for your handbook",x:91,f:"0/6",m:"4%"}]},
+{c:"Sales & CRM",n:27,r:[
+ {n:"Wharfside",t:"Pipeline hygiene enforced at the calendar level",x:27,f:"4/6",m:"63%"},
+ {n:"Coldharbour",t:"Call notes that write the follow-up before you hang up",x:34,f:"3/6",m:"47%"},
+ {n:"Ninebark",t:"Territory planning from actual won-deal geography",x:43,f:"2/6",m:"18%",dis:1},
+ {n:"Saltmarsh",t:"Renewal risk scored from support tickets",x:49,f:"2/6",m:"44%"},
+ {n:"Kelpforest",t:"Deal rooms buyers actually open",x:57,f:"1/6",m:"36%"},
+ {n:"Bracken",t:"Commission statements that reconcile themselves",x:64,f:"1/6",m:"25%"},
+ {n:"Hollowpost",t:"Intent data from your own docs traffic",x:72,f:"0/6",m:"17%"},
+ {n:"Driftwood",t:"AI SDR that books meetings while you sleep",x:94,f:"0/6",m:"3%"}]}];
+
+const TICK=[
+ ["Groveline","Dev Tools",32,2],["Halftone","Design",24,1],["Mistdeck","Dev Tools",71,14],
+ ["Ledgerline","Compliance",31,1],["Wharfside","Sales",27,1],["Papercut","Design",35,4],
+ ["Runlet","Dev Tools",97,23],["Ironwood","Compliance",37,3],["Sundeck","Design",38,3]];
+
+const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+const $=i=>document.getElementById(i);
+let cur=0,timer=null;
+
+function paintCats(){
+  $("cats").innerHTML=BOARDS.map((b,i)=>
+    `<button class="cat ${i===cur?"on":""}" data-i="${i}">${b.c}</button>`).join("");
+  $("cats").querySelectorAll(".cat").forEach(b=>
+    b.onclick=()=>{cur=+b.dataset.i;render();schedule();});
+}
+function render(){
+  const b=BOARDS[cur];
+  paintCats();
+  $("meta").textContent=`${b.n} products · six v3`;
+  $("rows").innerHTML=b.r.map((p,i)=>{
+    const depth=(i/(b.r.length-1))*0.55;
+    return `<div class="brow ${p.nw?"new-in":""}" style="--depth:${depth.toFixed(2)};animation-delay:${i*45}ms">
+      ${p.dis?'<span class="flag"></span>':""}
+      <span class="rk">${String(i+1).padStart(2,"0")}</span>
+      <span class="nm"><b>${p.n}${p.nw?'<span class="tagnew">just landed</span>':""}</b><span>${p.t}</span></span>
+      <span class="cell cuts">−${p.x}</span>
+      <span class="cell floor c-hide">${p.f}</span>
+      <span class="cell mob c-hide">${p.m}</span>
+    </div>`;}).join("");
+  const d=b.r.filter(p=>p.dis).length;
+  $("foot").textContent=`the mob disagrees on ${d} of ${b.r.length}`;
+  const p=$("prog");
+  p.classList.remove("run");void p.offsetWidth;
+  if(!reduce)p.classList.add("run");
+}
+function schedule(){
+  clearInterval(timer);
+  if(reduce)return;
+  timer=setInterval(()=>{cur=(cur+1)%BOARDS.length;render();},7000);
+}
+let ti=0;
+function tickIn(){
+  const t=TICK[ti++%TICK.length];
+  const d=document.createElement("div");
+  d.innerHTML=`<b>${t[0]}</b> · ${t[1]} · <span class="d">−${t[2]}</span> · placed #${String(t[3]).padStart(2,"0")}`;
+  const box=$("ticker");
+  box.insertBefore(d,box.firstChild);
+  while(box.children.length>5)box.removeChild(box.lastChild);
+}
+for(let k=0;k<5;k++)tickIn();
+render();schedule();
+if(!reduce)setInterval(tickIn,3200);
+</script>
+</body>
+</html>

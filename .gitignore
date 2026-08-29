@@ -1,0 +1,9 @@
+node_modules/
+.next/
+dist/
+.env
+.env.*
+.DS_Store
+.superpowers/
+cjr/runs/*/results.json
+cjr/runs/*/report.md
