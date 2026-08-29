@@ -46,6 +46,9 @@ function table(headers: readonly string[], rows: readonly (readonly string[])[])
   ].join('\n');
 }
 
+/** Column width for the status mark: the longest label plus a separating space. */
+const GATE_MARK_WIDTH = 12;
+
 const GATE_MARK: Record<GateCheck['status'], string> = {
   pass: 'PASS',
   flag: 'FLAG',
@@ -203,8 +206,10 @@ function sectionDisagreement(model: ReportModel): string {
           `> **Read that mean with care.** ${model.correlation.flat_roles.length} juror(s) — ` +
             `${model.correlation.flat_roles.join(', ')} — gave every product the SAME composite. A ` +
             'constant vector correlates 0 with everything, which is exactly the value a perfectly ' +
-            'independent juror would score, so a juror that said nothing pulls this mean DOWN and makes ' +
-            'the panel look healthier than it is. Over the jurors that actually voted the mean is ' +
+            'independent juror would score, so a juror that said nothing pulls this mean DOWN. That is not ' +
+            'merely flattering: **it HIDES real dependence between the jurors that did vote**, because ' +
+            'every pair involving the silent one dilutes the pairs that carry the actual agreement. Over ' +
+            'the jurors that actually voted the mean is ' +
             `**${num(model.correlation.mean_pair_correlation_excluding_flat)}**. That is the number to read.`,
           '',
         ]),
@@ -761,20 +766,45 @@ export function formatReportSummary(model: ReportModel, path: string): string {
   ];
 
   for (const gate of model.gates) {
-    lines.push(`  ${GATE_MARK[gate.status].padEnd(8)}${gate.name.padEnd(42)}${gate.value}`);
+    // Wide enough for the longest mark ('NO EVIDENCE', 11) plus a space. A pad
+    // shorter than the widest label does not truncate, it runs the two columns
+    // together — and it would do so on exactly the row that must be readable.
+    lines.push(`  ${GATE_MARK[gate.status].padEnd(GATE_MARK_WIDTH)}${gate.name.padEnd(42)}${gate.value}`);
   }
 
-  const flagged = model.gates.filter((gate) => gate.status === 'flag' || gate.status === 'missing');
-  lines.push('', flagged.length === 0 ? '  No gate is flagged.' : `  ${flagged.length} gate(s) need a decision:`);
-  for (const gate of flagged) lines.push(`    ! ${gate.name}: ${gate.note}`);
+  // Every status that is not a pass and not a deliberate READ. `inconclusive`
+  // belongs here for the same reason it exists at all: a gate with no usable
+  // evidence behind it is a decision someone has to make, and omitting it would
+  // print "No gate is flagged." for a run whose fix-1.1 A/B settled nothing —
+  // moving the exact failure the `inconclusive` status was added to eliminate out
+  // of the gate table and into the console summary. It is also the only place the
+  // note ("Nothing can be concluded…") reaches a reader who never opens the file.
+  const needsDecision = model.gates.filter(
+    (gate) => gate.status === 'flag' || gate.status === 'missing' || gate.status === 'inconclusive',
+  );
+  lines.push(
+    '',
+    needsDecision.length === 0 ? '  No gate needs a decision.' : `  ${needsDecision.length} gate(s) need a decision:`,
+  );
+  for (const gate of needsDecision) lines.push(`    ! ${gate.name}: ${gate.note}`);
 
   lines.push(
     '',
     `  Measured spend: ${money(model.cost.total.cost_usd)} (${model.cost.basis}) over ${model.cost.total.calls} call(s).`,
-    `  Estimated schedule: ${money2(model.schedule.monthly_score_only_usd)}/mo score-only over ` +
+    // The last line printed and the single most quotable figure in the whole
+    // output, so it carries its own hedges rather than relying on the reader
+    // having seen §6. A range, not one number, because which phases a pass runs
+    // is open (DECISIONS.md S7); and the inputs it was rendered from, because a
+    // projection carries real-looking dollars whatever produced them.
+    `  Estimated schedule: ${money2(model.schedule.monthly_score_only_usd)}-` +
+      `${money2(model.schedule.monthly_full_pipeline_usd)}/mo across 3 readings (S7 open), over ` +
       `${model.schedule.categories} categories, against a $${model.schedule.budget.min_usd}-` +
       `${model.schedule.budget.max_usd} budget stated over ${model.schedule.budget.stated_categories}. ` +
       `Prices checked ${model.price_table_date}.`,
+    `    ESTIMATED, not measured, and rendered from ${model.schedule.inputs.products} products at a ` +
+      `${model.schedule.inputs.median_description_chars}-char median description ` +
+      `(real seeded corpus: ${model.schedule.inputs.seeded_corpus_median_chars}, DECISIONS.md S5) — ` +
+      'the composition is verified, the magnitude is not. Do not quote it as measured.',
     '',
     `  Written to ${path}`,
   );

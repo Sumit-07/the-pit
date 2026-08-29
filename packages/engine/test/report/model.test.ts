@@ -580,4 +580,106 @@ describe('formatReportSummary', () => {
     expect(summary).toContain('(unmeasured)');
     expect(summary).toContain(`Prices checked ${model.price_table_date}`);
   });
+
+  it('counts an INCONCLUSIVE gate as needing a decision, even when it is the only one', async () => {
+    // The regression this pins. In a category where the fix-1.1 A/B is the ONLY
+    // problem and every other gate passes, a filter that knows about `flag` and
+    // `missing` but not `inconclusive` prints "No gate needs a decision." while
+    // `reportCommand` exits 1 — moving the exact failure the `inconclusive`
+    // status was added to eliminate out of the gate table and into the console.
+    //
+    // The gates are replaced wholesale rather than coaxed out of a fixture,
+    // because the fixture panel always flags juror independence — which is why
+    // the real bug passed CI. `formatReportSummary` is a pure function of the
+    // model, so overriding the field is the whole isolation this needs.
+    const model = await report();
+    const onlyInconclusive: ReportModel = {
+      ...model,
+      gates: [
+        { name: 'discrimination', status: 'pass', value: '0.9', note: 'fine' },
+        { name: 'juror independence', status: 'pass', value: 'r = 0.2', note: 'fine' },
+        {
+          name: 'fix 1.1 evidence (A/B vs test-retest)',
+          status: 'inconclusive',
+          value: 'A/B 0.000 pts vs retest 0.000 pts over 5 product(s)',
+          note: 'Nothing can be concluded about fix 1.1 from a run with no sampling variance.',
+        },
+        { name: 'source-ranking correlation (leak test)', status: 'info', value: '0.11', note: 'read it' },
+      ],
+    };
+
+    const summary = formatReportSummary(onlyInconclusive, 'out.md');
+    expect(summary).not.toContain('No gate needs a decision');
+    expect(summary).toContain('1 gate(s) need a decision:');
+    // And the REASON has to travel, not just the row value — it is the only
+    // place a reader who never opens report.md learns why the gate is open.
+    expect(summary).toContain('Nothing can be concluded about fix 1.1');
+    // The mark column must be wide enough for the longest label, or it runs into
+    // the gate name on exactly the row that most needs to be readable.
+    expect(summary).toContain('NO EVIDENCE fix 1.1 evidence');
+  });
+
+  it('says nothing needs a decision only when nothing does — INFO does not count', async () => {
+    const model = await report();
+    const allClear: ReportModel = {
+      ...model,
+      gates: [
+        { name: 'discrimination', status: 'pass', value: '0.9', note: 'fine' },
+        // `info` is a number that must be READ, never a decision to make: the
+        // leak correlation cannot support a pass/fail, so counting it would make
+        // every clean report look like it had an open question.
+        { name: 'source-ranking correlation (leak test)', status: 'info', value: '0.11', note: 'read it' },
+      ],
+    };
+    expect(formatReportSummary(allClear, 'out.md')).toContain('No gate needs a decision.');
+  });
+
+  it('hedges the trailing schedule line — the most quotable figure in the output', async () => {
+    // This is the LAST line printed and the one that gets quoted onward out of
+    // context. It must carry the range (three readings exist, S7 is open) and the
+    // fixture-projection marker on its own, without relying on the reader having
+    // seen §6.
+    const model = await report();
+    const summary = formatReportSummary(model, 'out.md');
+    const line = summary.slice(summary.indexOf('Estimated schedule:'));
+
+    expect(line).toContain('across 3 readings (S7 open)');
+    expect(line).toContain(`-$${model.schedule.monthly_full_pipeline_usd.toFixed(2)}/mo`);
+    expect(line).toContain('ESTIMATED, not measured');
+    expect(line).toContain('DECISIONS.md S5');
+    expect(line).toContain('the composition is verified, the magnitude is not');
+    expect(line).toContain('Do not quote it as measured');
+  });
+
+  it('says a flat juror HIDES panel dependence, not merely that it flatters', async () => {
+    // The exclusion metric matters because the raw mean reads as a healthily
+    // independent panel while the jurors that voted are perfectly correlated.
+    const clean = await seed();
+    const flattened = clean.results.scoreLog.map((entry) =>
+      entry.juror_role !== 'Juror 6'
+        ? entry
+        : {
+            ...entry,
+            scores: entry.scores.map((row) => ({
+              ...row,
+              metrics: row.metrics.map((metric) => ({
+                name: metric.name,
+                score: 50,
+                deductions: [{ points: 50, reason: 'flat' }],
+              })),
+            })),
+          },
+    );
+
+    const markdown = renderReport(
+      buildReport({
+        ranking: clean.ranking,
+        results: { ...clean.results, scoreLog: flattened },
+        products: clean.products,
+        jury: JURY,
+        personas: PANEL.personas,
+      }),
+    );
+    expect(markdown).toContain('HIDES real dependence between the jurors that did vote');
+  });
 });
