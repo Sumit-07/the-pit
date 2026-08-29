@@ -11,8 +11,10 @@
  * board with a rubric that never produced its scores (`01 §9` rule 5,
  * `brief §1.3`).
  *
- * That function is not exported, and the pipeline needs the same decision in two
- * places the engine has no reason to serve:
+ * `resumePhase` itself is not exported — it reads and writes through the engine's
+ * own store as part of running a category — but the PREDICATE it decides on is,
+ * as `versionsMoved`. The pipeline needs that decision in two places the engine
+ * has no reason to serve:
  *
  * 1. **Before a phase step spends anything.** The pipeline runs one phase per
  *    Inngest step, so it has to ask "is this phase already bought?" at each step
@@ -24,20 +26,36 @@
  *    customer notices when the clock keeps running.
  *
  * So this module answers the same question against the same files, in the same
- * format, using the engine's own `phaseVersions()` for the current stamp. There
- * is no second store, no second envelope and no second version list.
+ * format, with the engine's own `versionsMoved` for the version rule and the
+ * engine's own `phaseVersions()` for the current stamp. There is no second
+ * store, no second envelope, no second version list and no second copy of the
+ * rule — what this module adds is the five-armed classification the status page
+ * needs, which is presentation rather than policy. A restated predicate would
+ * drift, and the whole point of a version-stamped phase is that a stale one is
+ * never delivered as fresh.
  *
- * `test/pipeline-resume.test.ts` pins the two together: for the same stored
- * envelope it asserts that this module's verdict and `runCategory({resume:
- * true})`'s behaviour agree, so the pair cannot drift apart silently.
+ * `test/pipeline-resume.test.ts` still pins the two together end to end: for the
+ * same stored envelope it asserts that this module's verdict and
+ * `runCategory({resume: true})`'s behaviour agree.
  */
 
-import type { PersistedPhase, PhaseFailed, PhaseName, PhaseResult, PhaseVersions } from '@the-pit/engine';
+import {
+  versionsMoved,
+  type PersistedPhase,
+  type PhaseFailed,
+  type PhaseName,
+  type PhaseResult,
+  type PhaseVersions,
+} from '@the-pit/engine';
 
 import type { PipelineStore } from './store';
 
-/** The four version fields, in the order a warning names them. */
-const VERSION_KEYS = ['category_version', 'prompt_version', 'persona_version', 'engine_version'] as const;
+/**
+ * Which of the four versions differ, named for a human — the ENGINE's predicate,
+ * re-exported here so the status page and the phase steps read the rule from the
+ * same place `resumePhase` does rather than from a copy of it.
+ */
+export { versionsMoved };
 
 /**
  * What is on disk for one phase, classified.
@@ -106,18 +124,4 @@ export async function reusableStoredPhase<T>(
 ): Promise<PhaseResult<T> | undefined> {
   const stored = await readStoredPhase<T>(store, phase, versions);
   return stored.state === 'reusable' ? stored.result : undefined;
-}
-
-/**
- * Which of the four versions differ, named for a human.
- *
- * Deliberately checks a stale stamp field by field rather than comparing the two
- * objects: "the category snapshot moved" and "the engine was rebuilt" are
- * different explanations for the same re-spend, and a customer support answer
- * needs the right one.
- */
-export function versionsMoved(stored: PhaseVersions, current: PhaseVersions): string[] {
-  return VERSION_KEYS.filter((key) => stored[key] !== current[key]).map(
-    (key) => `${key} moved from ${JSON.stringify(stored[key])} to ${JSON.stringify(current[key])}`,
-  );
 }

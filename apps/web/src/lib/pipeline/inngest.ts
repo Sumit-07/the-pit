@@ -31,12 +31,14 @@
  * semantics being defined by a vendor's error class.
  */
 
-import { AnthropicClient } from '@the-pit/engine';
+import { AnthropicClient, phaseVersions, type Product } from '@the-pit/engine';
 import { Inngest, NonRetriableError } from 'inngest';
 
 import { PhaseFailedError } from './errors';
+import { runPlacement, type PlacementOutcome } from './placement';
 import { runPipeline, type PipelineResult } from './run';
 import { defaultBindings, type RunnerBindings } from './service';
+import { PlacementPhaseStore } from './store';
 import type { PipelineDeps, PipelineStep, StepRunner } from './types';
 
 /** `brief §2.3`'s cap on free retries per attempt, before the support queue. */
@@ -48,6 +50,13 @@ export const RUN_REQUESTED = 'pit/run.requested';
 /** The event a delivered run emits, for whatever consumes an attempt. */
 export const RUN_DELIVERED = 'pit/run.delivered';
 
+/**
+ * The event that enqueues ONE paid submission against an already-scored
+ * category — `brief §1.1`'s `--add-product` path, and the path every paying
+ * customer takes.
+ */
+export const PLACEMENT_REQUESTED = 'pit/placement.requested';
+
 /** What `pit/run.requested` carries. */
 export interface RunRequestedData {
   slug: string;
@@ -57,6 +66,29 @@ export interface RunRequestedData {
    * z-score in the category and `brief §1.3` keys the caches on this value.
    */
   categoryVersion?: string;
+}
+
+/**
+ * What `pit/placement.requested` carries.
+ *
+ * The product itself, unlike `RunRequestedData`'s slug-only payload. A run event
+ * names a category that is already seeded on both sides; a placement names a
+ * product that exists nowhere yet — it IS the submission — so there is nothing to
+ * look it up by until it has been placed. It stays small: one product, not a
+ * category.
+ *
+ * The text in it is UNTRUSTED (Global Constraint 2) and is screened by
+ * `DECISIONS.md` S9's input gate before the first step runs.
+ */
+export interface PlacementRequestedData {
+  slug: string;
+  /**
+   * The category snapshot version to place under. `brief §1.2` moves every
+   * z-score in the category on a placement and `brief §1.3` keys the caches on
+   * this value, so after the first placement it must be supplied.
+   */
+  categoryVersion?: string;
+  product: Product;
 }
 
 export const inngest = new Inngest({ id: 'the-pit' });
@@ -152,10 +184,110 @@ export async function executeRun(
 
   const deps: PipelineDeps = {
     client,
-    store: bindings.store(input.category),
+    // The store is addressed by the versions this run is judged under, not just
+    // by the category. A durable store keys its row on all four of them, so a run
+    // under a bumped `prompt_version` reads no phases and re-runs — the same
+    // verdict `resume.ts`'s version gate reaches from the stamps inside the
+    // envelopes. `phaseVersions` is the engine's own, and `runPipeline` computes
+    // the identical value to stamp what it writes.
+    store: bindings.store(input.category, phaseVersions(input)),
     snapshots: bindings.snapshots,
     ...(onDelivered === undefined ? {} : { onDelivered }),
   };
 
   return runPipeline(input, deps, runner);
+}
+
+/**
+ * The placement as an Inngest function.
+ *
+ * A separate function from `run-category` because it is a separate event with a
+ * separate payload, but the same `retries: 3` cap and the same per-slug
+ * concurrency: two placements against one category would race on the same
+ * `results.json` and `ranking.json`, and `brief §1.5` makes cluster membership
+ * append-only precisely because a second writer invalidates stored demand votes.
+ *
+ * Inngest's concurrency key is per FUNCTION, so this serializes placements
+ * against each other but not against a full re-run of the same category. That
+ * pairing is an admin operation on a category with paid placements in it, and it
+ * is `brief §1.5`'s "explicit admin operation that clears demand" — it should not
+ * be enqueued while a placement is in flight.
+ */
+export const placeProductFunction = inngest.createFunction(
+  {
+    id: 'place-product',
+    retries: MAX_FREE_RETRIES,
+    concurrency: { key: 'event.data.slug', limit: 1 },
+    triggers: [{ event: PLACEMENT_REQUESTED }],
+  },
+  async ({ event, step }) => {
+    const data = event.data as PlacementRequestedData;
+    return executePlacement(data, defaultBindings(), inngestStepRunner(step), async (payload) => {
+      await inngest.send({ name: RUN_DELIVERED, data: payload });
+    });
+  },
+);
+
+/**
+ * Load the category, its stored votes and its board, and place one product into
+ * them. Separated from `createFunction` for the same reason `executeRun` is: the
+ * whole body is reachable from a test with in-memory bindings.
+ *
+ * Three things are terminal on sight, because no amount of retrying changes any
+ * of them: a slug that is not seeded, a category that has never been RUN (a
+ * placement appends to stored votes and clusters; there is nothing to append to),
+ * and — inside `runPlacement` — a product id that already exists.
+ *
+ * The phases are stored in the placement's own scope (`placementScope`), while
+ * `products.json`, `results.json` and `ranking.json` stay the category's. A
+ * placement's `score` envelope holds one product and its `uniqueness` envelope
+ * holds a cluster ASSIGNMENT rather than a roster; sharing a scope with the seed
+ * run would let the resume gate hand one to the other under a matching version
+ * stamp, and it would be right to — nothing in the envelope says which kind of
+ * run wrote it.
+ */
+export async function executePlacement(
+  data: PlacementRequestedData,
+  bindings: RunnerBindings,
+  runner: StepRunner,
+  onDelivered?: PipelineDeps['onDelivered'],
+  client: PipelineDeps['client'] = new AnthropicClient(),
+): Promise<PlacementOutcome> {
+  const category = await bindings.categories.load(
+    data.slug,
+    data.categoryVersion === undefined ? {} : { categoryVersion: data.categoryVersion },
+  );
+  if (category === undefined) {
+    throw new NonRetriableError(`no category is seeded under the slug ${JSON.stringify(data.slug)}`);
+  }
+
+  const versions = phaseVersions(category);
+  const categoryStore = bindings.store(category.category, versions);
+  const [results, ranking] = await Promise.all([categoryStore.readResults(), categoryStore.readRanking()]);
+
+  if (results === undefined || ranking === undefined) {
+    throw new NonRetriableError(
+      `the category ${JSON.stringify(data.slug)} has no delivered run to place into. A placement appends ` +
+        'to stored scores, clusters and votes (brief §1.5); seeding the category is a separate operation ' +
+        'and must happen first.',
+    );
+  }
+
+  const deps: PipelineDeps = {
+    client,
+    // The scope is named to the BINDING rather than smuggled through the category
+    // string. On disk it becomes `placementScope(...)`, the separate directory
+    // this file already described; in Postgres it becomes a separate job row.
+    // Passing a synthetic category name worked on the filesystem and could not
+    // work durably — `PgPipelineStore` resolves a real `categories.id` from the
+    // slug, and there is no category called "... placement 41".
+    store: new PlacementPhaseStore(
+      categoryStore,
+      bindings.store(category.category, versions, { placement: data.product.id }),
+    ),
+    snapshots: bindings.snapshots,
+    ...(onDelivered === undefined ? {} : { onDelivered }),
+  };
+
+  return runPlacement({ ...category, product: data.product, results, ranking }, deps, runner);
 }

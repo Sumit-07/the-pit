@@ -1,6 +1,6 @@
 import { serve } from 'inngest/next';
 
-import { inngest, runCategoryFunction } from '@/lib/pipeline/inngest';
+import { inngest, placeProductFunction, runCategoryFunction } from '@/lib/pipeline/inngest';
 
 /**
  * The Inngest handler — `PHASE-0.md §3`'s "the app, the API routes and the
@@ -19,5 +19,5 @@ export const dynamic = 'force-dynamic';
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [runCategoryFunction],
+  functions: [runCategoryFunction, placeProductFunction],
 });

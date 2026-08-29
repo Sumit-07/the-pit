@@ -24,7 +24,17 @@ const config: NextConfig = {
    * app reshapes to suit itself — `PHASE-0.md §3`: "`packages/engine` never
    * imports from `apps/web`. The engine is a library the pipeline calls."
    */
-  serverExternalPackages: ['@the-pit/engine', '@the-pit/db', 'exceljs', '@anthropic-ai/sdk', 'postgres'],
+  serverExternalPackages: [
+    '@the-pit/engine',
+    '@the-pit/db',
+    'exceljs',
+    '@anthropic-ai/sdk',
+    'postgres',
+    // The durable `PipelineStore` queries through Drizzle. It is the same story
+    // as `postgres` above: a query builder with per-dialect dynamic requires,
+    // loaded by the pipeline and by nothing that renders.
+    'drizzle-orm',
+  ],
 };
 
 export default config;

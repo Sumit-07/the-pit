@@ -107,6 +107,14 @@ export type VerdictFloor =
       readonly firstPicks: number;
       /** How many named it runner-up. */
       readonly secondPicks: number;
+      /**
+       * How many personas could have picked it at all — the denominator
+       * `firstPicks + secondPicks` needs to mean anything. `packages/db/src/seed/
+       * build.ts`'s `demand_roster_size`: the number of personas that returned
+       * choices for this run, which is `01 §6.2`'s `P`. Never read for a `solo`
+       * floor, where there is no numerator to divide.
+       */
+      readonly rosterSize: number;
     }
   | {
       readonly kind: 'solo';
@@ -290,15 +298,28 @@ function parseMetrics(slug: string, raw: unknown): VerdictMetric[] {
     .sort((a, b) => b.cuts - a.cuts);
 }
 
-function parseFloor(slug: string, row: Record<string, unknown>, cluster: VerdictCluster): VerdictFloor {
+function parseFloor(
+  slug: string,
+  row: Record<string, unknown>,
+  cluster: VerdictCluster,
+  payload: Record<string, unknown>,
+): VerdictFloor {
   const status = requireString(slug, row['demand_status'], 'demand_status');
 
   if (status === 'solo_cluster') {
     // `DECISIONS.md` S11: an empty Floor is a delivery, not a failure. It is also
     // not an absence of data — it is a fact with a reason, and the page states it.
+    // `demand_roster_size` is not read here: this product had no numerator, and a
+    // roster count beside a floor that never convened would read as "0 of M" —
+    // the exact misreading `DECISIONS.md` S3 exists to prevent.
     return { kind: 'solo', clusterSize: cluster.size };
   }
   if (status !== 'scored') throw new VerdictPayloadError(slug, `demand_status ${status} is neither scored nor solo_cluster`);
+
+  const rosterSize = requireNumber(slug, payload['demand_roster_size'], 'demand_roster_size');
+  if (!Number.isInteger(rosterSize) || rosterSize < 1) {
+    throw new VerdictPayloadError(slug, `demand_roster_size ${rosterSize} is not a roster that could have convened`);
+  }
 
   const detail = requireRecord(slug, row['demand_detail'], 'demand_detail');
   // Annotated, because the conditional spread below produces a union of object
@@ -329,6 +350,7 @@ function parseFloor(slug: string, row: Record<string, unknown>, cluster: Verdict
     picks,
     firstPicks: picks.filter((pick) => pick.pick === 'first').length,
     secondPicks: picks.filter((pick) => pick.pick === 'second').length,
+    rosterSize,
   };
 }
 
@@ -407,7 +429,7 @@ export function parseVerdict(row: StoredVerdict): Verdict {
     sharpest: metrics.flatMap((metric) => metric.deductions).sort((a, b) => b.points - a.points)[0] ?? null,
     metrics,
     cluster,
-    floor: parseFloor(slug, verdict, cluster),
+    floor: parseFloor(slug, verdict, cluster, payload),
 
     weights: {
       merit: requireNumber(slug, weights['merit'], 'weights.merit'),

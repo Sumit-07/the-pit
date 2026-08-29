@@ -85,7 +85,7 @@ export interface PipelineResult {
 }
 
 /** The `deliver` step's report, which carries the two things the caller wants back. */
-interface DeliverReport extends StepReport {
+export interface DeliverReport extends StepReport {
   published?: PublishedSnapshot;
   product_count: number;
 }
@@ -131,7 +131,7 @@ export async function runPipeline(
   reports.push(await step.run('rank', () => rankStep(input, deps)));
 
   // --- Deliver: the placement that regenerates the board snapshot --------------
-  const delivered = await step.run('deliver', () => deliverStep(input, deps));
+  const delivered = await step.run('deliver', () => deliverStep(input.config.categoryVersion, deps));
   reports.push(delivered);
 
   return {
@@ -291,7 +291,7 @@ async function rankStep(input: PipelineInput, deps: PipelineDeps): Promise<StepR
  * called AFTER the snapshot exists, so an attempt can never be spent on a verdict
  * that was not published.
  */
-async function deliverStep(input: PipelineInput, deps: PipelineDeps): Promise<DeliverReport> {
+export async function deliverStep(categoryVersion: string, deps: PipelineDeps): Promise<DeliverReport> {
   const ranking = await deps.store.readRanking();
   if (ranking === undefined) {
     throw new PhaseFailedError('deliver', [
@@ -307,7 +307,7 @@ async function deliverStep(input: PipelineInput, deps: PipelineDeps): Promise<De
   const snapshot = buildSnapshot({
     slug: deps.store.slug,
     ranking,
-    categoryVersion: input.config.categoryVersion,
+    categoryVersion,
     generatedAt: (deps.now ?? (() => new Date()))(),
   });
 
@@ -347,7 +347,7 @@ async function deliverStep(input: PipelineInput, deps: PipelineDeps): Promise<De
  * 3. Only then, if it failed, throw. A failure that was thrown before it was
  *    written would leave the retry and the status page with nothing to read.
  */
-async function phaseStep<T>(
+export async function phaseStep<T>(
   step: Extract<PipelineStep, 'score' | 'cluster' | 'persona'>,
   deps: PipelineDeps,
   versions: PhaseVersions,

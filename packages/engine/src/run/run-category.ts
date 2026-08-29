@@ -317,8 +317,26 @@ async function resumePhase<T>(
   return result;
 }
 
-/** Which of the four versions differ, named for a human. */
-function versionsMoved(stored: PhaseVersions | undefined, current: PhaseVersions): string[] {
+/**
+ * Which of the four versions differ, named for a human.
+ *
+ * The version predicate `resumePhase` decides on, exported because it is decided
+ * in more than one process. A durable executor runs each phase as its own step,
+ * so it has to ask "is this phase already bought under these versions?" at every
+ * step boundary rather than once inside `runCategory`; a status page has to ask
+ * the same question about the same envelopes to avoid showing a stale phase as
+ * progress. The whole point of version-stamped phases is that a stale phase is
+ * never delivered as fresh, and a second copy of that rule — however carefully
+ * written — is a place where the two can quietly disagree and a phase the caller
+ * called reusable gets re-bought inside a step that is supposed to spend nothing.
+ *
+ * Field by field rather than a whole-object comparison: "the category snapshot
+ * moved" and "the engine was rebuilt" are different explanations for the same
+ * re-spend, and a support answer needs the right one. An empty result means the
+ * stamp matches and the stored phase may be reused; `undefined` means no stamp at
+ * all, which is refused for the same reason.
+ */
+export function versionsMoved(stored: PhaseVersions | undefined, current: PhaseVersions): string[] {
   if (stored === undefined) return ['it carries no version stamp'];
 
   const keys: (keyof PhaseVersions)[] = ['category_version', 'prompt_version', 'persona_version', 'engine_version'];

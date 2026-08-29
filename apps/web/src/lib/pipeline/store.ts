@@ -29,6 +29,8 @@ import {
   DEFAULT_WORKDIR,
   FileRunStore,
   MemoryRunStore,
+  type PhaseName,
+  type ProductSet,
   type Ranking,
   type RunResults,
   type RunStore,
@@ -82,6 +84,83 @@ export class MemoryPipelineStore extends MemoryRunStore implements PipelineStore
 
   readRanking(): Promise<Ranking | undefined> {
     return Promise.resolve(this.ranking);
+  }
+}
+
+/**
+ * The name a placement's PHASE envelopes are stored under.
+ *
+ * A placement writes a `score`, a `uniqueness` and a `customer` envelope, exactly
+ * like a full run — and they are not the same documents. A placement's score
+ * phase holds one product's rows; a full run's holds the category's. Its
+ * `uniqueness` envelope holds a `Placement` (which cluster, is it new); a full
+ * run's holds the whole cluster roster. Both are stamped with the same four
+ * versions, so if they shared `cjr/runs/<slug>/phases/` the resume gate would
+ * hand one to the other and be right to: the stamp matches, the phase name
+ * matches, and nothing in the envelope says which KIND of run wrote it.
+ *
+ * What that would cost is not an exception. The placement's cluster step would
+ * "resume" the seed run's roster as its own assignment; or a later full run would
+ * resume a one-product score phase and rank a category off it. Both produce a
+ * board rather than an error. So the phases live in their own scope, derived from
+ * the product being placed, and the two kinds of run can never read each other's
+ * work by accident.
+ *
+ * Only the phases move. `products.json`, `results.json` and `ranking.json` are
+ * the CATEGORY's documents — the placement updates them in place, which is the
+ * whole point of a placement — and they stay where the board and the next
+ * submission look for them (`PlacementPhaseStore`).
+ */
+export function placementScope(category: string, productId: number): string {
+  return `${category} placement ${productId}`;
+}
+
+/**
+ * The category's store, with the phase envelopes redirected to a placement's own
+ * scope. See `placementScope` for why.
+ *
+ * `slug` is deliberately the CATEGORY's: it is what the board snapshot is keyed
+ * on, and a placement republishes the category's board, not a board of its own.
+ */
+export class PlacementPhaseStore implements PipelineStore {
+  private readonly category: PipelineStore;
+  private readonly scoped: PipelineStore;
+
+  constructor(category: PipelineStore, scoped: PipelineStore) {
+    this.category = category;
+    this.scoped = scoped;
+  }
+
+  get slug(): string {
+    return this.category.slug;
+  }
+
+  writePhase(phase: PhaseName, envelope: unknown): Promise<void> {
+    return this.scoped.writePhase(phase, envelope);
+  }
+
+  readPhase(phase: PhaseName): Promise<unknown> {
+    return this.scoped.readPhase(phase);
+  }
+
+  writeProducts(products: ProductSet): Promise<void> {
+    return this.category.writeProducts(products);
+  }
+
+  writeResults(results: RunResults): Promise<void> {
+    return this.category.writeResults(results);
+  }
+
+  writeRanking(ranking: Ranking): Promise<void> {
+    return this.category.writeRanking(ranking);
+  }
+
+  readResults(): Promise<RunResults | undefined> {
+    return this.category.readResults();
+  }
+
+  readRanking(): Promise<Ranking | undefined> {
+    return this.category.readRanking();
   }
 }
 

@@ -44,18 +44,27 @@
  * what it was written for. The seeding path does not screen: those products come
  * from our own catalogue, and holding one would silently change `n` and with it
  * every z-score in the category.
+ *
+ * ## The same four steps, run by somebody else
+ *
+ * `runIncremental` executes all four in one process. A durable executor cannot:
+ * `brief` Part 7 makes each PHASE one step, so a placement arrives as three
+ * resumable steps with the results read back off disk between them. Everything
+ * those steps must not re-derive is exported rather than inlined here —
+ * `assertPlaceable` (the two guards), `placementCalibration` (§1.1's sample, and
+ * the reason it is not optional), `runPlacementPhase` with `mergePlacement` and
+ * `changedCluster` in `phases/placement.ts` (§1.5's append-only rule), and
+ * `completePlacement` (step 4 entire). The alternative is a second copy of the
+ * money path in whichever process happens to be running it.
  */
 
-import { SANITIZE_LIMIT } from '../config/constants.js';
 import type { ModelClient } from '../model/types.js';
+import type { CalibrationSample } from '../panels/calibration.js';
 import { selectCalibrationSample } from '../panels/calibration.js';
-import { sanitize } from '../ingest/sanitize.js';
 import { screenInput } from '../panels/injection.js';
 import type { PanelOrdering } from '../panels/ordering.js';
-import { buildAssignRequest, validateAssignResult } from '../panels/prompts/assign.js';
 import { rankCategory } from '../rank/ranking.js';
 import type {
-  Cluster,
   ClusterId,
   DemandLogEntry,
   Jury,
@@ -63,12 +72,17 @@ import type {
   Product,
   Ranking,
   ScoreLogEntry,
-  UniquenessProduct,
   UniquenessResult,
 } from '../types.js';
-import { dispatch } from './dispatch.js';
-import { buildLedger, PhaseLedger, zeroCost } from './ledger.js';
+import { buildLedger, zeroCost } from './ledger.js';
 import { runCustomerPhase } from './phases/customer.js';
+import {
+  changedCluster,
+  mergePlacement,
+  runPlacementPhase,
+  skippedCustomerPhase,
+  type Placement,
+} from './phases/placement.js';
 import { runScorePhase } from './phases/score.js';
 import { phaseVersions, type RunConfig } from './run-category.js';
 import type { RunStore } from './store.js';
@@ -130,16 +144,7 @@ export interface PlacedCluster {
 
 /** Score one new product against its calibrated peers, place it, and re-rank. */
 export async function runIncremental(input: IncrementalInput): Promise<IncrementalOutcome> {
-  const existingIds = new Set(input.products.map((product) => product.id));
-  if (existingIds.has(input.product.id)) {
-    throw new RangeError(`runIncremental: product id ${input.product.id} already exists in this category`);
-  }
-  if (input.results.uniqueness === null) {
-    throw new RangeError(
-      'runIncremental: this category has no stored clusters, so there is nothing to append to. ' +
-        'brief §1.5 makes full re-clustering an explicit admin operation, not a side effect of a placement.',
-    );
-  }
+  const priorUniqueness = assertPlaceable(input);
 
   // The gate, before anything is spent (`DECISIONS.md` S9).
   const screen = screenInput(`${input.product.name}\n${input.product.description}`);
@@ -148,14 +153,9 @@ export async function runIncremental(input: IncrementalInput): Promise<Increment
   const store = input.store ?? new MemoryRunStore(input.category);
   const ordering: PanelOrdering = { category: input.category, categoryVersion: input.config.categoryVersion };
   const allProducts = [...input.products, input.product];
-  const priorUniqueness = input.results.uniqueness;
   const versions = phaseVersions(input);
 
   // --- 1. Score, with the calibration sample (`brief §1.1`) -------------------
-  const calibration =
-    input.config.calibration ??
-    selectCalibrationSample(input.products, input.ranking, input.config.categoryVersion);
-
   const score = await persist(
     store,
     versions,
@@ -166,19 +166,28 @@ export async function runIncremental(input: IncrementalInput): Promise<Increment
       products: [input.product],
       jury: input.jury,
       ordering,
-      calibration,
+      calibration: placementCalibration(input),
     }),
   );
 
   // --- 2. Place it, append-only (`brief §1.5`) --------------------------------
   const placement =
     score.status === 'ok'
-      ? await persist(store, versions, assignCluster(input, priorUniqueness))
+      ? await persist(
+          store,
+          versions,
+          runPlacementPhase({
+            client: input.client,
+            product: input.product,
+            products: input.products,
+            clusters: priorUniqueness.clusters,
+          }),
+        )
       : notRun<Placement>('uniqueness', 'the placement call was not made: the merit panel did not return usable scores');
 
   const merged =
     placement.status === 'ok'
-      ? mergeUniqueness(priorUniqueness, input.product.id, placement.value)
+      ? mergePlacement(priorUniqueness, input.product.id, placement.value)
       : priorUniqueness;
 
   // --- 3. Re-ask the Floor about the one set that changed ---------------------
@@ -193,7 +202,7 @@ export async function runIncremental(input: IncrementalInput): Promise<Increment
           // SUCCESSFUL delivery — the same `skipped: 'no_sets'` a full run returns
           // for a category with no multi-member cluster — and emphatically not the
           // `failed` arm above, which is what a placement that never happened gets.
-          await persist(store, versions, Promise.resolve(skippedCustomer()))
+          await persist(store, versions, Promise.resolve(skippedCustomerPhase()))
         : await persist(
             store,
             versions,
@@ -209,6 +218,102 @@ export async function runIncremental(input: IncrementalInput): Promise<Increment
           );
 
   // --- 4. Assemble and re-rank ------------------------------------------------
+  return completePlacement(input, { score, placement, customer }, store);
+}
+
+/**
+ * The two conditions a placement requires, checked before anything is spent.
+ *
+ * Returns the roster the product will be appended to, so a caller cannot get past
+ * the guard without holding it — the `null` case is not a missing optional, it is
+ * a category that has never been clustered, and `brief §1.5` makes building one
+ * an explicit admin operation rather than a side effect of a paid submission.
+ */
+export function assertPlaceable(input: {
+  product: Product;
+  products: readonly Product[];
+  results: RunResults;
+}): UniquenessResult {
+  const existingIds = new Set(input.products.map((product) => product.id));
+  if (existingIds.has(input.product.id)) {
+    throw new RangeError(`runIncremental: product id ${input.product.id} already exists in this category`);
+  }
+  if (input.results.uniqueness === null) {
+    throw new RangeError(
+      'runIncremental: this category has no stored clusters, so there is nothing to append to. ' +
+        'brief §1.5 makes full re-clustering an explicit admin operation, not a side effect of a placement.',
+    );
+  }
+  return input.results.uniqueness;
+}
+
+/**
+ * The peers this placement is scored against — `brief §1.1`, and not optional.
+ *
+ * A configured sample wins (Task 8's A/B check supplies one deliberately);
+ * otherwise it is drawn from the category's own stored ranking. There is no arm
+ * of this function that returns nothing: scoring one product alone is the exact
+ * defect the calibration sample exists to correct, and it is the defect that
+ * lands entirely on paying customers, so a placement path that could silently
+ * omit the sample would be the one path in the engine allowed to reintroduce it.
+ */
+export function placementCalibration(input: {
+  products: readonly Product[];
+  ranking: Ranking;
+  config: RunConfig;
+}): CalibrationSample {
+  return (
+    input.config.calibration ??
+    selectCalibrationSample(input.products, input.ranking, input.config.categoryVersion)
+  );
+}
+
+/**
+ * The three phase results one placement produces, however they were executed.
+ *
+ * `runIncremental` fills this in-process; a durable executor fills it from three
+ * persisted envelopes across three steps. Both hand it to `completePlacement`,
+ * which is why the assembly, the ledger, the coverage record and the re-rank
+ * exist once rather than twice.
+ */
+export interface PlacementPhases {
+  score: PhaseResult<ScorePhaseValue>;
+  placement: PhaseResult<Placement>;
+  customer: PhaseResult<CustomerPhaseValue>;
+}
+
+/**
+ * Step 4: fold the three phase results into `results.json`, decide the outcome,
+ * and re-rank the whole category.
+ *
+ * Separated from `runIncremental` so the pipeline can run the three phases as
+ * three durable steps and still reach this code — the alternative is a second
+ * implementation of the assembly on the one path that charges a customer.
+ *
+ * `merged` and `changed` are recomputed here rather than passed in. Both are pure
+ * functions of the placement result, so a caller that read that result back off
+ * disk gets the identical roster; making them parameters would let a caller hand
+ * in a roster that disagrees with the placement it is filing.
+ *
+ * `brief §1.2`: appending a product shifts the population mean and std, so EVERY
+ * existing z-score changes. That is correct, and it is why nothing here may
+ * assume rank stability between placements.
+ */
+export async function completePlacement(
+  input: IncrementalInput,
+  phases: PlacementPhases,
+  store: RunStore,
+): Promise<Exclude<IncrementalOutcome, { status: 'held' }>> {
+  const priorUniqueness = assertPlaceable(input);
+  const { score, placement, customer } = phases;
+  const allProducts = [...input.products, input.product];
+
+  const merged =
+    placement.status === 'ok'
+      ? mergePlacement(priorUniqueness, input.product.id, placement.value)
+      : priorUniqueness;
+  const changed = placement.status === 'ok' ? changedCluster(merged, placement.value.cluster_id) : undefined;
+
   const scoreLog = score.status === 'ok' ? appendScoreLog(input.results.scoreLog, score.value.scoreLog) : input.results.scoreLog;
   const demandLog =
     customer.status === 'ok' && changed !== undefined
@@ -275,134 +380,7 @@ export async function runIncremental(input: IncrementalInput): Promise<Increment
   };
 }
 
-// --- The placement call --------------------------------------------------------
-
-/** A resolved placement: which cluster, whether it is new, and the scarcity row. */
-interface Placement {
-  cluster_id: ClusterId;
-  isNew: boolean;
-  label: string;
-  uniqueness_score: number;
-  reason: string;
-}
-
-/**
- * One call: place the product against the fixed roster (`src/panels/prompts/assign.ts`).
- *
- * Reported under `phase: 'uniqueness'`. It is a different CALL from `01 §5.2`'s
- * clustering pass, but it is the same phase of the graph — it is what produces
- * this run's cluster assignment, it is what the Customer phase waits on, and it
- * lands in the same `results.meta.phases.uniqueness` slot. Giving it a fourth
- * `PhaseName` would fork every consumer of that record for no gain.
- */
-async function assignCluster(input: IncrementalInput, prior: UniquenessResult): Promise<PhaseResult<Placement>> {
-  const ledger = new PhaseLedger();
-  const existingIds = new Set(prior.clusters.map((cluster) => cluster.cluster_id));
-
-  const result = await dispatch(
-    input.client,
-    buildAssignRequest({ product: input.product, clusters: prior.clusters, products: input.products }),
-    `placement of product ${input.product.id}`,
-    ledger,
-    (output) => validateAssignResult(output, existingIds),
-  );
-
-  const cost = ledger.total();
-  if (!result.ok) {
-    return {
-      phase: 'uniqueness',
-      status: 'failed',
-      cost,
-      warnings: [],
-      failure: {
-        code: result.code,
-        retryable: result.retryable,
-        message:
-          'the new product could not be placed in a cluster. Without a placement it would rank on merit ' +
-          'alone and look exactly like a genuine solo cluster (DECISIONS.md S11), so this is reported ' +
-          'here rather than left to be guessed from the board.',
-        causes: [result.message],
-      },
-    };
-  }
-
-  const assignment = result.value;
-  const placement: Placement =
-    assignment.cluster_id === undefined
-      ? {
-          cluster_id: newClusterId(input.product.id, existingIds),
-          isNew: true,
-          label: assignment.new_cluster_label ?? '',
-          uniqueness_score: assignment.uniqueness_score,
-          reason: assignment.reason,
-        }
-      : {
-          cluster_id: assignment.cluster_id,
-          isNew: false,
-          label: prior.clusters.find((cluster) => cluster.cluster_id === assignment.cluster_id)?.label ?? '',
-          uniqueness_score: assignment.uniqueness_score,
-          reason: assignment.reason,
-        };
-
-  return { phase: 'uniqueness', status: 'ok', cost, warnings: [], value: placement };
-}
-
-/**
- * A cluster id for a product that opened its own cluster.
- *
- * Derived from the product id, so it is stable across a retry of the same
- * placement rather than fresh on every attempt — a demand vote keyed to a
- * regenerated id would be orphaned. Suffixed only on the collision that a
- * hand-edited roster could produce.
- */
-function newClusterId(productId: number, taken: ReadonlySet<ClusterId>): ClusterId {
-  const base = `p${productId}`;
-  if (!taken.has(base)) return base;
-  for (let suffix = 2; ; suffix += 1) {
-    const candidate = `${base}-${suffix}`;
-    if (!taken.has(candidate)) return candidate;
-  }
-}
-
 // --- Merging -------------------------------------------------------------------
-
-/**
- * Append the new product to the stored clusters. Append-only, literally: existing
- * `cluster_id`s, labels and memberships are copied through untouched, so every
- * demand vote keyed to one of them stays valid (`brief §1.5`).
- */
-function mergeUniqueness(prior: UniquenessResult, productId: number, placement: Placement): UniquenessResult {
-  const clusters: Cluster[] = prior.clusters.map((cluster) =>
-    cluster.cluster_id === placement.cluster_id
-      ? { ...cluster, member_ids: [...cluster.member_ids, productId] }
-      : { ...cluster },
-  );
-
-  if (placement.isNew) {
-    clusters.push({
-      cluster_id: placement.cluster_id,
-      label: sanitize(placement.label, SANITIZE_LIMIT),
-      member_ids: [productId],
-    });
-  }
-
-  const row: UniquenessProduct = {
-    id: productId,
-    uniqueness_score: placement.uniqueness_score,
-    cluster_id: placement.cluster_id,
-    reason: placement.reason,
-  };
-
-  return { clusters, products: [...prior.products, row] };
-}
-
-/** The cluster the new product landed in, if it now holds a choice worth putting to anybody. */
-function changedCluster(merged: UniquenessResult, clusterId: ClusterId): Cluster | undefined {
-  const cluster = merged.clusters.find((candidate) => candidate.cluster_id === clusterId);
-  // `similarSets` filters to >= 2 members anyway; checking here is what lets the
-  // Customer phase be skipped rather than called with a set it would discard.
-  return cluster !== undefined && cluster.member_ids.length >= 2 ? cluster : undefined;
-}
 
 /**
  * Fold the new product's rows into the stored score log, per juror.
@@ -471,15 +449,6 @@ async function persist<T>(
   const envelope: PersistedPhase<T> = { versions, result };
   await store.writePhase(result.phase, envelope);
   return result;
-}
-
-/**
- * The Floor legitimately not convening, on the incremental path. `01 §5.3`'s
- * gate and `DECISIONS.md` S11's terminal, successful status — structurally the
- * same arm a full run returns for a category with no multi-member cluster.
- */
-function skippedCustomer(): PhaseResult<CustomerPhaseValue> {
-  return { phase: 'customer', status: 'skipped', cost: zeroCost(), warnings: [], skipped: 'no_sets' };
 }
 
 /** A phase that never got the chance to run. Never S11's `skipped`. */

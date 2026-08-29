@@ -11,16 +11,35 @@
  *
  * `inngest.ts` is deliberately NOT re-exported here: importing the pipeline
  * should never drag in the Inngest SDK, so the API route imports it directly.
+ * `pg-store.ts` and `service.ts` are out for the same reason one level down —
+ * they pull in `@the-pit/db`, Drizzle and the Postgres driver, and the status
+ * page, the boards route and every test of the pure pipeline have no business
+ * loading a database driver to read a type. Both are imported by path, exactly as
+ * the routes already import `service`.
+ *
+ * `bucket.ts` IS re-exported: it is `fetch` and JSON, with the transport
+ * injected, so it costs a consumer nothing.
  */
 
+export {
+  BucketSnapshotSink,
+  boardKey,
+  datedKey,
+  HttpObjectStore,
+  MemoryObjectStore,
+  ObjectStoreError,
+} from './bucket';
+export type { HttpObjectStoreConfig, ObjectStore, PutOptions } from './bucket';
 export { CategoryNotRunnableError, FileCategorySource, MemoryCategorySource } from './catalog';
 export type { CategorySource } from './catalog';
 export { NoModelClient, PhaseFailedError } from './errors';
 export { CallMeter, RecordingStepRunner, stepInProgress } from './local';
+export { runPlacement } from './placement';
+export type { PlacementInput, PlacementOutcome, PlacementResult } from './placement';
 export type { StoredPhase } from './resume';
 export { readStoredPhase, reusableStoredPhase, versionsMoved } from './resume';
-export { runPipeline } from './run';
-export type { PipelineResult } from './run';
+export { deliverStep, phaseStep, runPipeline } from './run';
+export type { DeliverReport, PipelineResult } from './run';
 export {
   BOARD_CACHE_CONTROL,
   buildSnapshot,
@@ -33,7 +52,7 @@ export {
 export type { BoardSnapshot, PublishedSnapshot, SnapshotSink } from './snapshot';
 export { readRunStatus } from './status';
 export type { RunState, RunStatus, StatusInput, StepStatus } from './status';
-export { FilePipelineStore, MemoryPipelineStore } from './store';
+export { FilePipelineStore, MemoryPipelineStore, PlacementPhaseStore, placementScope } from './store';
 export type { PipelineStore } from './store';
 export { PHASE_OF_STEP, PIPELINE_STEPS, STEP_OF_PHASE } from './types';
 export type {

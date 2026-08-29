@@ -21,6 +21,7 @@
  */
 
 import {
+  ASSIGN_TOOL_NAME,
   CHOICE_TOOL_NAME,
   JUROR_COUNT,
   SCORE_TOOL_NAME,
@@ -203,9 +204,35 @@ export function choiceAnswer(request: ModelRequest): unknown {
   };
 }
 
+/**
+ * The answer the incremental PLACEMENT call gives — `brief §1.5`'s two legal
+ * shapes and nothing else.
+ *
+ * `JOIN_EXISTING` names a cluster the seeded category really has, so the product
+ * lands in a set of three and the Floor re-votes on that one set. `OPEN_NEW`
+ * gives a label instead, so the product opens a cluster of its own, no set's
+ * membership moves, and the Floor never convenes — `DECISIONS.md` S11's terminal,
+ * SUCCESSFUL status, not a partial run.
+ */
+export const JOIN_EXISTING = {
+  cluster_id: 'pair-0',
+  uniqueness_score: 35,
+  reason: 'several tools already do this',
+};
+
+export const OPEN_NEW = {
+  new_cluster_label: 'Meeting action lists',
+  uniqueness_score: 88,
+  reason: 'no close analogue',
+};
+
 /** How the fixture panel should behave. Every field defaults to "answers correctly". */
 export interface ScriptOptions {
   clusterPlan?: ClusterPlan;
+  /** The placement answer. Defaults to joining `pair-0`. */
+  assignAnswer?: unknown;
+  /** Make the placement call fail, with this error. */
+  assignError?: () => Error;
   /** Make the clustering pass fail, with this error. */
   uniquenessError?: () => Error;
   /** Make every persona call fail, with this error. */
@@ -242,6 +269,10 @@ export function makeScript(options: ScriptOptions = {}): (request: ModelRequest)
       case CHOICE_TOOL_NAME: {
         if (options.personaError !== undefined) throw options.personaError();
         return { output: choiceAnswer(request), usage, model: 'claude-sonnet-5' };
+      }
+      case ASSIGN_TOOL_NAME: {
+        if (options.assignError !== undefined) throw options.assignError();
+        return { output: options.assignAnswer ?? JOIN_EXISTING, usage, model: 'claude-sonnet-5' };
       }
       default:
         throw new Error(`fixture: no answer for tool ${request.toolName}`);

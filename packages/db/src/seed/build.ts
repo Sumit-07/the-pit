@@ -407,6 +407,30 @@ export function buildSeedRows(input: SeedInput): SeedRows {
  * PANEL rather than about this product, it is already frozen on the snapshot
  * row, and copying it onto 48 verdicts would make one board's quality metrics 48
  * rows that could disagree.
+ *
+ * `demand_roster_size` is the denominator a `demand_detail.picks` count needs to
+ * mean anything: "5 personas picked you" reads as a strong result or a weak one
+ * depending on whether the roster was 6 or 40, and the row on its own carries
+ * only the numerator. `01 §6.2`'s `capture = |picked_personas| / P` computes
+ * exactly this `P` — the number of personas that RETURNED CHOICES for the run,
+ * not merely the number installed on the category's panel — and `rank/demand.ts`
+ * discards the count once it folds it into `capture`. It is recovered here from
+ * `ranking.personas`, the run's own frozen roster, rather than from the `panel`
+ * argument `buildSeedRows` also has in scope: `panel` is read live off
+ * `cjr/references/personas/<slug>.json` and can have drifted (a persona added or
+ * retired) since this board was produced, while `ranking.personas` is what this
+ * run actually asked. `01 §5.3` fires the customer panel once, with every
+ * installed persona answering about every cluster in the same call, and
+ * `run/phases/customer.ts` fails the whole phase rather than deliver a board
+ * built on a partial panel — so for any row that reached `ranking.json`,
+ * `ranking.personas.length` and `P` are the same number by construction.
+ *
+ * It is a category-level fact, not a per-product one — same value on every
+ * verdict this board issues — which is why it lives beside `product_count`
+ * rather than inside `row`. A `solo_cluster` row carries it too even though
+ * nothing renders it: the Floor never convened for that product, so there is no
+ * numerator to divide, and `DECISIONS.md` S3 is what the verdict page states
+ * instead (see `apps/web/src/lib/verdict/model.ts`'s `parseFloor`).
  */
 function verdictPayload(
   ranking: Ranking,
@@ -425,6 +449,7 @@ function verdictPayload(
     uniqueness_version: ranking.uniqueness_version,
     weights: ranking.weights,
     metrics: ranking.metrics,
+    demand_roster_size: ranking.personas.length,
     verdict: row,
   };
 }
