@@ -39,6 +39,29 @@ export type {
 export { createPostgresIdentityStore, createPostgresWebhookAccounts } from './identity-store.js';
 
 export type {
+  AccountListingRow,
+  AccountPurchaseRow,
+  PostgresAccountStore,
+} from './account-store.js';
+export { createPostgresAccountStore } from './account-store.js';
+
+export type {
+  AppendOutcome,
+  AttemptsStoreOptions,
+  PaymentsStoreOptions,
+  PostgresAttemptsStore,
+  PostgresSubmissionStore,
+  PostgresWebhookStore,
+  SubmissionDraftRow,
+} from './payments-store.js';
+export {
+  createPostgresAttemptsStore,
+  createPostgresSubmissionStore,
+  createPostgresWebhookStore,
+  DEFAULT_PAYMENTS_PROVIDER,
+} from './payments-store.js';
+
+export type {
   AttemptRowContext,
   DeliveredVerdict,
   LedgerEntry,

@@ -75,6 +75,62 @@ anything other than resolution.
 - Cheap classifier at submission, run BEFORE payment so nobody pays for a rejection.
 - On mismatch: reject with the suggested correct category.
 
+### S15 — GitHub OAuth vs §2.1's "No GitHub, no Google"
+`brief §2.1` says it literally, and the founder has since shipped GitHub OAuth as one
+of three sign-in paths (magic link, capability URL, GitHub). Read as a ban on the
+words, that is a contradiction. Read as the answer to the question §2.1 was asking —
+*what identifies the payer?* — it is not, and the sentence stands.
+
+**Why §2.1's design is intact.** The paragraph gives its own reason: "Dodo supplies a
+verified email with the payment, so a magic link to that address matches the payer with
+no extra identity system and no guest-payment claiming flow." Both clauses still hold.
+
+- **The payer identity is unchanged.** GitHub matches *against* the verified payment
+  email. `completeOAuthSignIn` takes only addresses GitHub reports as
+  `"verified": true`, looks for an `accounts` row with that address, and answers
+  `no_purchase_found` when there is none. It never becomes the identity; it resolves to
+  the one §2.1 chose.
+- **It cannot mint an account.** `AuthStore` has `findAccountByEmail` and deliberately
+  no `createAccount`; `IdentityStore` has none either. The only INSERT into `accounts`
+  in the repository is `createPostgresWebhookAccounts.ensureAccount`, called from the
+  signed Dodo webhook. **An account is a purchase** — there is no signup, no invitation
+  and no "sign in with GitHub to get started".
+- **There is still no guest-payment claiming flow.** Claiming would mean an unpaid
+  identity acquiring a paid account. What GitHub does is the reverse: a session that
+  already proves the account attaches a provider link to it, or a verified provider
+  address matches a payment that already exists. Neither direction hands anybody an
+  account they did not buy.
+- **It is not on the buying path.** Guest checkout stays the default on every device
+  (`brief §2.1`: "Nothing sits between a visitor and their purchase"). OAuth sits beside
+  the funnel, and linking is retroactive by design — someone who paid on a phone reaches
+  their account by capability URL and connects GitHub afterwards, converging on the same
+  row.
+
+What actually changed is the number of ways a returning customer reaches an account that
+already exists, and the reason is delivery risk rather than identity: a magic link is a
+bet on SPF/DKIM/DMARC, which want a fortnight at `p=none` plus reputation warm-up, and
+until then "check your inbox" is a promise the infrastructure cannot keep — worst for
+the corporate mailboxes most likely to have paid.
+
+**The constraint that comes with it: GitHub perks are procedural or informational,
+NEVER positional.** No perk may touch rank, ordering, weighting, tie-breaks, or
+visibility on a board. A login-conferred rank advantage is the same violation as a
+purchased one in a different currency, on the product whose whole line is "$5 to enter.
+That's all money does here." The four perks currently offered, and why each is inside
+the line:
+
+| Perk | Kind | Why it is not positional |
+|---|---|---|
+| Ownership verification skips the review hold | procedural | Changes how fast a submission is *processed*, not how it scores. The held run gets the same panel. |
+| Claiming a seeded listing | procedural | Transfers who administers a row. `brief` Part 7 already promises seeded listings a one-click opt-out; this is the other end of the same lever. |
+| The verified-builder marker | informational | A fact about the submitter rendered beside the listing. It enters no composite and no sort. |
+| Frictionless re-pitch | procedural | Removes a round trip through email. `brief §2.4`'s cycle cap and materially-changed-text rule apply unchanged. |
+
+Anything proposed later that cannot be put in one of those two columns is refused, and
+`packages/engine` is where that is enforced structurally: nothing in `rank/` takes an
+account, a session, or an identity, so a positional perk cannot be implemented without a
+new argument someone has to review.
+
 ### OPEN-1 RESOLVED — Seed removal: per-category threshold, drained gradually
 - A category sheds seeds only once it holds N paid products (N ~ 25-30, chosen to stay
   well clear of the n>=8 floor from `01` §4).

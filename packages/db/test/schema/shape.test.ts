@@ -21,7 +21,7 @@ afterAll(async () => {
 });
 
 /**
- * The nineteen tables, plus nothing. An extra table is as much a defect as a
+ * The twenty-one tables, plus nothing. An extra table is as much a defect as a
  * missing one: it means a concept was modelled twice, or that something another
  * agent owns leaked in here.
  *
@@ -29,10 +29,23 @@ afterAll(async () => {
  * `brief §2.1` describes without naming, and the frozen delivered verdict
  * `brief` Part 6 requires to stay addressable while the board moves under it.
  *
- * `account_identities` is `0004`'s, and it is the only table the second and
+ * `account_identities` is `0005`'s, and it is the only table the second and
  * third sign-in paths needed. The capability URL added no table at all — it is
  * one column on `accounts`, because rotation has to REPLACE a slug rather than
  * add one, and a table of slugs would permit two live at once.
+ *
+ * `webhook_events` and `submissions` are `0006`'s, and each closed a gap that
+ * only appeared when the Dodo webhook was actually wired up:
+ *
+ * - `handleDodoWebhook` records every event it is NOT going to grant on — a
+ *   refund, a dispute, an amount it refuses to price — and it records them
+ *   BEFORE resolving an account, because resolving one for a payment that did
+ *   not succeed would be creating an account for a payment that did not succeed.
+ *   `orders.account_id` is NOT NULL, so there was nowhere to put them.
+ * - `pit/placement.requested` carries a `Product`, which needs a name and a
+ *   300-character description. Dodo metadata is a small string map, and
+ *   `products_source_submitter` refuses a paid row with no submitter — which
+ *   under guest checkout is every row until the webhook arrives.
  */
 const REQUIRED_TABLES = [
   'account_identities',
@@ -52,12 +65,14 @@ const REQUIRED_TABLES = [
   'rankings',
   'score_rows',
   'snapshots',
+  'submissions',
   'tokens',
   'verdicts',
+  'webhook_events',
 ];
 
 describe('tables', () => {
-  it('creates exactly the nineteen required tables', async () => {
+  it('creates exactly the twenty-one required tables', async () => {
     const tables = await tablesOf(database.pg);
     expect(tables).toEqual(REQUIRED_TABLES);
   });

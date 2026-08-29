@@ -13,7 +13,7 @@
  *                     clusters
  *   derived           snapshots, rankings                          <- rebuildable
  *   DELIVERED         verdicts                                     <- frozen, append-only
- *   the money path    orders, attempts
+ *   the money path    submissions, webhook_events, orders, attempts
  *   surfaces          jobs, tokens, mob_votes, flagged_injections
  *
  * `02 §7` and `brief` Part 7 fix the RAW row: incremental placement and exact
@@ -51,6 +51,8 @@ export { clusterMembers, clusters, demandVotes, scoreRows } from './raw.js';
 export { rankings, snapshots } from './boards.js';
 export { verdicts } from './verdicts.js';
 export { attempts, orders } from './commerce.js';
+export { submissions } from './submissions.js';
+export { webhookEvents } from './webhooks.js';
 export { tokens } from './auth.js';
 export { mobVotes } from './mob.js';
 export { flaggedInjections } from './moderation.js';

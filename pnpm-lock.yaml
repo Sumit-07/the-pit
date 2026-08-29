@@ -19,6 +19,9 @@ importers:
       '@the-pit/engine':
         specifier: workspace:*
         version: link:../../packages/engine
+      '@the-pit/payments':
+        specifier: workspace:*
+        version: link:../../packages/payments
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(postgres@3.4.9)
