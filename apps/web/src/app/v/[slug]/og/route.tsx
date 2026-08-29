@@ -10,11 +10,12 @@
  * assertion. So the requirements live one module down, where they can be checked,
  * and what is left here is a picture.
  *
- * The card is the verdict card of `platform-surfaces-mockup.html` at 1200x630, in
- * `the-pit-home.html`'s palette: the ground, the bone type, the blade red on the
- * one number that matters. `brief` Part 5's rule rides in the data — `fields.rank`
- * cannot be produced without its product count and its timestamp — so there is no
- * arrangement of this layout that shows a bare rank.
+ * The card is the verdict card at 1200x630 in `lib/theme.ts`'s palette, and it is
+ * the one surface that inverts: a share image is seen at thumbnail size in a feed
+ * next to other people's, so it is the ink slab rather than the paper, with the
+ * single hue on the single number that matters. `brief` Part 5's rule rides in the
+ * data — `fields.rank` cannot be produced without its product count and its
+ * timestamp — so there is no arrangement of this layout that shows a bare rank.
  */
 
 import { ImageResponse } from 'next/og';
@@ -23,14 +24,16 @@ import { parseVerdict } from '@/lib/verdict/model';
 import { ogFields } from '@/lib/verdict/og';
 import { verdictStore } from '@/lib/verdict/service';
 
-/** `the-pit-home.html`'s custom properties, as literals — satori resolves no `var()`. */
-const GROUND = '#120E0C';
-const PANEL = '#211A16';
-const RULE = '#33291F';
-const BONE = '#EDE6DE';
-const MUTED = '#93857A';
-const BLADE = '#E2482C';
-const COIN = '#D9A441';
+/**
+ * `lib/theme.ts`'s tokens, as literals — satori resolves no `var()` and no
+ * `rgb(… / a)`, so the derived tones are written out at their resolved values.
+ */
+const INK = '#101317';
+const PANEL = '#1B1F26';
+const RULE = '#2C323B';
+const PAPER = '#EDEFF3';
+const MUTED = '#8C939E';
+const CUT = '#C2455C';
 
 const SIZE = { width: 1200, height: 630 } as const;
 
@@ -53,10 +56,10 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          background: GROUND,
-          color: BONE,
+          background: INK,
+          color: PAPER,
           padding: '56px 64px',
-          borderLeft: `14px solid ${BLADE}`,
+          borderLeft: `14px solid ${CUT}`,
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -64,7 +67,7 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
           {fields.pitch === '' ? (
             <div style={{ display: 'flex' }} />
           ) : (
-            <div style={{ display: 'flex', fontSize: 20, color: COIN, border: `1px solid ${COIN}`, padding: '6px 12px' }}>
+            <div style={{ display: 'flex', fontSize: 20, color: MUTED, border: `1px solid ${RULE}`, padding: '6px 12px' }}>
               {fields.pitch}
             </div>
           )}
@@ -75,10 +78,10 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
         </div>
 
         <div style={{ display: 'flex', alignItems: 'baseline', marginTop: 22 }}>
-          <div style={{ display: 'flex', fontSize: 120, fontWeight: 700, color: BLADE, lineHeight: 1 }}>
+          <div style={{ display: 'flex', fontSize: 120, fontWeight: 700, color: CUT, lineHeight: 1 }}>
             {fields.cuts}
           </div>
-          <div style={{ display: 'flex', fontSize: 34, color: BONE, marginLeft: 18 }}>{fields.cutsLabel}</div>
+          <div style={{ display: 'flex', fontSize: 34, color: PAPER, marginLeft: 18 }}>{fields.cutsLabel}</div>
         </div>
 
         {/* `marginBottom` guarantees a gap even when the quote below is pushed
@@ -96,12 +99,12 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
               flexDirection: 'column',
               marginTop: 'auto',
               background: PANEL,
-              borderLeft: `6px solid ${BLADE}`,
+              borderLeft: `6px solid ${CUT}`,
               borderTop: `1px solid ${RULE}`,
               padding: '20px 24px',
             }}
           >
-            <div style={{ display: 'flex', fontSize: 28, lineHeight: 1.35, color: BONE }}>{fields.quote}</div>
+            <div style={{ display: 'flex', fontSize: 28, lineHeight: 1.35, color: PAPER }}>{fields.quote}</div>
             <div style={{ display: 'flex', fontSize: 20, color: MUTED, marginTop: 12 }}>{fields.attribution}</div>
           </div>
         )}

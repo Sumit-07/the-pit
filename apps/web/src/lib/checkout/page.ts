@@ -41,77 +41,42 @@
 import { escapeHtml } from '@the-pit/auth';
 import { formatUsd, PURCHASE_TERMS, type PriceTier, type SubmissionRejection } from '@the-pit/payments';
 
-/** `the-pit-home.html`'s eight custom properties and its type stack, verbatim. */
-const FONTS = [
-  '<link rel="preconnect" href="https://fonts.googleapis.com">',
-  '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
-  '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&amp;' +
-    'family=Barlow:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap">',
-].join('\n');
+import { BASE, FONT_LINKS, TOKENS } from '@/lib/theme';
 
-const CSS = `
-:root{
-  --ground:#120E0C; --ground2:#191411; --panel:#211A16; --rule:#33291F; --rule2:#241D18;
-  --bone:#EDE6DE; --muted:#93857A; --blade:#E2482C; --coin:#D9A441; --roar:#5B9EA6;
-  --body:"Barlow","Helvetica Neue",Helvetica,Arial,sans-serif;
-  --disp:"Archivo Black","Arial Black","Helvetica Neue",Impact,sans-serif;
-  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-html{background:var(--ground)}
-body{background:var(--ground);color:var(--bone);font-family:var(--body);
-  -webkit-font-smoothing:antialiased;overflow-x:hidden}
-.wrap{max-width:660px;margin:0 auto;padding:0 14px 56px}
-nav{display:flex;justify-content:space-between;align-items:center;padding:13px 0;
-  border-bottom:1px solid var(--rule)}
-.mark{font-family:var(--disp);font-size:14px;letter-spacing:-.02em;color:var(--bone);text-decoration:none}
-.mark i{color:var(--blade);font-style:normal}
-.navr{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.06em;display:flex;gap:14px}
-.navr a{color:var(--muted);text-decoration:none}
-.navr a:hover{color:var(--bone)}
-.sh{font-family:var(--mono);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
-header{padding:26px 0 4px}
-header h1{font-family:var(--disp);font-size:clamp(20px,5.2vw,28px);line-height:1.05;
-  letter-spacing:-.03em;text-transform:uppercase;margin-top:6px}
-.lede{font-size:12.5px;line-height:1.6;color:#B3A79C;margin-top:9px;max-width:64ch}
-.lede b{color:var(--bone);font-weight:600}
-section{margin-top:26px}
-h2{font-family:var(--disp);font-size:15px;letter-spacing:-.02em;text-transform:uppercase}
-label{display:block;margin-top:14px}
-label .sh{display:block;margin-bottom:5px}
-input[type=text],input[type=url],textarea,select{width:100%;background:var(--panel);
-  border:1px solid var(--rule);color:var(--bone);font-family:var(--body);font-size:13.5px;
-  padding:9px 10px}
-input:focus,textarea:focus,select:focus{outline:none;border-color:var(--muted)}
-textarea{min-height:96px;resize:vertical;line-height:1.55}
-.hint{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px}
-.tiers{display:flex;gap:9px;flex-wrap:wrap;margin-top:8px}
-.tier{flex:1;min-width:200px;border:1px solid var(--rule);background:var(--ground2);padding:12px}
-.tier b{display:block;font-size:13.5px;font-weight:600}
-.tier span{display:block;font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px}
-.tier input{margin-right:7px}
-button.act{display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.05em;
-  border:1px solid var(--blade);background:var(--blade);color:#150C0A;font-weight:600;
-  padding:10px 15px;margin-top:18px;cursor:pointer}
-a.act{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;
-  text-decoration:none;color:var(--bone);border:1px solid var(--rule);padding:7px 11px;margin-top:14px}
-a.act:hover{border-color:var(--muted)}
-.blk{background:var(--ground2);border:1px solid var(--rule);padding:14px 15px;margin-top:14px}
-.blk p{font-size:12.5px;line-height:1.6;color:#B3A79C}
-.blk p+p{margin-top:8px}
-.blk p b{color:var(--bone);font-weight:600}
-.warn{border-left:2px solid var(--coin)}
-.warn h2{color:var(--coin)}
-.when{font-family:var(--mono);font-size:11.5px;color:var(--coin);border:1px solid rgba(217,164,65,.42);
-  padding:8px 10px;margin-top:11px;display:block}
-.linked{font-family:var(--mono);font-size:11px;color:var(--roar);
-  border:1px solid rgba(91,158,166,.34);padding:2px 6px;display:inline-block}
-.terms{margin-top:11px;font-size:12px;line-height:1.6;color:#B3A79C;padding-left:1.1rem}
-.terms li{margin-top:4px}
-footer{margin-top:34px;border-top:1px solid var(--rule);padding-top:16px;
-  font-family:var(--mono);font-size:10.5px;line-height:1.75;color:var(--muted)}
-footer a{color:var(--muted)}
-@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/** One sans, one mono, from `lib/theme.ts` — the same two every surface loads. */
+const FONTS = FONT_LINKS;
+
+const CSS = `${TOKENS}${BASE}
+.wrap{max-width:720px}
+
+header.page h1{margin-top:9px}
+
+.tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-top:10px}
+.tier{display:block;background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
+  box-shadow:var(--e1);padding:15px 16px;cursor:pointer;
+  transition:box-shadow .15s ease,border-color .15s ease}
+.tier:hover{box-shadow:var(--e2);border-color:rgb(var(--ink-c) / .2)}
+.tier:has(input:checked){border-color:var(--ink);box-shadow:var(--e2)}
+.tier:has(input:focus-visible){outline:2px solid var(--ink);outline-offset:2px}
+.tier b{display:flex;align-items:center;gap:9px;font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+.tier span{display:block;font-family:var(--mono);font-size:11.5px;color:var(--dimmer);
+  margin-top:7px;padding-left:24px}
+.tier input{margin:0;flex:0 0 auto;accent-color:var(--ink);width:15px;height:15px}
+
+/* The one button that takes money is the filled one, wherever it appears. */
+button.act{margin-top:22px;font-size:15px;padding:13px 20px;
+  background:var(--ink);border-color:var(--ink);color:var(--paper)}
+button.act:hover{background:#000}
+a.act{margin-top:16px}
+
+.warn{border-left:3px solid var(--cut)}
+.warn h2{color:var(--cut)}
+.when{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;color:var(--ink);
+  background:var(--sunk);border-radius:var(--r1);padding:10px 12px;margin-top:12px;display:block}
+.linked{font-family:var(--mono);font-size:11px;color:var(--dim);
+  border:1px solid var(--line);border-radius:999px;padding:3px 9px;display:inline-block}
+.terms{margin-top:14px;font-size:14px;line-height:1.65;color:var(--dim);padding-left:1.2rem}
+.terms li{margin-top:6px}
 `;
 
 function document_(title: string, body: string): string {
@@ -205,7 +170,7 @@ function tierChoices(view: SubmitPageView): string {
  */
 export function renderSubmitPage(view: SubmitPageView): string {
   const body = [
-    '<header>',
+    '<header class="page">',
     '<div class="sh">Throw it in</div>',
     '<h1>Five dollars. One honest verdict.</h1>',
     '<p class="lede">Paste the URL, name it, say what it does. Pay. That is the whole form — ' +
@@ -290,7 +255,7 @@ export function renderRejectionPage(view: RejectionView): string {
   const { rejection } = view;
 
   const body = [
-    '<header>',
+    '<header class="page">',
     '<div class="sh">Not charged</div>',
     `<h1>${escapeHtml(headingFor(rejection))}</h1>`,
     '</header>',

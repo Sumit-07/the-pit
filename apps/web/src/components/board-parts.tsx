@@ -13,12 +13,38 @@
  * ratings stay small and secondary." So `<RowLead>` emits, in this order:
  *
  *   rank -> name -> marks -> **the heaviest cut, its reason, and the juror who
- *   took it** -> and only then the small mono numbers.
+ *   took it** -> the cut meter -> and only then the small mono numbers.
  *
  * That order is DOM order, not just visual order, and `test/boards-render.test.ts`
  * asserts it by index — because someone scanning with a screen reader, or a
  * search engine reading the page, meets the reason before the number for exactly
  * the reason a sighted reader does.
+ *
+ * ## The signature: the cut meter
+ *
+ * `<CutMeter>` is the one element this design is remembered by, and it is the
+ * mechanic drawn rather than a chart bolted onto it. Every product walks in at
+ * 100. The track is that 100; the graphite head is what survived; each segment
+ * after it is **one metric's** contribution to the loss.
+ *
+ * The widths are exact, not illustrative. `cuts = 100 − mean(metric score)`, so a
+ * metric contributes `metricCuts / metricCount` and the segments sum to the bar
+ * with no residue — verified against all 92 seeded products in both categories.
+ * Segments are heaviest-first, so the most expensive metric is the widest block
+ * against the boundary, and each one carries its metric, its points and its
+ * heaviest reason **with the juror who took it** in a `title`.
+ *
+ * `<JurorMeter>` is the same figure one level down, inside an open ledger, split
+ * by juror instead of by metric. That decomposition is exact for the same reason:
+ * a metric's score is the mean of six jurors' own 100s, so juror J contributes
+ * `(sum of J's points on this metric) / jurorCount`. It is why "every deduction
+ * shows the juror" is structural here and not a caption — the juror is a
+ * measurable share of the bar.
+ *
+ * Neither meter is the only route to its content. Both are `aria-hidden` with the
+ * same facts stated in text beside them, and every deduction is written out in
+ * full in the ledger below, because a `title` is not an accessible name and a
+ * hover is not available to a keyboard.
  *
  * ## Escaping
  *
@@ -33,18 +59,24 @@
 import type { CSSProperties, ReactNode } from 'react';
 
 import { SOLO_NOTE } from '@/lib/boards/copy';
-import { metricLabel, n1, n2, rank2, type RowView } from '@/lib/boards/view';
+import { metricLabel, n1, n2, rank2, type MetricView, type RowView } from '@/lib/boards/view';
 
 /** How much of a row's numbers a surface shows. The homepage shows fewer. */
 export type NumberSet = 'home' | 'board';
 
+/** The opacity ramp a segment sits on: heaviest is solid, the rest step back. */
+function segClass(index: number): string {
+  return index === 0 ? 'seg' : `seg s${Math.min(index + 1, 6)}`;
+}
+
 /**
  * The marks a row can carry.
  *
- * Each one is a `title` as well as a colour, because a coloured chip that only a
+ * Each one is a `title` as well as a treatment, because a chip that only a
  * returning visitor can decode is decoration. `solo cluster` in particular is the
- * common case — 32 of 48 and 26 of 44 in the seeded categories — so it is stated
- * as a property, never styled as a warning.
+ * common case — 32 of 48 and 26 of 44 in the seeded categories — so it is a
+ * hairline outline and never a colour: the one hue in this system means "taken",
+ * and a solo cluster took nothing from anyone.
  */
 function RowTags({ row }: { row: RowView }): ReactNode {
   if (!row.soloCluster && !row.tiebroken && row.flagged.length === 0) return null;
@@ -99,13 +131,71 @@ export function RowLead({ row }: { row: RowView }): ReactNode {
   );
 }
 
+/** The `title` a metric segment carries: what it cost, and the worst thing said. */
+function segmentTitle(metric: MetricView, share: number): string {
+  const worst = metric.deductions.at(0);
+  const head = `${metricLabel(metric.metric)} — ${n1(metric.cuts)} off 100, ${n1(share)} of this card's cuts`;
+  return worst === undefined ? `${head}. Nothing came off this metric.` : `${head}. −${worst.points} ${worst.reason} — ${worst.role}`;
+}
+
+/**
+ * The cut meter. See the module header — this is the signature element.
+ *
+ * `aria-hidden` on the bar itself and the same facts in the caption beside it:
+ * the meter is a second reading of numbers that are already written down, and a
+ * screen reader should get the sentence rather than a run of unlabelled boxes.
+ */
+export function CutMeter({ row }: { row: RowView }): ReactNode {
+  const count = row.metrics.length;
+  const cuts = Math.max(0, Math.min(100, row.cuts));
+  const kept = 100 - cuts;
+  // `view.ts` sorts metrics heaviest-loss-first, so the first is the widest block.
+  const heaviest = row.metrics.at(0);
+
+  return (
+    <span className="meterwrap">
+      <span className="meter" aria-hidden="true">
+        <i className="kept" style={{ width: `${kept}%` }} />
+        {row.metrics.map((metric, index) => (
+          <i
+            className={segClass(index)}
+            style={{ width: `${Math.max(0, metric.cuts) / Math.max(1, count)}%` }}
+            title={segmentTitle(metric, Math.max(0, metric.cuts) / Math.max(1, count))}
+            key={metric.metric}
+          />
+        ))}
+      </span>
+      <span className="metercap">
+        <span>
+          {count === 0
+            ? 'no metrics scored'
+            : `${Math.round(kept)} of 100 left · ${count} ${count === 1 ? 'metric' : 'metrics'} · ${row.deductionCount} ${
+                row.deductionCount === 1 ? 'reason' : 'reasons'
+              }`}
+        </span>
+        {/*
+          The widest block, named. A segmented bar whose blocks can only be
+          identified by hovering is a bar a phone cannot read, so the one that
+          matters most is written out beside it.
+        */}
+        {heaviest === undefined ? null : (
+          <span className="heaviest">
+            widest: {metricLabel(heaviest.metric)} &minus;{n1(heaviest.cuts)}
+          </span>
+        )}
+      </span>
+    </span>
+  );
+}
+
 /**
  * The small mono numbers, to the right of the reason and after it in the DOM.
  *
  * `Cuts` is the one that is allowed to be loud, because it is the connective word
  * `brief` Part 5 keeps on every surface and it is a count of what came off rather
  * than a rating. Merit, demand and core are muted and drop out below 760px: a
- * phone gets the reason and the cuts, which is the whole point of the surface.
+ * phone gets the reason, the meter and the cuts, which is the whole point of the
+ * surface.
  */
 export function RowNumbers({ row, set }: { row: RowView; set: NumberSet }): ReactNode {
   return (
@@ -113,21 +203,32 @@ export function RowNumbers({ row, set }: { row: RowView; set: NumberSet }): Reac
       <span className="cell cuts" title="100 minus the mean metric score — what came off this card">
         <span className="v">&minus;{Math.round(row.cuts)}</span>
       </span>
-      <span className="cell c-hide" title="pure merit composite, before the blend">
-        <span className="v">{n2(row.composite)}</span>
-      </span>
-      <span className="cell c-hide" title="reduced demand from the floor">
-        {row.demand === undefined ? (
-          <span className="v none">none</span>
-        ) : (
-          <span className="v">{n2(row.demand)}</span>
-        )}
-      </span>
-      {set === 'board' ? (
-        <span className="cell c-hide" title="the blended score this row is ranked by">
-          <span className="v">{n2(row.core)}</span>
+      {/*
+        Named, because three unlabelled grey decimals are a riddle rather than a
+        secondary reading. Small, muted and after the reason in the DOM — `brief`
+        Part 6's "numeric ratings stay small and secondary" — and gone entirely
+        below 760px, where a phone gets the reason, the meter and the cuts.
+      */}
+      <span className="nums">
+        <span className="cell c-hide" title="pure merit composite, before the blend">
+          <span className="k">merit</span>
+          <span className="v">{n2(row.composite)}</span>
         </span>
-      ) : null}
+        <span className="cell c-hide" title="reduced demand from the floor">
+          <span className="k">demand</span>
+          {row.demand === undefined ? (
+            <span className="v none">none</span>
+          ) : (
+            <span className="v">{n2(row.demand)}</span>
+          )}
+        </span>
+        {set === 'board' ? (
+          <span className="cell c-hide" title="the blended score this row is ranked by">
+            <span className="k">core</span>
+            <span className="v">{n2(row.core)}</span>
+          </span>
+        ) : null}
+      </span>
     </>
   );
 }
@@ -147,8 +248,62 @@ export function BoardHead({ set, trailing }: { set: NumberSet; trailing?: ReactN
   );
 }
 
-/** One metric's ledger: the bar, then every cut with its points, reason and juror. */
-function MetricLedger({ metric }: { metric: RowView['metrics'][number] }): ReactNode {
+/**
+ * One metric's loss, split by the juror who caused it.
+ *
+ * Exact, not illustrative: a metric's merged score is the mean of its jurors' own
+ * scores, so juror J's share of the metric's loss is `J's points / jurorCount` and
+ * the shares sum to the loss. Jurors are ordered by what they took, heaviest
+ * first, so the widest block is the juror who hurt this metric most.
+ */
+function JurorMeter({ metric }: { metric: MetricView }): ReactNode {
+  const jurors = Math.max(1, metric.jurors);
+  const byRole = new Map<string, number>();
+  for (const deduction of metric.deductions) {
+    byRole.set(deduction.role, (byRole.get(deduction.role) ?? 0) + deduction.points);
+  }
+  const shares = [...byRole.entries()]
+    .map(([role, points]) => ({ role, share: points / jurors, points }))
+    .sort((a, b) => b.share - a.share);
+
+  const lost = Math.max(0, Math.min(100, metric.cuts));
+
+  // A metric nobody cut still gets its bar. An absent bar reads as missing data;
+  // a full one reads as "this survived", which is what happened.
+  if (shares.length === 0) {
+    return (
+      <>
+        <span className="jurorbar" aria-hidden="true">
+          <i className="kept" style={{ width: '100%' }} />
+        </span>
+        <span className="jurorcap">nothing came off this metric</span>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <span className="jurorbar" aria-hidden="true">
+        <i className="kept" style={{ width: `${100 - lost}%` }} />
+        {shares.map((entry, index) => (
+          <i
+            className={segClass(index)}
+            style={{ width: `${entry.share}%` }}
+            title={`${entry.role} — ${entry.points} points off their own 100, ${n1(entry.share)} off this metric`}
+            key={entry.role}
+          />
+        ))}
+      </span>
+      <span className="jurorcap">
+        {shares.length} of {jurors} {jurors === 1 ? 'juror' : 'jurors'} cut here &middot; widest block is{' '}
+        {shares[0]?.role}
+      </span>
+    </>
+  );
+}
+
+/** One metric's ledger: the bar, the juror split, then every cut with its points, reason and juror. */
+function MetricLedger({ metric }: { metric: MetricView }): ReactNode {
   return (
     <div className="ledger">
       <div className="ledger-h">
@@ -159,10 +314,7 @@ function MetricLedger({ metric }: { metric: RowView['metrics'][number] }): React
           {n1(metric.score)} / 100 &middot; spread &plusmn;{n1(metric.spread)} &middot; {metric.jurors} jurors
         </span>
       </div>
-      <div className="bar">
-        <i className="kept" style={{ width: `${n1(metric.score)}%` }} />
-        <i className="lost" style={{ width: `${n1(metric.cuts)}%` }} />
-      </div>
+      <JurorMeter metric={metric} />
       {metric.deductions.map((deduction, index) => (
         <div className="ded" key={`${deduction.role}-${index}`}>
           <span className="pts">&minus;{deduction.points}</span>
@@ -216,7 +368,7 @@ export function RowLedger({ row }: { row: RowView }): ReactNode {
           <b>{row.cluster.label}</b> &middot; {row.cluster.size}{' '}
           {row.cluster.size === 1 ? 'product' : 'products'} &middot; uniqueness {row.cluster.uniqueness}/100
         </p>
-        <p style={{ marginTop: 5 }}>{row.cluster.reason}</p>
+        <p style={{ marginTop: 7 }}>{row.cluster.reason}</p>
       </div>
 
       <div className="blk">
@@ -275,11 +427,13 @@ export function RowLedger({ row }: { row: RowView }): ReactNode {
  * bundle would mean the cached page is inert until the JavaScript lands, and the
  * ledger is the reason anyone opened it.
  *
- * `--depth` darkens the row as it descends. No row animates on a rank change:
- * `brief` Part 6 is explicit that motion comes from rotating categories and
- * arriving verdicts and never from rank churn, and `brief §1.2` has every rank
- * move on every placement — animating that would advertise instability as a
- * feature.
+ * `--depth` sinks the row as it descends. `brief` Part 6's "rows darken as they
+ * descend (the pit is literal)" is depth in the surface stack rather than mud in
+ * the palette: the first row is a lifted white card and the last is flush with the
+ * floor. No row animates on a rank change — `brief` Part 6 is explicit that motion
+ * comes from rotating categories and arriving verdicts and never from rank churn,
+ * and `brief §1.2` has every rank move on every placement, so animating that would
+ * advertise instability as a feature.
  */
 export function BoardRow({ row, depth, first }: { row: RowView; depth: string; first: boolean }): ReactNode {
   return (
@@ -289,6 +443,7 @@ export function BoardRow({ row, depth, first }: { row: RowView; depth: string; f
           {row.soloCluster ? <span className="flag" aria-hidden="true" /> : null}
           <span className="rk">{rank2(row.rank)}</span>
           <RowLead row={row} />
+          <CutMeter row={row} />
           <RowNumbers row={row} set="board" />
           <span className="chev" aria-hidden="true">
             &#9656;

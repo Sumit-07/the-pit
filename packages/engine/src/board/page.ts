@@ -7,13 +7,29 @@
  *
  * ## Where the design comes from
  *
- * The palette, the type treatment and the row anatomy are `the-pit-home.html`'s,
- * taken verbatim — the same eight custom properties, the same Archivo Black /
- * Barlow / IBM Plex Mono stack (with local fallbacks, since a font CDN is not
- * allowed here), the same per-row `--depth` overlay that darkens rows as they
- * descend. The expandable ledger, the metric bar and the picks list follow the
- * board pane of `platform-surfaces-mockup.html`, restated in the dark palette.
- * Nothing here is a new visual idea; both files are the reference.
+ * `apps/web/src/lib/theme.ts`, restated. Five values — `--paper`, `--card`,
+ * `--sunk`, `--ink` and one hue, `--cut` — with every rule, shadow and muted tone
+ * derived from `--ink` at an alpha. One sans and one mono, declared with local
+ * fallbacks and loaded from nowhere, because this page must render with the
+ * machine offline. `--cut` is the only colour in the system and it means exactly
+ * one thing: this was taken.
+ *
+ * The copy is deliberate, not an oversight. `PHASE-0.md §3` forbids the engine
+ * importing from `apps/web`, so the preview board and the public board are kept in
+ * step by hand — as they have been since this file was written. The two are meant
+ * to look like one product, because they publish the same verdict.
+ *
+ * `brief` Part 6's "rows darken as they descend (the pit is literal)" is read as
+ * depth in the surface stack rather than as mud in the palette: `--depth` runs 0
+ * at rank 1 to 1 at the last row, and the row's ground sinks from `--card` toward
+ * `--sunk` as it goes. Hovering lifts it back out.
+ *
+ * The signature is the **cut meter**: every product walked in at 100, the graphite
+ * head is what survived, and each segment after it is one metric's exact share of
+ * the loss. Inside an open row the same bar splits again by juror. Both
+ * decompositions are exact — `cuts = 100 - mean(metric score)`, and a metric's
+ * score is the mean of its jurors' own 100s — which is what makes the drawing a
+ * statement about the mechanic rather than a decoration on it.
  *
  * ## What `brief` Part 6 requires of it
  *
@@ -46,156 +62,228 @@ function embedJson(value: unknown): string {
 
 const CSS = `
 :root{
-  --ground:#120E0C; --ground2:#191411; --panel:#211A16; --rule:#33291F; --rule2:#241D18;
-  --bone:#EDE6DE; --muted:#93857A; --blade:#E2482C; --coin:#D9A441; --roar:#5B9EA6;
-  --body:"Barlow","Helvetica Neue",Helvetica,Arial,sans-serif;
-  --disp:"Archivo Black","Arial Black","Helvetica Neue",Impact,sans-serif;
+  --paper:#EDEFF3; --card:#FFFFFF; --sunk:#DCE0E7; --ink:#101317; --cut:#9C1B2F;
+  --ink-c:16 19 23; --cut-c:156 27 47;
+  --dim:rgb(var(--ink-c) / .58); --dimmer:rgb(var(--ink-c) / .40);
+  --line:rgb(var(--ink-c) / .11); --hair:rgb(var(--ink-c) / .06); --wash:rgb(var(--ink-c) / .035);
+  --e1:0 1px 2px rgb(var(--ink-c) / .05), 0 1px 1px rgb(var(--ink-c) / .04);
+  --e2:0 2px 4px rgb(var(--ink-c) / .05), 0 8px 20px rgb(var(--ink-c) / .07);
+  --e3:0 2px 6px rgb(var(--ink-c) / .06), 0 14px 40px rgb(var(--ink-c) / .12);
+  --r1:6px; --r2:10px; --r3:16px;
+  --sans:"Archivo","Helvetica Neue",Helvetica,Arial,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html{background:var(--ground)}
-body{background:var(--ground);color:var(--bone);font-family:var(--body);
-  -webkit-font-smoothing:antialiased;overflow-x:hidden}
-.wrap{max-width:1000px;margin:0 auto;padding:0 14px}
+html{background:var(--paper);-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;
+  line-height:1.55;-webkit-font-smoothing:antialiased;font-synthesis-weight:none;overflow-x:hidden}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:3px}
+.wrap{max-width:1080px;margin:0 auto;padding:0 18px}
 
-nav{display:flex;justify-content:space-between;align-items:center;padding:13px 0;
-  border-bottom:1px solid var(--rule)}
-.mark{font-family:var(--disp);font-size:14px;letter-spacing:-.02em}
-.mark i{color:var(--blade);font-style:normal}
-.navr{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.06em}
+nav{display:flex;justify-content:space-between;align-items:center;padding:20px 0 18px}
+.mark{font-weight:800;font-size:14px;letter-spacing:.02em;text-transform:uppercase;
+  display:inline-flex;align-items:center;gap:7px}
+.mark::before{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--cut)}
+.mark i{font-style:normal}
+.navr{font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.04em}
 
 /* ---------- head ---------- */
-.head{padding:24px 0 4px}
-.sh{font-family:var(--mono);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
-h1{font-family:var(--disp);font-size:clamp(27px,6.6vw,46px);line-height:.92;
-  letter-spacing:-.035em;text-transform:uppercase;margin-top:8px}
-h1 em{font-style:normal;color:var(--blade)}
-.headsub{font-size:14px;line-height:1.35;margin-top:10px;max-width:52ch;color:#C9BCB1}
-.headsub b{color:var(--bone);font-weight:600}
+.head{padding:8px 0 0}
+.sh{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.17em;
+  text-transform:uppercase;color:var(--dim)}
+h1{font-weight:700;font-size:clamp(28px,5vw,44px);line-height:1.04;letter-spacing:-.03em;margin-top:10px}
+h1 em{font-style:normal;color:var(--dim)}
+.headsub{font-size:15px;line-height:1.6;margin-top:12px;max-width:66ch;color:var(--dim)}
+.headsub b{color:var(--ink);font-weight:600}
 
-/* ---------- category switcher (home mockup treatment) ---------- */
-.rail{margin-top:20px;border-top:1px solid var(--rule);padding-top:13px}
-.railhead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:9px}
-.cats{display:flex;gap:5px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:9px}
-.cat{font-family:var(--mono);font-size:10.5px;white-space:nowrap;cursor:pointer;
-  background:transparent;border:1px solid var(--rule);color:var(--muted);padding:6px 10px;border-radius:1px;
-  transition:color .15s,border-color .15s,background .15s}
-.cat:hover{color:var(--bone);border-color:var(--muted)}
-.cat.on{background:var(--blade);border-color:var(--blade);color:#150C0A;font-weight:600}
-.cat:focus-visible{outline:2px solid var(--bone);outline-offset:2px}
+/* ---------- category switcher ---------- */
+.rail{margin-top:26px}
+.railhead{display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin-bottom:12px}
+.cats{display:flex;gap:8px;flex-wrap:wrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+.cat{font-family:var(--sans);font-size:13px;font-weight:600;letter-spacing:-.005em;white-space:nowrap;
+  cursor:pointer;background:transparent;border:1px solid var(--line);color:var(--dim);
+  padding:8px 13px;border-radius:var(--r1);transition:color .16s,background .16s,box-shadow .16s}
+.cat:hover{color:var(--ink);background:var(--card)}
+.cat.on{background:var(--ink);border-color:var(--ink);color:var(--paper);box-shadow:var(--e1)}
 
 /* ---------- stat strip ---------- */
-.strip{display:flex;gap:22px;flex-wrap:wrap;background:var(--ground2);border:1px solid var(--rule);
-  padding:10px 12px;margin-top:2px}
-.strip .k{display:block;font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--muted);margin-bottom:3px}
-.strip .v{display:block;font-family:var(--mono);font-size:14px;font-weight:600}
-.strip .v.solo{color:var(--coin)}
-.strip .v.tb{color:var(--roar)}
-.legend{font-family:var(--mono);font-size:10px;line-height:1.6;color:var(--muted);margin-top:9px}
-.legend b{color:#C9BCB1;font-weight:500}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;
+  background:var(--line);border:1px solid var(--line);border-radius:var(--r2);
+  box-shadow:var(--e1);overflow:hidden;margin-top:14px}
+.strip > div{background:var(--card);padding:13px 14px;min-width:0}
+.strip .k{display:block;font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--dimmer)}
+.strip .v{display:block;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:19px;
+  font-weight:600;letter-spacing:-.02em;margin-top:7px}
+.legend{font-size:13px;line-height:1.7;color:var(--dim);margin-top:16px;background:var(--sunk);
+  border:1px solid var(--line);border-radius:var(--r2);padding:14px 16px;
+  box-shadow:inset 0 1px 2px rgb(var(--ink-c) / .05)}
+.legend b{color:var(--ink);font-weight:600}
 
-/* ---------- the board: a pit ---------- */
-.board{margin-top:16px}
-.bhead{display:flex;align-items:center;gap:10px;padding:8px 11px;
-  font-family:var(--mono);font-size:8.5px;letter-spacing:.13em;
-  text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--rule)}
-.bhead .c-rk{min-width:30px}
-.bhead .c-nm{flex:1}
-.bhead .c-x{min-width:52px;text-align:right}
-.bhead .c-ch{min-width:20px;text-align:right}
+/* ---------- the board ---------- */
+.board{margin-top:18px;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r3);box-shadow:var(--e3);overflow:hidden}
+.bhead{display:grid;grid-template-columns:38px 1fr auto;gap:14px;align-items:center;
+  padding:12px 18px;background:var(--wash);border-bottom:1px solid var(--line);
+  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--dimmer)}
+.bhead .c-x{display:none}
+.bhead .c-ch{justify-self:end}
 .c-hide{display:none}
 @media(min-width:760px){.c-hide{display:block}}
-.allbtn{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;
-  background:none;border:1px solid var(--rule);color:var(--muted);padding:3px 7px;cursor:pointer;border-radius:1px}
-.allbtn:hover{color:var(--bone);border-color:var(--muted)}
+.allbtn{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;background:var(--card);border:1px solid var(--line);color:var(--dim);
+  padding:5px 10px;cursor:pointer;border-radius:var(--r1);box-shadow:var(--e1)}
+.allbtn:hover{color:var(--ink)}
 
-.brow{border-bottom:1px solid var(--rule2);animation:rise .4s cubic-bezier(.2,.8,.3,1) backwards}
-@keyframes rise{from{opacity:0;transform:translateY(9px)}}
-/* The pit is literal: the board starts at the surface and every row below it is
-   further down. The --depth variable is set per row, 0 at rank 1 to 1 at the last, and the
-   overlay is what daylight is left. Hovering lifts a row back out of it. */
-.rowhead{position:relative;display:flex;align-items:center;gap:10px;padding:11px;width:100%;
-  background:var(--ground2);border:0;text-align:left;font-family:inherit;color:inherit;cursor:pointer}
-.rowhead::after{content:"";position:absolute;inset:0;pointer-events:none;transition:opacity .18s;
-  background:linear-gradient(to bottom,rgba(0,0,0,.30),rgba(0,0,0,.80));opacity:var(--depth,0)}
-.rowhead:hover{background:var(--panel)}
-.rowhead:hover::after{opacity:0}
-.rowhead:focus-visible{outline:2px solid var(--blade);outline-offset:-2px}
-.flag{position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--coin);z-index:2}
-.rk{font-family:var(--disp);font-size:16px;letter-spacing:-.04em;min-width:30px;
-  color:var(--bone);position:relative;z-index:1}
-.brow.first .rk{color:var(--blade);font-size:19px}
-.nm{flex:1;min-width:0;position:relative;z-index:1}
-/* The name may be clipped; the solo/moved marks may never be. */
-.nm b{display:flex;align-items:baseline;font-size:13.5px;font-weight:600}
+.brow{border-top:1px solid var(--line);animation:rise .34s cubic-bezier(.2,.7,.3,1) backwards}
+.brow:first-of-type{border-top:0}
+@keyframes rise{from{opacity:0;transform:translateY(7px)}}
+
+/*
+ * The pit is literal, and on paper it is depth rather than darkness: --depth runs
+ * 0 at rank 1 to 1 at the last row, and the row's ground sinks from the raised
+ * white card toward the recessed floor. Hovering lifts it back out.
+ */
+.rowhead{--depth:0;position:relative;display:grid;
+  grid-template-columns:38px minmax(0,1fr) auto;
+  grid-template-areas:"rank name cuts" "rank lead nums" "rank meter meter";
+  column-gap:16px;row-gap:2px;align-items:start;width:100%;padding:15px 18px 14px;
+  border:0;text-align:left;font-family:inherit;color:inherit;cursor:pointer;
+  background:color-mix(in srgb, var(--card) calc(100% - var(--depth) * 62%), var(--sunk));
+  transition:background .16s ease}
+.rowhead:hover{background:color-mix(in srgb, var(--card) calc(100% - var(--depth) * 40%), var(--sunk))}
+.rowhead:focus-visible{outline:2px solid var(--ink);outline-offset:-2px}
+.flag{position:absolute;left:0;top:10px;bottom:10px;width:2px;border-radius:0 2px 2px 0;
+  background:rgb(var(--ink-c) / .22)}
+.rk{grid-area:rank;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px;
+  font-weight:600;color:var(--dim);letter-spacing:-.02em;padding-top:1px}
+.nm{grid-area:name;min-width:0}
+.nm b{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;font-size:15px;font-weight:600;
+  letter-spacing:-.012em;line-height:1.3}
 .pname{min-width:0;flex:0 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.topcut{display:block;font-size:11.5px;line-height:1.4;color:#B3A79C;margin-top:3px;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.topcut .pts{font-family:var(--mono);font-size:11px;color:var(--blade);font-weight:600}
-.topcut .who{font-family:var(--mono);font-size:10px;color:var(--muted)}
-.tags{display:inline-flex;gap:5px;flex:none;margin-left:7px}
-.tag{font-family:var(--mono);font-size:8px;letter-spacing:.1em;text-transform:uppercase;
-  padding:1px 4px;border-radius:1px;font-weight:500}
-.tag.solo{color:var(--coin);border:1px solid rgba(217,164,65,.42)}
-.tag.tb{color:var(--roar);border:1px solid rgba(91,158,166,.42)}
-.tag.fl{color:var(--muted);border:1px solid var(--rule)}
-.cell{min-width:52px;text-align:right;position:relative;z-index:1}
-.cell .v{display:block;font-family:var(--mono);font-size:11.5px;color:#C9BCB1}
-.cell.cuts .v{color:var(--blade);font-weight:600;font-size:13px}
-.cell .v.none{color:var(--coin)}
-.chev{position:relative;z-index:1;color:var(--muted);font-size:11px;min-width:20px;text-align:right;
-  transition:transform .18s}
+.topcut{grid-area:lead;display:block;font-size:14px;line-height:1.5;color:var(--dim);margin-top:6px}
+.topcut .pts{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px;
+  color:var(--cut);font-weight:600;margin-right:3px}
+.topcut .who{font-family:var(--mono);font-size:11px;color:var(--dimmer);white-space:nowrap}
+.tags{display:inline-flex;gap:6px;flex-wrap:wrap;flex:none}
+.tag{font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.1em;
+  text-transform:uppercase;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.tag.solo{border:1px solid var(--line);color:var(--dim)}
+.tag.tb{background:rgb(var(--ink-c) / .86);color:var(--card)}
+.tag.fl{border:1px solid rgb(var(--cut-c) / .40);color:var(--cut);background:rgb(var(--cut-c) / .06)}
+
+/* ---------- the signature: the cut meter ---------- */
+.meterwrap{grid-area:meter;min-width:0;margin-top:9px}
+.meter{display:flex;height:10px;border-radius:999px;background:var(--sunk);overflow:hidden;
+  box-shadow:inset 0 1px 1px rgb(var(--ink-c) / .07)}
+.meter .kept{background:rgb(var(--ink-c) / .24);height:100%;flex:0 0 auto}
+.meter .seg{background:var(--cut);height:100%;flex:0 0 auto;box-shadow:-1px 0 0 var(--card)}
+.meter .seg.s2{background:rgb(var(--cut-c) / .82)}
+.meter .seg.s3{background:rgb(var(--cut-c) / .66)}
+.meter .seg.s4{background:rgb(var(--cut-c) / .52)}
+.meter .seg.s5{background:rgb(var(--cut-c) / .40)}
+.meter .seg.s6{background:rgb(var(--cut-c) / .30)}
+.metercap{display:flex;justify-content:space-between;gap:14px;margin-top:7px;
+  font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:10.5px;
+  letter-spacing:.02em;color:var(--dimmer)}
+.metercap .heaviest{text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.cell{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11.5px;
+  color:var(--dimmer);white-space:nowrap}
+.cell .v{color:var(--dim)}
+.cell.cuts{grid-area:cuts;font-size:15px;font-weight:600;letter-spacing:-.02em;
+  text-align:right;padding-top:1px}
+.cell.cuts .v{color:var(--cut)}
+.nums{grid-area:nums;display:flex;gap:11px;align-items:baseline;justify-content:flex-end;
+  align-self:start;padding-top:4px}
+.nums .k{color:rgb(var(--ink-c) / .30);margin-right:3px}
+.chev{position:absolute;left:20px;top:38px;font-size:10px;line-height:1;color:var(--dimmer);
+  transition:transform .16s}
 .brow.open .chev{transform:rotate(90deg)}
 
 /* ---------- the ledger ---------- */
-.detail{display:none;background:var(--ground2);border-top:1px solid var(--rule2);padding:2px 13px 16px}
+.detail{display:none;background:var(--wash);border-top:1px solid var(--hair);padding:4px 18px 22px}
 .brow.open .detail{display:block}
-.took{font-size:13px;line-height:1.45;color:#C9BCB1;margin-top:13px}
-.took b{color:var(--bone);font-weight:600}
-.took a{color:var(--blade);text-decoration:none;font-family:var(--mono);font-size:11px}
-.took a:hover{text-decoration:underline}
-.sect{font-family:var(--mono);font-size:9px;letter-spacing:.15em;text-transform:uppercase;
-  color:var(--muted);margin-bottom:8px}
-.ledger{margin-top:15px}
-.ledger-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
-.ledger-h .mt{font-size:12.5px;font-weight:600}
-.ledger-h .sc{font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap}
-.bar{display:flex;height:8px;overflow:hidden;background:var(--rule2);margin-top:6px}
+.took{font-size:14px;line-height:1.6;color:var(--dim);padding:12px 0 4px}
+.took b{color:var(--ink);font-weight:600}
+.took a,.took .who{font-family:var(--mono);font-size:11.5px;color:var(--dim);overflow-wrap:anywhere}
+.sect{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--dimmer);margin-bottom:9px}
+.ledger{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
+  box-shadow:var(--e1);padding:14px 16px 12px;margin-top:12px}
+.ledger-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.ledger-h .mt{font-size:14px;font-weight:600;letter-spacing:-.008em}
+.ledger-h .sc{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11px;
+  color:var(--dimmer);white-space:nowrap}
+.bar{display:flex;height:10px;border-radius:999px;background:var(--sunk);overflow:hidden;
+  margin-top:10px;box-shadow:inset 0 1px 1px rgb(var(--ink-c) / .07)}
 .bar i{display:block;height:100%}
-.bar i.kept{background:rgba(237,230,222,.20)}
-.bar i.lost{background:var(--blade);opacity:.82}
-.ded{display:flex;gap:9px;font-size:12px;line-height:1.5;color:#B3A79C;margin-top:7px}
-.ded .pts{font-family:var(--mono);font-size:11px;color:var(--blade);font-weight:600;
-  min-width:30px;text-align:right;padding-top:1px}
-.ded .who{font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap}
-.sub{font-family:var(--mono);font-size:10px;color:var(--coin);margin-top:6px}
+.bar i.kept{background:rgb(var(--ink-c) / .24)}
+.bar i.lost{background:var(--cut)}
+.bar i.j{background:var(--cut);box-shadow:-1px 0 0 var(--card)}
+.bar i.j.s2{background:rgb(var(--cut-c) / .82)}
+.bar i.j.s3{background:rgb(var(--cut-c) / .66)}
+.bar i.j.s4{background:rgb(var(--cut-c) / .52)}
+.bar i.j.s5{background:rgb(var(--cut-c) / .40)}
+.bar i.j.s6{background:rgb(var(--cut-c) / .30)}
+.barcap{display:block;margin-top:7px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer)}
+.ded{display:grid;grid-template-columns:42px minmax(0,1fr);gap:12px;font-size:14px;line-height:1.5;
+  color:var(--dim);margin-top:10px;padding-top:10px;border-top:1px solid var(--hair)}
+.barcap + .ded{border-top:0}
+.ded .pts{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;color:var(--cut);
+  font-weight:600;text-align:right;padding-top:1px}
+.ded .who{font-family:var(--mono);font-size:11px;color:var(--dimmer);white-space:nowrap}
+.sub{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:12px;padding:8px 10px;
+  background:var(--sunk);border-radius:var(--r1)}
 
-.blk{margin-top:18px;padding-top:13px;border-top:1px dashed var(--rule)}
-.blk p{font-size:12px;line-height:1.5;color:#B3A79C}
-.blk p b{color:var(--bone);font-weight:600}
-.pick{display:flex;gap:9px;font-size:12px;line-height:1.5;color:#B3A79C;margin-top:7px}
-.pick .p{font-family:var(--mono);font-size:9.5px;color:var(--roar);white-space:nowrap;
-  border:1px solid rgba(91,158,166,.34);padding:1px 5px;border-radius:1px;align-self:flex-start}
-.pick .p.second{color:var(--muted);border-color:var(--rule)}
-.pick .who{font-family:var(--mono);font-size:10px;color:var(--muted)}
-.solonote{color:var(--coin);font-size:12px;line-height:1.5}
-.dnums{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px}
-.flagnote{font-family:var(--mono);font-size:10.5px;line-height:1.5;color:var(--muted);margin-top:7px}
+.blk{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
+  box-shadow:var(--e1);padding:15px 16px;margin-top:12px}
+.blk p{font-size:14px;line-height:1.6;color:var(--dim)}
+.blk p b{color:var(--ink);font-weight:600}
+.pick{display:grid;grid-template-columns:auto minmax(0,1fr);gap:11px;font-size:14px;line-height:1.5;
+  color:var(--dim);margin-top:11px}
+.pick .p{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--card);background:rgb(var(--ink-c) / .86);
+  border-radius:999px;padding:3px 8px;white-space:nowrap;align-self:start}
+.pick .p.second{background:transparent;color:var(--dim);border:1px solid var(--line)}
+.pick .who{font-family:var(--mono);font-size:11px;color:var(--dimmer)}
+.solonote{color:var(--dim);font-size:14px;line-height:1.6}
+.dnums{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11px;color:var(--dimmer);
+  margin-top:14px;padding-top:11px;border-top:1px solid var(--hair)}
+.flagnote{font-family:var(--mono);font-size:11.5px;line-height:1.7;color:var(--dim);
+  margin-top:8px;overflow-wrap:anywhere}
 
 /* ---------- footer: the honesty block ---------- */
-footer{margin-top:34px;border-top:1px solid var(--rule);padding:18px 0 44px}
-.fgrid{display:flex;gap:22px;flex-wrap:wrap;background:var(--ground2);border:1px solid var(--rule);padding:11px 12px}
-.fgrid .k{display:block;font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--muted);margin-bottom:3px}
-.fgrid .v{display:block;font-family:var(--mono);font-size:14px;font-weight:600}
-.caveat{background:var(--ground2);border-left:2px solid var(--blade);padding:11px 13px;margin-top:11px}
-.caveat .sect{margin-bottom:6px}
-.caveat p{font-family:var(--mono);font-size:11px;line-height:1.62;color:#C9BCB1}
-.stamp{font-family:var(--mono);font-size:10.5px;line-height:1.7;color:var(--muted);margin-top:13px}
-.stamp b{color:#C9BCB1;font-weight:500}
-.empty{border:1px solid var(--rule);background:var(--ground2);padding:22px;margin-top:20px;
-  font-family:var(--mono);font-size:12px;line-height:1.6;color:var(--muted)}
+footer{margin-top:34px;padding:0 0 56px}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;
+  background:var(--line);border:1px solid var(--line);border-radius:var(--r2);overflow:hidden}
+.fgrid > div{background:var(--card);padding:12px 14px;min-width:0}
+.fgrid .k{display:block;font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--dimmer)}
+.fgrid .v{display:block;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:16px;
+  font-weight:600;margin-top:6px}
+.caveat{background:var(--sunk);border-radius:var(--r2);padding:15px 16px;margin-top:16px}
+.caveat p{font-size:13.5px;line-height:1.65;color:var(--dim)}
+.stamp{font-family:var(--mono);font-size:11px;line-height:1.85;color:var(--dimmer);margin-top:18px;
+  overflow-wrap:anywhere}
+.stamp b{color:var(--dim);font-weight:500}
+.empty{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
+  box-shadow:var(--e1);padding:28px;margin-top:24px;font-size:14px;line-height:1.7;color:var(--dim)}
+
+@media (max-width:760px){
+  .wrap{padding:0 14px}
+  .nums{display:none}
+  .rowhead{grid-template-columns:32px minmax(0,1fr) auto;column-gap:11px;padding:14px 14px 15px}
+  .detail{padding:4px 14px 20px}
+  .bhead{grid-template-columns:32px 1fr auto;padding:11px 14px}
+  .chev{display:none}
+}
+@media (max-width:560px){
+  /* Two mono captions side by side at 390px is two truncated captions. Stack. */
+  .metercap{flex-direction:column;gap:2px}
+  .metercap .heaviest{text-align:left}
+}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 `;
 
@@ -252,12 +340,83 @@ function rowHead(row, depth, index) {
     '<span class="rk">' + pad(row.rank) + '</span>' +
     '<span class="nm"><b><span class="pname">' + esc(row.name) + '</span>' + tags + '</b>' +
     '<span class="topcut">' + cut + '</span></span>' +
+    cutMeter(row) +
     '<span class="cell cuts" title="100 minus the mean metric score"><span class="v">-' + Math.round(row.cuts) + '</span></span>' +
-    '<span class="cell c-hide" title="pure merit composite"><span class="v">' + n2(row.composite) + '</span></span>' +
-    '<span class="cell c-hide" title="reduced demand from the floor">' + demand + '</span>' +
-    '<span class="cell c-hide" title="the blended score the row is ranked by"><span class="v">' + n2(row.core) + '</span></span>' +
+    '<span class="nums">' +
+    '<span class="cell c-hide" title="pure merit composite"><span class="k">merit</span><span class="v">' + n2(row.composite) + '</span></span>' +
+    '<span class="cell c-hide" title="reduced demand from the floor"><span class="k">demand</span>' + demand + '</span>' +
+    '<span class="cell c-hide" title="the blended score the row is ranked by"><span class="k">core</span><span class="v">' + n2(row.core) + '</span></span>' +
+    '</span>' +
     '<span class="chev">&#9656;</span>' +
     '</button>';
+}
+
+/* ---- the signature: a hundred points, and the metrics that ate them ---- */
+/*
+ * Exact, not illustrative. cuts = 100 - mean(metric score), so a metric's share is
+ * metricCuts / metricCount and the segments sum to the bar. Metrics arrive sorted
+ * heaviest-first, so the widest block sits against the boundary, and the widest one
+ * is named in the caption because a segment identifiable only by hovering is a
+ * segment a touch screen cannot read.
+ */
+function segClass(i, base) {
+  return i === 0 ? base : base + ' s' + Math.min(i + 1, 6);
+}
+function cutMeter(row) {
+  var count = row.metrics.length;
+  var cuts = Math.max(0, Math.min(100, row.cuts));
+  var kept = 100 - cuts;
+  var h = '<span class="meterwrap"><span class="meter" aria-hidden="true">' +
+    '<i class="kept" style="width:' + kept + '%"></i>';
+  for (var i = 0; i < count; i++) {
+    var mt = row.metrics[i];
+    var share = Math.max(0, mt.cuts) / count;
+    var worst = mt.deductions.length ? mt.deductions[0] : null;
+    var title = metricLabel(mt.metric) + ' - ' + n1(mt.cuts) + ' off 100, ' + n1(share) + " of this card's cuts" +
+      (worst ? '. -' + worst.points + ' ' + worst.reason + ' - ' + worst.role : '. Nothing came off this metric.');
+    h += '<i class="' + segClass(i, 'seg') + '" style="width:' + share + '%" title="' + esc(title) + '"></i>';
+  }
+  h += '</span><span class="metercap"><span>' +
+    (count === 0
+      ? 'no metrics scored'
+      : Math.round(kept) + ' of 100 left &middot; ' + count + (count === 1 ? ' metric' : ' metrics')) +
+    '</span>' +
+    (count === 0
+      ? ''
+      : '<span class="heaviest">widest: ' + esc(metricLabel(row.metrics[0].metric)) + ' -' + n1(row.metrics[0].cuts) + '</span>') +
+    '</span></span>';
+  return h;
+}
+
+/* ---- one metric's loss, split by the juror who caused it ---- */
+/*
+ * Exact for the same reason: a metric's merged score is the mean of its jurors'
+ * own 100s, so juror J contributes (J's points / jurorCount) and the shares sum to
+ * the loss. The juror is a measurable width, not a byline.
+ */
+function jurorBar(mt) {
+  var jurors = Math.max(1, mt.jurors);
+  var lost = Math.max(0, Math.min(100, mt.cuts));
+  var byRole = {};
+  var order = [];
+  for (var d = 0; d < mt.deductions.length; d++) {
+    var role = mt.deductions[d].role;
+    if (!(role in byRole)) { byRole[role] = 0; order.push(role); }
+    byRole[role] += mt.deductions[d].points;
+  }
+  if (order.length === 0) {
+    return '<div class="bar"><i class="kept" style="width:100%"></i></div>' +
+      '<span class="barcap">nothing came off this metric</span>';
+  }
+  order.sort(function (a, b) { return byRole[b] - byRole[a]; });
+
+  var h = '<div class="bar"><i class="kept" style="width:' + (100 - lost) + '%"></i>';
+  for (var i = 0; i < order.length; i++) {
+    h += '<i class="' + segClass(i, 'j') + '" style="width:' + (byRole[order[i]] / jurors) + '%" title="' +
+      esc(order[i] + ' - ' + byRole[order[i]] + ' points off their own 100') + '"></i>';
+  }
+  return h + '</div><span class="barcap">' + order.length + ' of ' + jurors +
+    ' jurors cut here &middot; widest block is ' + esc(order[0]) + '</span>';
 }
 
 /* ---- expanded row: the whole ledger, built on first open ---- */
@@ -276,8 +435,7 @@ function detailHtml(row) {
       '<span class="mt" title="' + esc(mt.metric) + '">' + esc(metricLabel(mt.metric)) + '</span>' +
       '<span class="sc">' + n1(mt.score) + ' / 100 &middot; spread &plusmn;' + n1(mt.spread) +
       ' &middot; ' + mt.jurors + ' jurors</span></div>' +
-      '<div class="bar"><i class="kept" style="width:' + n1(mt.score) + '%"></i>' +
-      '<i class="lost" style="width:' + n1(mt.cuts) + '%"></i></div>';
+      jurorBar(mt);
     for (var d = 0; d < mt.deductions.length; d++) {
       var de = mt.deductions[d];
       h += '<div class="ded"><span class="pts">-' + de.points + '</span>' +

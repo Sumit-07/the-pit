@@ -1,36 +1,66 @@
 /*
  * The Pit — the public face.
  *
- * This is `the-pit-home.html` and nothing else. The eight custom properties, the
- * Archivo Black / Barlow / IBM Plex Mono stack, the compact hero, the rolling
- * category rail with its 7s progress bar, the row-depth darkening, the three
- * panels, the closer: all taken from the founder's own homepage, at the founder's
- * own sizes. Nothing here is a new visual idea and nothing here modernises one.
+ * The React mirror of `src/lib/theme.ts`. That module is the same theme for the
+ * surfaces that have to be self-contained HTML strings (the downloadable verdict
+ * page, checkout, account, the magic-link screens); this file is the same tokens
+ * and the same base layer for the surfaces Next renders, plus everything the
+ * board itself needs. The two are kept in step by hand because a `.css` file
+ * cannot be interpolated into a `<style>` block that has to survive being saved to
+ * disk. `theme.ts`'s header carries the reasoning for the palette and the type.
  *
- * The board's expandable ledger, its metric bar and its picks list come from the
- * board pane of `platform-surfaces-mockup.html`, restated in this dark palette —
- * which is exactly what `packages/engine/src/board/page.ts` already did for the
- * local preview board. The two boards look the same on purpose.
+ * ## The short version
  *
- * Fonts are `<link>`ed in `layout.tsx` with real local fallbacks in every stack,
- * so the page is legible and correctly proportioned with the font host blocked or
- * the machine offline. A board is a CDN read; it must not depend on a second one.
+ * Five values. `--paper` / `--card` / `--sunk` are a real surface stack and
+ * `--ink` is text; every rule, shadow and muted tone is `--ink` at an alpha, so
+ * there is no muted hex to drift. `--cut` is the only hue anywhere on the site,
+ * and it means exactly one thing: **this was taken.** Points, deductions, and the
+ * consumed part of a meter are `--cut`. Nothing else is.
+ *
+ * One sans (Archivo, 400–800 — the grotesque, not Archivo Black) and one mono
+ * (IBM Plex Mono, on numbers only, always `tabular-nums`). Weight, scale and
+ * tracking carry the personality; there is no display face.
+ *
+ * ## The pit is elevation, not darkness
+ *
+ * `brief` Part 6: "Rows darken as they descend (the pit is literal)." On paper the
+ * literal reading is depth in the surface stack rather than mud in the palette:
+ * the first row sits highest — white, lifted, a real shadow — and each row below
+ * loses elevation and sinks toward `--sunk`, until the last row is flush with the
+ * floor. `--depth` is 0 at the top and 1 at the bottom (`boards/view.ts`) and it
+ * drives background, shadow and border together, so descending is one gesture.
+ *
+ * Nothing animates on a rank change. `brief` Part 6 again: motion comes from
+ * rotating categories and arriving verdicts and never from rank churn, and
+ * `brief §1.2` moves every rank on every placement — animating that would
+ * advertise the instability as the page's most eye-catching feature.
  */
 
 :root {
-  --ground: #120e0c;
-  --ground2: #191411;
-  --panel: #211a16;
-  --rule: #33291f;
-  --rule2: #241d18;
-  --bone: #ede6de;
-  --muted: #93857a;
-  --blade: #e2482c;
-  --coin: #d9a441;
-  --roar: #5b9ea6;
+  --paper: #edeff3;
+  --card: #ffffff;
+  --sunk: #dce0e7;
+  --ink: #101317;
+  --cut: #9c1b2f;
 
-  --body: "Barlow", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --disp: "Archivo Black", "Arial Black", "Helvetica Neue", Impact, sans-serif;
+  --ink-c: 16 19 23;
+  --cut-c: 156 27 47;
+
+  --dim: rgb(var(--ink-c) / 0.58);
+  --dimmer: rgb(var(--ink-c) / 0.4);
+  --line: rgb(var(--ink-c) / 0.11);
+  --hair: rgb(var(--ink-c) / 0.06);
+  --wash: rgb(var(--ink-c) / 0.035);
+
+  --e1: 0 1px 2px rgb(var(--ink-c) / 0.05), 0 1px 1px rgb(var(--ink-c) / 0.04);
+  --e2: 0 2px 4px rgb(var(--ink-c) / 0.05), 0 8px 20px rgb(var(--ink-c) / 0.07);
+  --e3: 0 2px 6px rgb(var(--ink-c) / 0.06), 0 14px 40px rgb(var(--ink-c) / 0.12);
+
+  --r1: 6px;
+  --r2: 10px;
+  --r3: 16px;
+
+  --sans: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
@@ -40,207 +70,269 @@
   padding: 0;
 }
 html {
-  background: var(--ground);
+  background: var(--paper);
+  -webkit-text-size-adjust: 100%;
 }
 body {
-  background: var(--ground);
-  color: var(--bone);
-  font-family: var(--body);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  font-synthesis-weight: none;
   overflow-x: hidden;
 }
-.wrap {
-  max-width: 920px;
-  margin: 0 auto;
-  padding: 0 14px;
-}
-.wrap.wide {
-  max-width: 1000px;
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
+.wrap {
+  max-width: 1020px;
+  margin: 0 auto;
+  padding: 0 18px 72px;
+}
+.wrap.wide {
+  max-width: 1100px;
+}
+
+/* ---------- nav ---------- */
 nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 13px 0;
-  border-bottom: 1px solid var(--rule);
+  padding: 20px 0 18px;
+  gap: 16px;
 }
 .mark {
-  font-family: var(--disp);
+  font-weight: 800;
   font-size: 14px;
-  letter-spacing: -0.02em;
-  color: var(--bone);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink);
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+/*
+ * The wordmark is one word in ink, preceded by a small square in `--cut`.
+ *
+ * The one licensed exception to "the only colour means taken", and it earns it:
+ * the mark IS a cut. Colouring half the word instead — which is what the rejected
+ * design did — spends the system's only hue on branding, and then a deduction and
+ * a logo are the same red.
+ */
+.mark::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--cut);
+  flex: 0 0 auto;
 }
 .mark i {
-  color: var(--blade);
   font-style: normal;
 }
 .navr {
   display: flex;
-  gap: 14px;
+  gap: 18px;
   align-items: center;
 }
-.navlink {
+.navlink,
+.navr span {
   font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--dim);
   text-decoration: none;
-  letter-spacing: 0.06em;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 1px;
 }
-.navlink:hover {
-  color: var(--bone);
+a.navlink:hover {
+  color: var(--ink);
+  border-bottom-color: var(--line);
 }
 
-/* ---------- compact hero ---------- */
-.hero {
-  padding: 30px 0 22px;
-}
-h1 {
-  font-family: var(--disp);
-  font-size: clamp(31px, 8.6vw, 58px);
-  line-height: 0.9;
-  letter-spacing: -0.035em;
+.sh {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.17em;
   text-transform: uppercase;
+  color: var(--dim);
 }
-h1 em {
+
+/* ---------- the hero slab ---------- */
+/*
+ * The one aggressive surface on the site, and it is aggressive by being an
+ * object: an ink card lifted off the paper, with the headline at 800 and −0.038em
+ * doing the shouting. `brief` Part 5's voice — loud here, plain everywhere behind
+ * it — is carried by weight and scale rather than by a display face or a colour.
+ */
+.hero {
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: var(--r3);
+  box-shadow: var(--e3);
+  padding: clamp(28px, 5vw, 52px) clamp(22px, 4.5vw, 46px) clamp(26px, 4.5vw, 44px);
+  margin-top: 6px;
+  position: relative;
+  overflow: hidden;
+}
+/* A single hairline that starts at the left edge and stops: the top of the descent. */
+.hero::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 38%;
+  background: var(--cut);
+}
+.hero h1 {
+  font-weight: 800;
+  font-size: clamp(34px, 8.2vw, 74px);
+  line-height: 0.93;
+  letter-spacing: -0.038em;
+  text-transform: uppercase;
+  max-width: 14ch;
+}
+.hero h1 em {
   font-style: normal;
-  color: var(--blade);
+  color: rgb(255 255 255 / 0.52);
 }
-.sub {
-  font-size: clamp(14px, 3.4vw, 18px);
-  line-height: 1.3;
-  margin-top: 13px;
-  max-width: 26ch;
-  font-weight: 500;
-  color: #c9bcb1;
+.hero .sub {
+  font-size: clamp(15px, 2.4vw, 20px);
+  line-height: 1.4;
+  margin-top: 18px;
+  max-width: 34ch;
+  font-weight: 400;
+  color: rgb(255 255 255 / 0.62);
 }
-.sub b {
-  color: var(--bone);
+.hero .sub b {
+  color: var(--paper);
   font-weight: 600;
 }
 .herorow {
   display: flex;
-  flex-wrap: wrap;
-  gap: 13px;
   align-items: center;
-  margin-top: 18px;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 28px;
 }
 .cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--disp);
-  font-size: 13px;
-  text-transform: uppercase;
-  background: var(--blade);
-  color: #150c0a;
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  background: var(--paper);
   border: 0;
-  padding: 12px 19px;
-  border-radius: 1px;
+  border-radius: var(--r1);
+  padding: 13px 20px;
   cursor: pointer;
-  transition:
-    transform 0.12s,
-    background 0.15s;
-}
-.cta:hover:not([disabled]) {
-  background: #f05639;
-  transform: translateY(-1px);
-}
-.cta:focus-visible {
-  outline: 2px solid var(--bone);
-  outline-offset: 3px;
-}
-.cta[disabled] {
-  cursor: default;
-  opacity: 0.82;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.4) inset, 0 6px 18px rgb(0 0 0 / 0.3);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 .cta small {
   font-family: var(--mono);
-  font-size: 10px;
-  opacity: 0.6;
-  text-transform: none;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dim);
 }
-.terms {
+.cta:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.cta:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+.hero .terms {
   font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--muted);
-  line-height: 1.5;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: rgb(255 255 255 / 0.5);
+  letter-spacing: 0.01em;
 }
-.terms i {
+.hero .terms i {
   font-style: normal;
-  color: #6f6459;
+  color: rgb(255 255 255 / 0.34);
+}
+.hero :focus-visible {
+  outline-color: var(--paper);
 }
 
-/* ---------- rolling category rail ---------- */
+/* ---------- the category rail ---------- */
 .rail {
-  margin-top: 26px;
-  border-top: 1px solid var(--rule);
-  padding-top: 14px;
+  margin-top: 34px;
 }
 .railhead {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-.sh {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--muted);
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
 }
 .cats {
   display: flex;
-  gap: 5px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 8px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .cat {
-  font-family: var(--mono);
-  font-size: 10px;
-  white-space: nowrap;
-  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--dim);
   background: transparent;
-  border: 1px solid var(--rule);
-  color: var(--muted);
-  padding: 5px 9px;
-  border-radius: 1px;
-  transition:
-    color 0.15s,
-    border-color 0.15s,
-    background 0.15s;
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  padding: 8px 13px;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
 }
 .cat:hover {
-  color: var(--bone);
-  border-color: var(--muted);
+  color: var(--ink);
+  background: var(--card);
 }
 .cat.on {
-  background: var(--blade);
-  border-color: var(--blade);
-  color: #150c0a;
-  font-weight: 600;
+  color: var(--paper);
+  background: var(--ink);
+  border-color: var(--ink);
+  box-shadow: var(--e1);
 }
-.cat:focus-visible {
-  outline: 2px solid var(--bone);
-  outline-offset: 2px;
-}
+
+/*
+ * The rotation's clock, drawn as the top edge of the board card.
+ *
+ * The same visual verb as the meter below it: a full line being consumed. The
+ * page then has exactly one grammar for movement, and `brief` Part 6's "auto-rotate
+ * every 7s with a progress bar" is the board's own edge rather than a widget
+ * parked above it.
+ */
 .prog {
   height: 2px;
-  background: var(--rule2);
+  background: var(--line);
+  border-radius: 2px 2px 0 0;
   overflow: hidden;
+  margin-top: 14px;
 }
 .prog i {
   display: block;
   height: 100%;
-  background: var(--blade);
   width: 0;
+  background: var(--cut);
 }
 .prog i.run {
-  animation: fill 7s linear;
+  animation: fill 7s linear forwards;
 }
 @keyframes fill {
   from {
@@ -251,714 +343,1046 @@ h1 em {
   }
 }
 
-/* ---------- the board: a pit ---------- */
+/* ---------- the board ---------- */
 .board {
-  margin-top: 2px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 0 0 var(--r3) var(--r3);
+  box-shadow: var(--e3);
+  overflow: hidden;
 }
-.bhead {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 11px;
-  font-family: var(--mono);
-  font-size: 8.5px;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--muted);
-  border-bottom: 1px solid var(--rule);
+/* On the homepage the board hangs off the rotation bar, so its top corners are
+   square and `.prog` is its top edge. On a category board it is a free-standing
+   card. */
+.rail + .board {
+  border-radius: 0 0 var(--r3) var(--r3);
 }
-.bhead .c-rk {
-  min-width: 30px;
-}
-.bhead .c-nm {
-  flex: 1;
-}
-.bhead .c-x {
-  min-width: 52px;
-  text-align: right;
-}
-.bhead .c-ch {
-  min-width: 18px;
-}
-.c-hide {
-  display: none;
-}
-@media (min-width: 760px) {
-  .c-hide {
-    display: block;
-  }
+.legend + .board {
+  border-radius: var(--r3);
+  margin-top: 18px;
 }
 
 /*
- * The pit is literal. `--depth` is 0 at rank 1 and 1 at the last row, and the
- * overlay is what daylight is left. Hovering lifts a row back out of it.
+ * `brief` Part 6: "rows stagger in on switch". Only on the homepage, where a row
+ * is a `div` and the category behind it can change; a category board's rows are
+ * `details` and never re-key. `animationDelay` is set per row by the component,
+ * and `prefers-reduced-motion` removes both the animation and the rotation that
+ * triggers it.
  */
-.brow {
-  border-bottom: 1px solid var(--rule2);
-  animation: rise 0.42s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
+div.brow {
+  animation: rise 0.34s cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(11px);
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
-.rowhead {
-  position: relative;
-  display: flex;
+
+.bhead {
+  display: grid;
+  grid-template-columns: 38px 1fr auto;
+  gap: 14px;
   align-items: center;
-  gap: 10px;
-  padding: 11px;
-  width: 100%;
-  background: var(--ground2);
-  border: 0;
-  text-align: left;
-  font-family: inherit;
-  color: inherit;
-}
-.rowhead::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  transition: opacity 0.18s;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.8));
-  opacity: var(--depth, 0);
-}
-.rowhead:hover {
-  background: var(--panel);
-}
-.rowhead:hover::after {
-  opacity: 0;
-}
-.flag {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--coin);
-  z-index: 2;
-}
-.rk {
-  font-family: var(--disp);
-  font-size: 16px;
-  letter-spacing: -0.04em;
-  min-width: 30px;
-  color: var(--bone);
-  position: relative;
-  z-index: 1;
-}
-.brow.first .rk {
-  color: var(--blade);
-  font-size: 19px;
-}
-.nm {
-  flex: 1;
-  min-width: 0;
-  position: relative;
-  z-index: 1;
-}
-/* The name may be clipped. The solo/moved marks may never be. */
-.nm b {
-  display: flex;
-  align-items: baseline;
-  font-size: 13.5px;
-  font-weight: 600;
-}
-.pname {
-  min-width: 0;
-  flex: 0 1 auto;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.topcut {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  font-size: 11.5px;
-  line-height: 1.4;
-  color: #b3a79c;
-  margin-top: 3px;
-}
-.topcut .pts {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--blade);
-  font-weight: 600;
-}
-.topcut .who {
+  padding: 12px 18px;
+  background: var(--wash);
+  border-bottom: 1px solid var(--line);
   font-family: var(--mono);
   font-size: 10px;
-  color: var(--muted);
-}
-.tags {
-  display: inline-flex;
-  gap: 5px;
-  flex: none;
-  margin-left: 7px;
-}
-.tag {
-  font-family: var(--mono);
-  font-size: 8px;
-  letter-spacing: 0.1em;
+  font-weight: 600;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  padding: 1px 4px;
-  border-radius: 1px;
-  font-weight: 500;
+  color: var(--dimmer);
 }
-.tag.solo {
-  color: var(--coin);
-  border: 1px solid rgba(217, 164, 65, 0.42);
+.bhead .c-x,
+.bhead .c-ch {
+  display: none;
 }
-.tag.tb {
-  color: var(--roar);
-  border: 1px solid rgba(91, 158, 166, 0.42);
-}
-.tag.fl {
-  color: var(--muted);
-  border: 1px solid var(--rule);
-}
-.cell {
-  min-width: 52px;
-  text-align: right;
-  position: relative;
-  z-index: 1;
-}
-.cell .v {
-  display: block;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: #c9bcb1;
-}
-.cell.cuts .v {
-  color: var(--blade);
-  font-weight: 600;
-  font-size: 13px;
-}
-.cell .v.none {
-  color: var(--coin);
-}
-.chev {
-  position: relative;
-  z-index: 1;
-  color: var(--muted);
-  font-size: 11px;
-  min-width: 18px;
-  text-align: right;
-  transition: transform 0.18s;
+.bhead .c-nm {
+  letter-spacing: 0.1em;
 }
 
-.bfoot {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 11px 11px 0;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
+/*
+ * One row.
+ *
+ * `--depth` is 0 at the top of the board and 1 at the bottom. It is the pit: the
+ * row loses its lift, its ground darkens toward `--sunk`, and by the last row it
+ * is flush with the floor. Set on `.rowhead` by the surfaces, read here.
+ */
+.brow {
+  border-top: 1px solid var(--line);
 }
-.bfoot a {
-  color: var(--blade);
-  text-decoration: none;
+.brow.first {
+  border-top: 0;
 }
-.bfoot a:hover {
-  text-decoration: underline;
-}
-
-/* ---------- the ledger (native <details>, so it works with JS off) ---------- */
-details.brow > summary {
+.brow > summary {
   list-style: none;
   cursor: pointer;
 }
-details.brow > summary::-webkit-details-marker {
+.brow > summary::-webkit-details-marker {
   display: none;
 }
-details.brow > summary:focus-visible {
-  outline: 2px solid var(--blade);
-  outline-offset: -2px;
+/*
+ * The ring goes on `.rowhead`, not on the `<summary>` that owns the focus.
+ *
+ * An outline drawn on the summary with a negative offset is painted with the
+ * summary's own background — and then `.rowhead`, its child, paints an opaque
+ * background straight over it. `:focus-visible` matched, the computed style was
+ * right, and there was no visible ring. Putting it on the element that carries the
+ * background is what makes it appear.
+ */
+.brow > summary:focus-visible {
+  outline: none;
 }
-details.brow[open] .chev {
-  transform: rotate(90deg);
+.brow > summary:focus-visible .rowhead {
+  outline: 2px solid var(--ink);
+  outline-offset: -3px;
+  border-radius: 3px;
 }
-details.brow[open] .rowhead::after {
-  opacity: 0;
+
+.rowhead {
+  --depth: 0;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "rank name  cuts"
+    "rank lead  nums"
+    "rank meter meter";
+  column-gap: 16px;
+  row-gap: 2px;
+  align-items: start;
+  padding: 15px 18px 14px;
+  position: relative;
+  background: color-mix(in srgb, var(--card) calc(100% - var(--depth) * 62%), var(--sunk));
+  transition: background 0.16s ease;
 }
-.detail {
-  background: var(--ground2);
-  border-top: 1px solid var(--rule2);
-  padding: 2px 13px 16px;
+.brow > summary:hover .rowhead {
+  background: color-mix(in srgb, var(--card) calc(100% - var(--depth) * 40%), var(--sunk));
 }
-.took {
+/* A solo cluster is 32 of 48 products. It is marked, quietly, and never as a warning. */
+.rowhead .flag {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: rgb(var(--ink-c) / 0.22);
+}
+.rk {
+  grid-area: rank;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
   font-size: 13px;
-  line-height: 1.45;
-  color: #c9bcb1;
-  margin-top: 13px;
-}
-.took b {
-  color: var(--bone);
   font-weight: 600;
+  color: var(--dim);
+  padding-top: 1px;
+  letter-spacing: -0.02em;
 }
-.took a {
-  color: var(--blade);
-  text-decoration: none;
+
+.nm {
+  grid-area: name;
+  display: block;
+  min-width: 0;
+}
+.nm > b {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  flex-wrap: wrap;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.012em;
+  line-height: 1.3;
+}
+.pname {
+  overflow-wrap: anywhere;
+}
+
+/*
+ * The lead: the heaviest cut on the card, its reason, and the juror who took it.
+ *
+ * `brief` Part 6 — "Lead with deductions and reasons, not composites" — is DOM
+ * order here as well as visual order, and it is the largest run of text in the
+ * row. The composites are eleven-pixel mono two rows below it.
+ */
+.topcut {
+  grid-area: lead;
+  display: block;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--dim);
+  margin-top: 6px;
+}
+.topcut .pts {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--cut);
+  margin-right: 3px;
+}
+.topcut .who {
   font-family: var(--mono);
   font-size: 11px;
+  color: var(--dimmer);
+  white-space: nowrap;
 }
-.took a:hover {
-  text-decoration: underline;
+
+/* ---------- the signature: the cut meter ---------- */
+/*
+ * A hundred points, and the named things that ate them.
+ *
+ * The track is the full 100 a product walks in with. The graphite head is what
+ * survived; every segment after it is ONE METRIC's contribution to the loss, and
+ * the widths are exact rather than illustrative: cuts = 100 − mean(metric score),
+ * so a metric contributes `metricCuts / metricCount` and the segments sum to the
+ * bar. Heaviest first, so the most expensive thing is the widest block against
+ * the boundary, and each segment carries its metric, its points and its heaviest
+ * reason with the juror in a `title`.
+ *
+ * The same figure appears one level down inside an open ledger, split by JUROR
+ * rather than by metric — that decomposition is exact too, because a metric's
+ * score is the mean of six jurors' own 100s. It is the mechanic drawn, not a
+ * chart bolted to it.
+ */
+/*
+ * The meter runs the full width of the row, on its own line, so that every
+ * product's hundred points are drawn on the same ruler at the same scale. That is
+ * what makes the board scannable as a shape rather than as a column of numbers:
+ * the boundary between graphite and red walks left as you descend, and the
+ * descent IS the board.
+ */
+.meterwrap {
+  grid-area: meter;
+  min-width: 0;
+  margin-top: 9px;
 }
-.sect {
+.meter {
+  display: flex;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--sunk);
+  overflow: hidden;
+  box-shadow: inset 0 1px 1px rgb(var(--ink-c) / 0.07);
+}
+.meter .kept {
+  background: rgb(var(--ink-c) / 0.24);
+  height: 100%;
+  flex: 0 0 auto;
+}
+.meter .seg {
+  background: var(--cut);
+  height: 100%;
+  flex: 0 0 auto;
+  box-shadow: -1px 0 0 var(--card);
+}
+.meter .seg.s2 {
+  background: rgb(var(--cut-c) / 0.82);
+}
+.meter .seg.s3 {
+  background: rgb(var(--cut-c) / 0.66);
+}
+.meter .seg.s4 {
+  background: rgb(var(--cut-c) / 0.52);
+}
+.meter .seg.s5 {
+  background: rgb(var(--cut-c) / 0.4);
+}
+.meter .seg.s6 {
+  background: rgb(var(--cut-c) / 0.3);
+}
+.metercap {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 7px;
   font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 8px;
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--dimmer);
 }
+.metercap .heaviest {
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- numbers: small, secondary, after the reason ---------- */
+.cell {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--dimmer);
+  white-space: nowrap;
+}
+.cell .v {
+  color: var(--dim);
+}
+.cell.cuts {
+  grid-area: cuts;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-align: right;
+  padding-top: 1px;
+}
+.cell.cuts .v {
+  color: var(--cut);
+}
+.nums {
+  grid-area: nums;
+  display: flex;
+  gap: 11px;
+  align-items: baseline;
+  justify-content: flex-end;
+  align-self: start;
+  padding-top: 4px;
+}
+.nums .k {
+  color: rgb(var(--ink-c) / 0.3);
+  margin-right: 3px;
+}
+.nums .cell .v.none {
+  color: var(--dimmer);
+  font-style: normal;
+}
+/*
+ * The disclosure sits in the rank gutter, directly under the number, because the
+ * meter now runs the full width of the row and there is no right-hand margin left
+ * to park it in. It points at the ledger it opens.
+ */
+.chev {
+  position: absolute;
+  left: 20px;
+  top: 38px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--dimmer);
+  transition: transform 0.16s ease;
+}
+details[open] > summary .chev {
+  transform: rotate(90deg);
+}
+
+/* ---------- tags ---------- */
+.tags {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tag {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  cursor: help;
+}
+/* The common case. A hairline outline, not a colour: it is a property, not an alarm. */
+.tag.solo {
+  border: 1px solid var(--line);
+  color: var(--dim);
+  background: transparent;
+}
+/* Demand moved the row. A filled ink chip — a fact about arithmetic, not a loss. */
+.tag.tb {
+  background: rgb(var(--ink-c) / 0.86);
+  color: var(--card);
+}
+.tag.fl {
+  border: 1px solid rgb(var(--cut-c) / 0.4);
+  color: var(--cut);
+  background: rgb(var(--cut-c) / 0.06);
+}
+
+/* ---------- the open ledger ---------- */
+.detail {
+  padding: 4px 18px 22px 56px;
+  background: var(--wash);
+  border-top: 1px solid var(--hair);
+}
+.took {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--dim);
+  padding: 12px 0 4px;
+}
+.took b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.took a,
+.took .who {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+
 .ledger {
-  margin-top: 15px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  box-shadow: var(--e1);
+  padding: 14px 16px 12px;
+  margin-top: 12px;
 }
 .ledger-h {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 10px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 .ledger-h .mt {
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
+  letter-spacing: -0.008em;
 }
 .ledger-h .sc {
   font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--dimmer);
   white-space: nowrap;
 }
 .bar {
   display: flex;
-  height: 8px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--sunk);
   overflow: hidden;
-  background: var(--rule2);
-  margin-top: 6px;
+  margin-top: 10px;
+  box-shadow: inset 0 1px 1px rgb(var(--ink-c) / 0.07);
 }
 .bar i {
   display: block;
   height: 100%;
 }
 .bar i.kept {
-  background: rgba(237, 230, 222, 0.2);
+  background: rgb(var(--ink-c) / 0.24);
 }
 .bar i.lost {
-  background: var(--blade);
-  opacity: 0.82;
+  background: var(--cut);
 }
-.ded {
+/* The juror split: the same figure, one level down, and exact for the same reason. */
+.jurorbar {
   display: flex;
-  gap: 9px;
-  font-size: 12px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--sunk);
+  overflow: hidden;
+  margin-top: 10px;
+  box-shadow: inset 0 1px 1px rgb(var(--ink-c) / 0.07);
+}
+.jurorbar .kept {
+  background: rgb(var(--ink-c) / 0.24);
+  height: 100%;
+  flex: 0 0 auto;
+}
+.jurorbar .seg {
+  background: var(--cut);
+  height: 100%;
+  flex: 0 0 auto;
+  box-shadow: -1px 0 0 var(--card);
+}
+.jurorbar .seg.s2 {
+  background: rgb(var(--cut-c) / 0.82);
+}
+.jurorbar .seg.s3 {
+  background: rgb(var(--cut-c) / 0.66);
+}
+.jurorbar .seg.s4 {
+  background: rgb(var(--cut-c) / 0.52);
+}
+.jurorbar .seg.s5 {
+  background: rgb(var(--cut-c) / 0.4);
+}
+.jurorbar .seg.s6 {
+  background: rgb(var(--cut-c) / 0.3);
+}
+.jurorcap {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--dimmer);
+  letter-spacing: 0.02em;
+}
+
+.ded {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+  font-size: 14px;
   line-height: 1.5;
-  color: #b3a79c;
-  margin-top: 7px;
+  color: var(--dim);
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hair);
+}
+/* The first cut under a bar or a header needs no rule above it. `:first-of-type`
+   cannot say this: `.ledger-h` is a div too, so it owns that pseudo-class. */
+.jurorcap + .ded,
+.ledger-h + .ded {
+  border-top: 0;
 }
 .ded .pts {
   font-family: var(--mono);
-  font-size: 11px;
-  color: var(--blade);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
   font-weight: 600;
-  min-width: 30px;
+  color: var(--cut);
   text-align: right;
   padding-top: 1px;
 }
 .ded .who {
   font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
+  font-size: 11px;
+  color: var(--dimmer);
+  white-space: nowrap;
 }
 .subst {
   font-family: var(--mono);
-  font-size: 10px;
-  color: var(--coin);
-  margin-top: 6px;
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 12px;
+  padding: 8px 10px;
+  background: var(--sunk);
+  border-radius: var(--r1);
 }
 
 .blk {
-  margin-top: 18px;
-  padding-top: 13px;
-  border-top: 1px dashed var(--rule);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  box-shadow: var(--e1);
+  padding: 15px 16px;
+  margin-top: 12px;
 }
 .blk p {
-  font-size: 12px;
-  line-height: 1.5;
-  color: #b3a79c;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--dim);
 }
 .blk p b {
-  color: var(--bone);
+  color: var(--ink);
   font-weight: 600;
 }
+.sect {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+  margin-bottom: 9px;
+}
+.solonote {
+  color: var(--dim);
+}
 .pick {
-  display: flex;
-  gap: 9px;
-  font-size: 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 11px;
+  font-size: 14px;
   line-height: 1.5;
-  color: #b3a79c;
-  margin-top: 7px;
+  color: var(--dim);
+  margin-top: 11px;
 }
 .pick .p {
   font-family: var(--mono);
   font-size: 9.5px;
-  color: var(--roar);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--card);
+  background: rgb(var(--ink-c) / 0.86);
+  border-radius: 999px;
+  padding: 3px 8px;
   white-space: nowrap;
-  border: 1px solid rgba(91, 158, 166, 0.34);
-  padding: 1px 5px;
-  border-radius: 1px;
-  align-self: flex-start;
+  align-self: start;
 }
 .pick .p.second {
-  color: var(--muted);
-  border-color: var(--rule);
+  background: transparent;
+  color: var(--dim);
+  border: 1px solid var(--line);
 }
 .pick .who {
   font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
-}
-.solonote {
-  color: var(--coin);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  color: var(--dimmer);
 }
 .dnums {
   font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
-  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--dimmer);
+  margin-top: 14px;
+  padding-top: 11px;
+  border-top: 1px solid var(--hair);
 }
 .flagnote {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- board footer strip on the homepage ---------- */
+.bfoot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 13px 18px;
+  background: var(--wash);
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+.bfoot a {
+  color: var(--ink);
+  font-weight: 500;
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 1px;
+}
+.bfoot a:hover {
+  border-bottom-color: var(--ink);
+}
+.legend {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--dim);
+  margin-top: 16px;
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  padding: 14px 16px;
+  box-shadow: inset 0 1px 2px rgb(var(--ink-c) / 0.05);
+}
+.legend b {
+  color: var(--ink);
+  font-weight: 600;
+}
+/*
+ * The homepage's legend is inside the board card, under the footer strip, so it
+ * needs the card's own padding rather than a second surface of its own.
+ */
+.board .legend {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+  padding: 14px 18px 16px;
+  max-width: 86ch;
+  font-size: 12.5px;
+  color: var(--dimmer);
+}
+
+/* ---------- the strip of cuts ---------- */
+.tickwrap {
+  margin-top: 34px;
+}
+.tick {
+  list-style: none;
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  box-shadow: inset 0 1px 2px rgb(var(--ink-c) / 0.05);
+  padding: 6px 16px;
+}
+.tick li {
+  font-size: 13.5px;
   line-height: 1.5;
-  color: var(--muted);
-  margin-top: 7px;
+  color: var(--dim);
+  padding: 9px 0;
+  border-top: 1px solid var(--hair);
+  overflow-wrap: anywhere;
+}
+.tick li:first-child {
+  border-top: 0;
+}
+.tick li b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.tick .d {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--cut);
+}
+
+section {
+  margin-top: 34px;
+}
+
+/* ---------- the three panels ---------- */
+/*
+ * Not three feature cards. Each panel states, in its own footer, whether it can
+ * move a rank — which is the only question the page is actually answering, and
+ * the honest form of "you can't outbid the pit".
+ */
+.three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.three .card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  box-shadow: var(--e1);
+  padding: 18px 18px 0;
+  display: flex;
+  flex-direction: column;
+}
+.three .card h3 {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.three .role {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+  margin-top: 6px;
+}
+.three .card p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--dim);
+  margin-top: 12px;
+  flex: 1;
+}
+.three .moves {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 16px -18px 0;
+  padding: 11px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--wash);
+  border-radius: 0 0 var(--r2) var(--r2);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+}
+.three .moves b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ---------- the closer ---------- */
+.closer {
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: var(--r3);
+  box-shadow: var(--e3);
+  padding: clamp(28px, 4.5vw, 46px);
+  margin-top: 40px;
+}
+.closer h2 {
+  font-weight: 800;
+  font-size: clamp(22px, 4.2vw, 38px);
+  line-height: 1.02;
+  letter-spacing: -0.032em;
+  text-transform: uppercase;
+  max-width: 18ch;
+}
+.closer h2 em {
+  font-style: normal;
+  color: rgb(255 255 255 / 0.5);
+}
+.closer p {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  color: rgb(255 255 255 / 0.48);
+  margin-top: 18px;
 }
 
 /* ---------- category board head ---------- */
 .head {
-  padding: 24px 0 4px;
+  padding: 10px 0 0;
 }
 .head h1 {
-  font-size: clamp(27px, 6.6vw, 46px);
-  line-height: 0.92;
-  margin-top: 8px;
+  font-weight: 700;
+  font-size: clamp(28px, 5vw, 44px);
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  margin-top: 10px;
 }
 .headsub {
-  font-size: 14px;
-  line-height: 1.35;
-  margin-top: 10px;
-  max-width: 56ch;
-  color: #c9bcb1;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--dim);
+  margin-top: 12px;
+  max-width: 66ch;
 }
 .headsub b {
-  color: var(--bone);
+  color: var(--ink);
   font-weight: 600;
 }
+
 .strip {
-  display: flex;
-  gap: 22px;
-  flex-wrap: wrap;
-  background: var(--ground2);
-  border: 1px solid var(--rule);
-  padding: 10px 12px;
-  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 22px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  box-shadow: var(--e1);
+  overflow: hidden;
+}
+.strip > div {
+  background: var(--card);
+  padding: 13px 14px;
+  min-width: 0;
 }
 .strip .k {
   display: block;
   font-family: var(--mono);
-  font-size: 8.5px;
-  letter-spacing: 0.14em;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 3px;
+  color: var(--dimmer);
 }
 .strip .v {
   display: block;
   font-family: var(--mono);
-  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-size: 19px;
   font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-top: 7px;
 }
-.strip .v.solo {
-  color: var(--coin);
-}
+.strip .v.solo,
 .strip .v.tb {
-  color: var(--roar);
-}
-.legend {
-  font-family: var(--mono);
-  font-size: 10px;
-  line-height: 1.6;
-  color: var(--muted);
-  margin-top: 9px;
-}
-.legend b {
-  color: #c9bcb1;
-  font-weight: 500;
+  color: var(--ink);
 }
 
-/* ---------- ticker ---------- */
-.tickwrap {
+/* ---------- category board footer ---------- */
+.boardfoot {
   margin-top: 26px;
-  border-top: 1px solid var(--rule);
-  padding-top: 14px;
 }
-.tick {
-  background: var(--ground2);
-  border-left: 2px solid var(--blade);
-  padding: 10px 12px;
-  font-family: var(--mono);
-  font-size: 11px;
-  min-height: 96px;
-  overflow: hidden;
-}
-.tick li {
-  list-style: none;
-  padding: 3px 0;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  animation: slip 0.3s ease-out;
-}
-@keyframes slip {
-  from {
-    opacity: 0;
-    transform: translateX(-6px);
-  }
-}
-.tick b {
-  color: var(--bone);
-  font-weight: 600;
-}
-.tick .d {
-  color: var(--blade);
-}
-
-/* ---------- three panels ---------- */
-section {
-  padding: 32px 0;
-  border-top: 1px solid var(--rule);
-}
-.three {
+.fgrid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 11px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  overflow: hidden;
 }
-@media (min-width: 700px) {
-  .three {
-    grid-template-columns: repeat(3, 1fr);
-  }
+.fgrid > div {
+  background: var(--card);
+  padding: 12px 14px;
+  min-width: 0;
 }
-.card {
-  background: var(--ground2);
-  border: 1px solid var(--rule);
-  padding: 15px;
-}
-.card.six {
-  border-top: 3px solid var(--blade);
-}
-.card.floor {
-  border-top: 3px solid var(--coin);
-}
-.card.mob {
-  border-top: 3px solid var(--roar);
-}
-.card h3 {
-  font-family: var(--disp);
-  font-size: 20px;
-  text-transform: uppercase;
-  letter-spacing: -0.025em;
-  margin-bottom: 3px;
-}
-.card.six h3 {
-  color: var(--blade);
-}
-.card.floor h3 {
-  color: var(--coin);
-}
-.card.mob h3 {
-  color: var(--roar);
-}
-.card .role {
+.fgrid .k {
+  display: block;
   font-family: var(--mono);
   font-size: 9.5px;
-  color: var(--muted);
-  letter-spacing: 0.09em;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  margin-bottom: 10px;
+  color: var(--dimmer);
 }
-.card p {
-  font-size: 13px;
-  line-height: 1.48;
-  color: #c9bcb1;
+.fgrid .v {
+  display: block;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 6px;
+}
+.caveat {
+  background: var(--sunk);
+  border-radius: var(--r2);
+  padding: 15px 16px;
+  margin-top: 16px;
+}
+.caveat p {
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--dim);
+}
+.stamp {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.85;
+  color: var(--dimmer);
+  margin-top: 18px;
+  overflow-wrap: anywhere;
+}
+.stamp b {
+  color: var(--dim);
+  font-weight: 500;
 }
 
 /* ---------- board index ---------- */
 .blist {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 9px;
-  margin-top: 18px;
-}
-@media (min-width: 640px) {
-  .blist {
-    grid-template-columns: repeat(2, 1fr);
-  }
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+  margin-top: 26px;
 }
 .bcard {
   display: block;
-  background: var(--ground2);
-  border: 1px solid var(--rule);
-  border-top: 3px solid var(--blade);
-  padding: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  box-shadow: var(--e1);
+  padding: 20px;
   text-decoration: none;
   color: inherit;
+  transition: box-shadow 0.16s ease, transform 0.16s ease;
 }
 .bcard:hover {
-  background: var(--panel);
+  box-shadow: var(--e2);
+  transform: translateY(-2px);
 }
 .bcard h2 {
-  font-family: var(--disp);
-  font-size: 19px;
-  text-transform: uppercase;
-  letter-spacing: -0.025em;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.022em;
 }
 .bcard .meta {
   font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
-  margin-top: 7px;
-  line-height: 1.6;
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--dimmer);
+  margin-top: 10px;
 }
 .bcard .lead {
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: #b3a79c;
-  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--dim);
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hair);
 }
 
-/* ---------- closer, footer, empties ---------- */
-.closer {
-  padding: 40px 0 24px;
-  border-top: 1px solid var(--rule);
-  text-align: center;
+.empty {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  box-shadow: var(--e1);
+  padding: 28px;
+  margin-top: 26px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--dim);
 }
-.closer h2 {
-  font-family: var(--disp);
-  font-size: clamp(22px, 5.8vw, 38px);
-  line-height: 0.98;
-  letter-spacing: -0.03em;
-  text-transform: uppercase;
-}
-.closer h2 em {
-  font-style: normal;
-  color: var(--blade);
-}
-.closer p {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 11px;
-}
+
 footer {
-  padding: 15px 0 32px;
-  border-top: 1px solid var(--rule);
-  font-family: var(--mono);
-  font-size: 9.5px;
-  color: var(--muted);
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
   flex-wrap: wrap;
-}
-.boardfoot {
-  display: block;
-  margin-top: 34px;
-  padding: 18px 0 44px;
-  font-size: inherit;
-}
-.fgrid {
-  display: flex;
-  gap: 22px;
-  flex-wrap: wrap;
-  background: var(--ground2);
-  border: 1px solid var(--rule);
-  padding: 11px 12px;
-}
-.fgrid .k {
-  display: block;
-  font-family: var(--mono);
-  font-size: 8.5px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 3px;
-}
-.fgrid .v {
-  display: block;
-  font-family: var(--mono);
-  font-size: 14px;
-  font-weight: 600;
-}
-.fgrid .v.solo {
-  color: var(--coin);
-}
-.fgrid .v.tb {
-  color: var(--roar);
-}
-.caveat {
-  background: var(--ground2);
-  border-left: 2px solid var(--blade);
-  padding: 11px 13px;
-  margin-top: 11px;
-}
-.caveat p {
+  margin-top: 48px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
   font-family: var(--mono);
   font-size: 11px;
-  line-height: 1.62;
-  color: #c9bcb1;
-}
-.stamp {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  line-height: 1.7;
-  color: var(--muted);
-  margin-top: 13px;
-}
-.stamp b {
-  color: #c9bcb1;
-  font-weight: 500;
-}
-.empty {
-  border: 1px solid var(--rule);
-  background: var(--ground2);
-  padding: 22px;
-  margin-top: 20px;
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.7;
-  color: var(--muted);
+  color: var(--dimmer);
 }
 
-/*
- * `brief` Part 6's motion is the category rotation and arriving verdicts. Someone
- * who has asked for less motion gets none of it: the rail stops rotating, the
- * rows stop staggering, the ticker stops advancing.
- */
+/* ---------- responsive ---------- */
+@media (max-width: 900px) {
+  .strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .fgrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .three {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 760px) {
+  .wrap {
+    padding: 0 14px 56px;
+  }
+  .nums {
+    display: none;
+  }
+  .rowhead {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    column-gap: 11px;
+    padding: 14px 14px 15px;
+  }
+  .detail {
+    padding: 4px 14px 20px 14px;
+  }
+  .meterwrap {
+    max-width: none;
+  }
+  .bhead {
+    grid-template-columns: 32px 1fr;
+    padding: 11px 14px;
+  }
+  .bhead .c-x {
+    display: none;
+  }
+  .chev {
+    display: none;
+  }
+  .hero h1 {
+    max-width: none;
+  }
+}
+@media (max-width: 480px) {
+  .strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .fgrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  /* Two mono captions side by side at 390px is two truncated captions. Stack. */
+  .metercap {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .metercap .heaviest {
+    text-align: left;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  * {
-    animation: none !important;
+  *,
+  *::before,
+  *::after {
     transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
   }
 }
