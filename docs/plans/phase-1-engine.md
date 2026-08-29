@@ -262,3 +262,74 @@ Produces every number the Phase 1 gate in `the-pit-agent-prompts.md` demands:
   ordinary sampling noise.
 
 Report renders as Markdown to `cjr/runs/<slug>/report.md` and prints a summary.
+
+---
+
+## Task 9 — Local handoff runner + `/seed-category` skill
+
+Added after the founder asked to seed locally rather than wait on an API key. This is
+not a workaround: `01` §1 and §9 describe the skill running with **no Anthropic API key**,
+jurors as local Claude Code subagents, and the Workflow return value hand-written to
+`cjr/runs/<slug>/results.json` (§4 Step 5). We are reproducing that flow, made
+repeatable.
+
+The engine cannot call the Agent tool from inside a Node process, so the handoff is via
+files, in dependency-ordered rounds. Round 1 is Score ∥ Uniqueness (both need only the
+products); Round 2 is Customer (needs Round 1's clusters) — matching `01` §2's phase
+graph exactly.
+
+### 9.1 `HandoffClient` — a third `ModelClient` adapter
+
+Implements the same interface as `AnthropicClient` and `FixtureClient`.
+
+- **Emit:** serializes each would-be request to
+  `cjr/runs/<slug>/handoff/<round>/<phase>-<key>.request.json`, carrying the fully
+  rendered system + messages + tool schema, and the `phase`, `juror_role` / `persona` /
+  `chunk_index` it belongs to.
+- **Ingest:** reads `<same-name>.response.json`, validates it against that phase's schema
+  (`SCORE_SCHEMA` / `UNIQ_SCHEMA` / `CHOICE_SCHEMA`) and **fails loudly per file**,
+  naming the file and the violated constraint. A juror whose deductions do not sum to
+  exactly `100 − score` is a hard failure, not a warning — that invariant is what makes
+  the deduction ledger trustworthy.
+- Records token counts where the responder reports them; where it cannot, marks cost as
+  `unmeasured` rather than guessing. Task 8's cost projection must show which figures
+  are measured and which are not.
+
+### 9.2 CLI
+
+```
+pnpm engine seed --category "X" --emit  --round 1   # writes N .request.json files
+pnpm engine seed --category "X" --ingest --round 1   # validates + persists phase results
+pnpm engine seed --category "X" --emit  --round 2   # cluster sets are now known
+pnpm engine seed --category "X" --ingest --round 2
+pnpm engine rank   --category "X"                    # ranking.json
+pnpm engine report --category "X"                    # the Phase 1 report
+```
+
+`--emit` prints the exact number of requests and their file paths. Every command is
+idempotent and resumable: re-running `--ingest` over already-ingested files is a no-op,
+and a partially-answered round reports which files are still missing rather than
+failing.
+
+### 9.3 The skill
+
+`.claude/skills/seed-category/SKILL.md`, invoked as `/seed-category "Developer Tools"`.
+Encodes the loop: emit round 1 → dispatch one subagent per request file → write each
+response → ingest → emit round 2 → dispatch → ingest → rank → report. Built with
+`superpowers:writing-skills`.
+
+The skill must state the **model-provenance caveat** prominently, and the runner must
+stamp it into `results.json.meta`:
+
+> Locally-seeded scores come from Claude Code subagents, not from the
+> `claude-haiku-4-5` / `claude-sonnet-5` Messages API calls production will make, and
+> the local path exposes no `effort` control. The pipeline, the fix-1.1 A/B, cluster
+> behaviour, discrimination and juror-correlation results are all valid. **Absolute
+> score levels and per-run cost do not transfer to production** and must be
+> re-baselined once a key exists.
+
+### 9.4 Tests
+
+`HandoffClient` emit/ingest round-trips against fixtures with no network: a well-formed
+response ingests; a response with a bad deduction sum, an unknown product id, a missing
+required field, or a duplicate cluster choice each fail loudly and name the file.
