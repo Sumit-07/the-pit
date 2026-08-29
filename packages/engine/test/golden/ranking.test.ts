@@ -244,10 +244,24 @@ describe('rankCategory — GOLDEN: scorecard, `01 §6.6`', () => {
    */
   it('reports the cross-juror mean and spread per metric', () => {
     expect(rowOf(0)?.scorecard).toEqual([
-      { metric: 'M', score: 95, spread: 5, deductions: [{ points: 10, reason: 'thin docs', role: 'harsh' }] },
+      {
+        metric: 'M',
+        score: 95,
+        spread: 5,
+        deductions: [{ points: 10, reason: 'thin docs', role: 'harsh' }],
+        juror_count: 2,
+        substituted_roles: [],
+      },
     ]);
     expect(rowOf(3)?.scorecard[0]?.score).toBe(65);
     expect(rowOf(3)?.scorecard[0]?.spread).toBe(5);
+  });
+
+  it('records that both jurors answered, so nothing was substituted', () => {
+    for (const row of ranking.ranking) {
+      expect(row.scorecard[0]?.juror_count).toBe(2);
+      expect(row.scorecard[0]?.substituted_roles).toEqual([]);
+    }
   });
 
   it('tags every deduction with the juror role that took it', () => {
@@ -341,6 +355,68 @@ describe('rankCategory — GOLDEN: document envelope, `01 §6.6`', () => {
       'scored',
       'solo_cluster',
     ]);
+  });
+});
+
+describe('rankCategory — a mixed uniqueness result places every product', () => {
+  /*
+   * Products 1 and 2 carry no `cluster_id`; only c1's `member_ids` places them.
+   * Everything downstream of membership must be identical to the fully-specified
+   * board above: same demand entries, same `demand_status`, same `cluster.size`,
+   * same roster. A whole-map fallback would drop 1 and 2 out of c1 and report
+   * them as `solo_cluster` with `cluster.size` 1 — a paying customer told the
+   * Floor never convened on them when it did.
+   */
+  const mixed = rankCategory({
+    category: 'Developer Tools',
+    type: 'b2b',
+    prompt_version: 'jury-v1',
+    uniqueness_version: 'uniq-v1',
+    demand_version: 'demand-v1',
+    products: PRODUCTS,
+    metrics: METRICS,
+    jury: JURY,
+    personas: PERSONAS,
+    scoreLog: SCORE_LOG,
+    uniqueness: {
+      clusters: UNIQUENESS.clusters,
+      products: [
+        { id: 0, uniqueness_score: 50, cluster_id: 'c1', reason: 'familiar' },
+        { id: 3, uniqueness_score: 90, cluster_id: 'c2', reason: 'no close analog' },
+      ],
+    },
+    demandLog: DEMAND_LOG,
+  });
+  const mixedRow = (id: number) => mixed.ranking.find((row) => row.id === id);
+
+  it('keeps the Floor-scored products out of solo_cluster', () => {
+    expect(mixedRow(1)?.demand_status).toBe('scored');
+    expect(mixedRow(2)?.demand_status).toBe('scored');
+    expect(mixedRow(1)?.demand).toBeCloseTo(0.86, PRECISION);
+    expect(mixedRow(3)?.demand_status).toBe('solo_cluster');
+  });
+
+  it('counts the whole cluster in every member row', () => {
+    expect(mixedRow(0)?.cluster.size).toBe(3);
+    expect(mixedRow(1)?.cluster).toEqual({
+      id: 'c1',
+      label: 'Note takers',
+      size: 3,
+      // No per-product uniqueness row for product 1, so UNIQ_NEUTRAL and no reason.
+      uniqueness: 50,
+      reason: '',
+    });
+  });
+
+  it('reports the roster at full size', () => {
+    expect(mixed.clusters).toEqual([
+      { cluster_id: 'c1', label: 'Note takers', size: 3 },
+      { cluster_id: 'c2', label: 'One of a kind', size: 1 },
+    ]);
+  });
+
+  it('produces the same board as the fully-specified uniqueness result', () => {
+    expect(mixed.ranking.map((row) => row.id)).toEqual([1, 0, 2, 3]);
   });
 });
 

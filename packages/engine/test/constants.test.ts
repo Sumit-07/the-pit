@@ -17,6 +17,12 @@ const FROZEN = {
   FIRST_PICK_W: 1.0,
   SECOND_PICK_W: 0.5,
   STRENGTH_DEFAULT: 50,
+  // Added by Task 3, cited to `01 §6.2` ("mean of the top-2 strengths"). Not in
+  // the plan's frozen table because the plan transcribed `01 §7.1`, which lists
+  // only the constants that file declared; the top-2 rule is stated inline in
+  // §6.2 instead. It is a demand weight in the same class as BREADTH_W and
+  // INTENSITY_W, so it is audited here with them.
+  TOP_STRENGTHS: 2,
   SCORE_CLAMP_DEFAULT: 50,
   MIN_PRODUCTS: 8,
   SANITIZE_LIMIT: 300,

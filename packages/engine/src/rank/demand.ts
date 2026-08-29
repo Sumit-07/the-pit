@@ -24,16 +24,10 @@ import {
   INTENSITY_W,
   SECOND_PICK_W,
   STRENGTH_DEFAULT,
+  TOP_STRENGTHS,
 } from '../config/constants.js';
 import type { ClusterId, DemandDetail, DemandLogEntry, DemandPick, UniquenessResult } from '../types.js';
 import { RAW_SCORE_MAX, clampScore, mean } from './stats.js';
-
-/**
- * `intensity` averages the top 2 strengths, not all of them. Structural to
- * `01 §6.2`, not a tunable: it is what makes intensity a measure of a product's
- * best advocates rather than of how many personas happened to be asked.
- */
-const TOP_STRENGTHS = 2;
 
 /** `01 §6.2` output: `demand_raw` per product, and the per-product `detail`. */
 export interface DemandReduction {
@@ -52,9 +46,22 @@ export interface DemandReduction {
  * Cluster membership as `01 §6.2` resolves it: from `uniqueness.products[].cluster_id`,
  * else from `uniqueness.clusters[].member_ids`.
  *
- * The per-product field wins because it is the one the uniqueness pass writes
- * per row; `member_ids` is the retrofit path for a run clustered before the
- * per-product field existed (`01 §4` Step 5).
+ * The fallback is PER PRODUCT, not all-or-nothing. `members_ids` fills in only
+ * the products the per-product field did not place, so a model-generated result
+ * that sets `cluster_id` on some rows and lists the rest only in `member_ids`
+ * still puts every product in its cluster.
+ *
+ * Resolving it as a whole-map switch instead — take `products[]` if it placed
+ * anything at all, otherwise `member_ids` — would silently drop the unplaced
+ * products out of their cluster. They would then get no `demand_raw` entry, so
+ * `blend` would rank them merit-only and label them `solo_cluster` when the
+ * Floor had in fact convened on their cluster, their peers' `cluster.size` would
+ * under-count, and the `ranking.clusters` roster would be wrong. All without an
+ * error.
+ *
+ * The per-product field wins on a conflict because it is the one the uniqueness
+ * pass writes per row; `member_ids` is also the retrofit path for a run
+ * clustered before that field existed (`01 §4` Step 5).
  */
 export function clusterMembers(
   uniqueness: UniquenessResult | null | undefined,
@@ -62,17 +69,21 @@ export function clusterMembers(
   const members = new Map<ClusterId, number[]>();
   if (!uniqueness) return members;
 
+  // A product belongs to exactly one cluster. `placed` enforces that across both
+  // sources, so it is also the duplicate guard within a single `member_ids` list.
+  const placed = new Set<number>();
   const add = (clusterId: ClusterId, productId: number): void => {
+    if (placed.has(productId)) return;
+    placed.add(productId);
     const list = members.get(clusterId);
     if (list === undefined) members.set(clusterId, [productId]);
-    else if (!list.includes(productId)) list.push(productId);
+    else list.push(productId);
   };
 
   for (const product of uniqueness.products ?? []) {
     if (typeof product.cluster_id !== 'string' || product.cluster_id === '') continue;
     add(product.cluster_id, product.id);
   }
-  if (members.size > 0) return members;
 
   for (const cluster of uniqueness.clusters ?? []) {
     for (const id of cluster.member_ids ?? []) add(cluster.cluster_id, id);

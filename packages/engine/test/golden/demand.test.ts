@@ -285,7 +285,80 @@ describe('clusterMembers — `01 §6.2` membership resolution', () => {
     expect([...clusterMembers(retrofit)]).toEqual([['c1', [4, 5]]]);
   });
 
+  it('falls back PER PRODUCT on a mixed result, not all-or-nothing', () => {
+    /*
+     * A plausible shape from model-generated output: `cluster_id` set on some
+     * rows and the rest listed only in `member_ids`.
+     *
+     * Resolving this as a whole-map switch -- take products[] because it placed
+     * something, ignore member_ids entirely -- would silently drop products 1
+     * and 2 out of c1. They would get no demand_raw entry, so `blend` would rank
+     * them merit-only and label them `solo_cluster` when the Floor HAD convened
+     * on their cluster; product 0's `cluster.size` would read 1 instead of 3;
+     * and the `ranking.clusters` roster would be wrong. All without an error.
+     */
+    const mixed: UniquenessResult = {
+      clusters: [
+        { cluster_id: 'c1', label: 'Note takers', member_ids: [0, 1, 2] },
+        { cluster_id: 'c2', label: 'One of a kind', member_ids: [3] },
+      ],
+      products: [
+        { id: 0, uniqueness_score: 40, cluster_id: 'c1', reason: 'crowded' },
+        // products 1 and 2 carry no cluster_id; only member_ids places them
+        { id: 1, uniqueness_score: 50, cluster_id: '', reason: 'familiar' },
+        { id: 3, uniqueness_score: 95, cluster_id: 'c2', reason: 'no analog' },
+      ],
+    };
+    expect([...clusterMembers(mixed)]).toEqual([
+      ['c1', [0, 1, 2]],
+      ['c2', [3]],
+    ]);
+  });
+
+  it('keeps a product in the cluster its own row names when the two sources disagree', () => {
+    // The per-product field wins: it is what the uniqueness pass wrote for that
+    // row, and a product belongs to exactly one cluster.
+    const conflicting: UniquenessResult = {
+      clusters: [
+        { cluster_id: 'c1', label: 'A', member_ids: [0, 1] },
+        { cluster_id: 'c2', label: 'B', member_ids: [0] },
+      ],
+      products: [{ id: 0, uniqueness_score: 50, cluster_id: 'c2', reason: 'r' }],
+    };
+    expect([...clusterMembers(conflicting)]).toEqual([
+      ['c2', [0]],
+      ['c1', [1]],
+    ]);
+  });
+
+  it('does not double-count a product repeated inside one member_ids list', () => {
+    const duped: UniquenessResult = {
+      clusters: [{ cluster_id: 'c1', label: 'L', member_ids: [4, 4, 5] }],
+      products: [],
+    };
+    expect([...clusterMembers(duped)]).toEqual([['c1', [4, 5]]]);
+  });
+
   it('has no membership at all without a uniqueness pass', () => {
     expect(clusterMembers(null).size).toBe(0);
+  });
+});
+
+describe('reduceDemand — a mixed uniqueness result still scores the whole cluster', () => {
+  it('gives every member a demand entry, however its membership was expressed', () => {
+    /*
+     * The same 6-persona demand log as the golden fixture, but products 1 and 2
+     * are placed only by `member_ids`. Every demand_raw value must be identical
+     * to the fully-specified case -- 0.7518181818 / 0.5109090909 / 0.4206060606 --
+     * and nobody may fall out to `solo_cluster`.
+     */
+    const mixed: UniquenessResult = {
+      clusters: [{ cluster_id: 'c1', label: 'Note takers', member_ids: [0, 1, 2] }],
+      products: [{ id: 0, uniqueness_score: 40, cluster_id: 'c1', reason: 'crowded' }],
+    };
+    const { demandRaw } = reduceDemand(DEMAND_LOG, mixed);
+    expect(demandRaw.get(0)).toBeCloseTo(0.7518181818, PRECISION);
+    expect(demandRaw.get(1)).toBeCloseTo(0.5109090909, PRECISION);
+    expect(demandRaw.get(2)).toBeCloseTo(0.4206060606, PRECISION);
   });
 });

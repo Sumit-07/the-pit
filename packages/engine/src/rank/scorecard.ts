@@ -19,14 +19,25 @@ import { clampScore, mean, popStd } from './stats.js';
 /**
  * Build every product's scorecard, one row per rubric metric, in rubric order.
  *
- * A (product, metric) pair NO juror returned is omitted rather than shown as a
- * default. That is deliberately different from `computeComposite`, which must
- * substitute 50.0 for a missing score because every juror needs a value on every
- * product to z-normalize across the set. The scorecard is the published record
- * of what the jury actually said, so it reports only what was actually returned;
- * inventing a 50 there would put a number in a customer's hands that no juror
- * ever wrote. `avg_metric_spread` follows the scorecard, so a metric nobody
- * scored contributes no disagreement rather than a fabricated zero.
+ * Every juror in the score log contributes a value to every row, taken from the
+ * SAME clamped table `computeComposite` reads: a juror that returned no score
+ * for this metric contributes a substituted `SCORE_CLAMP_DEFAULT`, because that
+ * is what it contributed to the rank. `01 §6`'s preamble is explicit that the
+ * board and the health stats share their arithmetic "so they always agree", and
+ * that `_clamp(x, 0, 100, default=50)` guards *every* raw score.
+ *
+ * The alternative — averaging only the jurors that answered — publishes a
+ * scorecard the rank cannot be re-derived from. With six jurors, one omission on
+ * a metric the other five scored 85 would print 85 on a board whose composite
+ * used 50. `the-pit-build-brief.md` Part 7 calls the score log the integrity
+ * record if anyone disputes a ranking, and that re-derivability is the product.
+ *
+ * The substitution is never silent: `substituted_roles` names every juror whose
+ * cell was filled in, so a consumer discloses "this juror did not return a
+ * score" instead of presenting a fabricated 50 as a juror's opinion.
+ *
+ * A score log with no jurors at all produces no scorecard rows — there is nobody
+ * to substitute for, and the composite counts no jurors either.
  */
 export function buildScorecards(
   scoreLog: readonly ScoreLogEntry[],
@@ -39,21 +50,34 @@ export function buildScorecards(
   for (const id of productIds) {
     const entries: ScorecardEntry[] = [];
 
-    for (const name of metricNames) {
-      const scores: number[] = [];
-      const deductions: ScorecardDeduction[] = [];
+    if (jurors.length > 0) {
+      for (const name of metricNames) {
+        const scores: number[] = [];
+        const deductions: ScorecardDeduction[] = [];
+        const substituted: string[] = [];
 
-      for (const juror of jurors) {
-        const metric = juror.rows.get(id)?.get(name);
-        if (metric === undefined) continue;
-        scores.push(clampScore(metric.score, SCORE_CLAMP_DEFAULT));
-        for (const deduction of metric.deductions ?? []) {
-          deductions.push({ points: deduction.points, reason: deduction.reason, role: juror.role });
+        for (const juror of jurors) {
+          const metric = juror.rows.get(id)?.get(name);
+          const raw = metric?.score;
+          // The exact condition under which `clampScore` falls back, so
+          // `substituted_roles` names every cell the default filled in — a row
+          // the juror never returned and a row it returned as garbage alike.
+          if (typeof raw !== 'number' || !Number.isFinite(raw)) substituted.push(juror.role);
+          scores.push(clampScore(raw, SCORE_CLAMP_DEFAULT));
+          for (const deduction of metric?.deductions ?? []) {
+            deductions.push({ points: deduction.points, reason: deduction.reason, role: juror.role });
+          }
         }
-      }
 
-      if (scores.length === 0) continue;
-      entries.push({ metric: name, score: mean(scores), spread: popStd(scores), deductions });
+        entries.push({
+          metric: name,
+          score: mean(scores),
+          spread: popStd(scores),
+          deductions,
+          juror_count: jurors.length,
+          substituted_roles: substituted,
+        });
+      }
     }
 
     scorecards.set(id, entries);

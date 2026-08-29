@@ -41,6 +41,16 @@ export const SECOND_PICK_W = 0.5;
 /** Clamp default for a missing persona `strength`. Source: `01 §7.1` (rank_final.py:173). */
 export const STRENGTH_DEFAULT = 50;
 
+/**
+ * How many of a product's strengths `intensity` averages: the TOP 2.
+ * Source: `01 §6.2` — `intensity = mean(top-2 of strengths[pid]) / 100`.
+ *
+ * A weight that shapes demand, in the same class as `BREADTH_W`/`INTENSITY_W`:
+ * raising it to 3 would re-weight intensity toward breadth-of-advocates, so it
+ * belongs in the audited table rather than at its use site.
+ */
+export const TOP_STRENGTHS = 2;
+
 /** Clamp default for a missing raw 0-100 juror score. Source: `01 §6` (`_clamp(x, 0, 100, default=50)`). */
 export const SCORE_CLAMP_DEFAULT = 50;
 

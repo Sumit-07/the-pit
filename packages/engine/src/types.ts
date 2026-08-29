@@ -217,14 +217,41 @@ export interface ScorecardDeduction extends Deduction {
   role: string;
 }
 
-/** One metric row of a product's merged scorecard. Source: `01 §6.6`. */
+/**
+ * One metric row of a product's merged scorecard. Source: `01 §6.6`.
+ *
+ * `score` and `spread` are computed over the SAME clamped table the merit
+ * composite reads (`01 §6`: `_clamp(x, 0, 100, default=50)` guards every raw
+ * score, and the shared `_score_products` exists "so the board and the health
+ * stats always agree"). A juror that returned nothing for this metric therefore
+ * contributes a substituted `SCORE_CLAMP_DEFAULT`, exactly as it did to the
+ * composite — which is what lets a customer re-derive their rank from the
+ * published record. `the-pit-build-brief.md` Part 7 calls the score log the
+ * integrity record if anyone disputes a ranking; a scorecard computed over a
+ * different table than the rank would not be one.
+ *
+ * `substituted_roles` keeps that substitution visible rather than silently
+ * publishing a fabricated 50 as if a juror had written it.
+ */
 export interface ScorecardEntry {
   metric: string;
-  /** Cross-juror mean of the raw 0-100 scores. */
+  /** Cross-juror mean of the raw 0-100 scores, substitutions included. */
   score: number;
-  /** Cross-juror population std of the raw 0-100 scores. */
+  /** Cross-juror population std of the raw 0-100 scores, substitutions included. */
   spread: number;
   deductions: ScorecardDeduction[];
+  /** How many jurors' scores `score` and `spread` cover — the whole score log. */
+  juror_count: number;
+  /**
+   * Roles that returned no score for this metric. Each contributed a substituted
+   * `SCORE_CLAMP_DEFAULT` to `score`, `spread` and the composite, so a non-empty
+   * list is a disclosure the verdict page must render: this juror did not answer.
+   *
+   * It should always be empty: `01 §5.1` has every juror score every product, so
+   * a missing cell is a malformed response, which `brief §2.3` classifies as a
+   * failure to retry rather than deliver.
+   */
+  substituted_roles: string[];
 }
 
 /**

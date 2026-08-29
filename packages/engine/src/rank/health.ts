@@ -30,6 +30,9 @@ export interface JuryHealthInput {
  * - `avg_metric_spread` — mean over (product, metric) of the cross-juror
  *   population std of raw scores, i.e. how much the jury disagrees per metric.
  *   High disagreement is healthy; near-zero means the six jurors are one juror.
+ *   It reads the scorecard's `spread` values, which are computed over the same
+ *   clamped table the composite uses, so the board and the health stats describe
+ *   one table rather than two (`01 §6` preamble).
  * - `tiebreak_count` — `01 §6.4`. The name is historical: it counts products
  *   demand + uniqueness moved off their pure-merit position, not duels.
  */
