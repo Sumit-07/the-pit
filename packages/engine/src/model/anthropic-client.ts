@@ -165,12 +165,16 @@ export function extractToolOutput(message: Anthropic.Message, toolName: string):
   if (message.stop_reason === 'max_tokens') {
     throw new ModelCallError(
       `model response was truncated at max_tokens before ${JSON.stringify(toolName)} completed; raise the max_tokens budget`,
-      { retryable: true },
+      // Retryable HERE, where a shorter answer next time is plausible. Task 7's
+      // dispatcher demotes `code: 'max_tokens'` to terminal, because a category
+      // that overflows a `MAX_TOKENS_*` budget overflows it on every attempt.
+      { retryable: true, code: 'max_tokens' },
     );
   }
   if (message.stop_reason === 'refusal') {
     throw new ModelCallError(`model refused the request (${message.stop_details?.category ?? 'no category'})`, {
       retryable: false,
+      code: 'refusal',
     });
   }
 
@@ -180,7 +184,7 @@ export function extractToolOutput(message: Anthropic.Message, toolName: string):
 
   throw new ModelCallError(
     `model returned no ${JSON.stringify(toolName)} tool call (stop_reason ${JSON.stringify(message.stop_reason)})`,
-    { retryable: true },
+    { retryable: true, code: 'no_tool_call' },
   );
 }
 

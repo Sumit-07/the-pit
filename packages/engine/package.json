@@ -24,5 +24,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
     "exceljs": "^4.4.0"
+  },
+  "bin": {
+    "engine": "./dist/cli/main.js"
   }
 }

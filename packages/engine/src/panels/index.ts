@@ -30,6 +30,8 @@ export {
 } from './generate/index.js';
 export type { PanelOrdering } from './ordering.js';
 export { orderedChunks, orderingSeed, panelOrder } from './ordering.js';
+export type { AssignRequestInput, Assignment } from './prompts/assign.js';
+export { ASSIGN_SCHEMA, ASSIGN_TOOL_NAME, buildAssignRequest, validateAssignResult } from './prompts/assign.js';
 export type { ChoiceRequestInput, SimilarSet } from './prompts/choice.js';
 export { buildChoiceRequest, setMembership, similarSets } from './prompts/choice.js';
 export type { ScoreRequestInput } from './prompts/score.js';

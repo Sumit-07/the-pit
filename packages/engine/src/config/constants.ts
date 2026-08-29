@@ -161,3 +161,94 @@ export const MAX_TOKENS_UNIQUENESS = 8000;
  * <=20-word reason.
  */
 export const MAX_TOKENS_CHOICE = 4000;
+
+/**
+ * The new product's cluster assignment on the incremental path — one existing
+ * `cluster_id` or one new label, plus a scarcity score and a <=20-word reason.
+ * A single small row, so the budget only has to cover one uniqueness-shaped
+ * answer with room for a long label.
+ */
+export const MAX_TOKENS_ASSIGN = 2000;
+
+// --- Engine identity ----------------------------------------------------------
+
+/**
+ * The engine build that produced a stored run, stamped into `results.json.meta`.
+ *
+ * A run is an integrity record (`brief` Part 7: "backups of the score log — it's
+ * the integrity record if anyone disputes a ranking"), and a record that cannot
+ * say which code produced it is a weaker one. Must equal `version` in
+ * `packages/engine/package.json`; `test/constants.test.ts` asserts that, because
+ * two hand-maintained version strings drift.
+ */
+export const ENGINE_VERSION = '0.1.0';
+
+// --- Cost model ---------------------------------------------------------------
+// `01 §7.3` gives the cost model as a CALL COUNT and never prices a token, so
+// these rates are the missing half of Task 7's ledger. They are US dollars per
+// MILLION tokens, from the current Anthropic pricing table (checked 2026-08-29
+// against the `claude-api` skill's model table).
+//
+// Cache rates are the published multipliers on the model's own input rate:
+// a 5-minute cache WRITE costs 1.25x input, a cache READ costs 0.1x input. They
+// are written out as absolute rates rather than as multipliers so a reader of
+// the ledger can check a dollar figure against this table without doing the
+// multiplication in their head, and `test/run/ledger.test.ts` re-derives them
+// from the multipliers so the two can never drift apart.
+
+/** Cache WRITE premium as a multiple of the input rate. Source: Anthropic prompt-caching pricing. */
+export const CACHE_WRITE_MULTIPLIER = 1.25;
+
+/** Cache READ discount as a multiple of the input rate. Source: Anthropic prompt-caching pricing. */
+export const CACHE_READ_MULTIPLIER = 0.1;
+
+/** USD per million input tokens, `claude-haiku-4-5`. */
+export const PRICE_HAIKU_INPUT = 1.0;
+
+/** USD per million output tokens, `claude-haiku-4-5`. */
+export const PRICE_HAIKU_OUTPUT = 5.0;
+
+/** USD per million input tokens, `claude-sonnet-5`. */
+export const PRICE_SONNET_INPUT = 2.0;
+
+/** USD per million output tokens, `claude-sonnet-5`. */
+export const PRICE_SONNET_OUTPUT = 10.0;
+
+/** Tokens per dollar-denominated price unit: the rates above are per million tokens. */
+export const TOKENS_PER_PRICE_UNIT = 1_000_000;
+
+// --- Dry-run estimation -------------------------------------------------------
+// `01 §4` Step 4 requires the dry run to print a projected call count AND a token
+// estimate while spending nothing, which means estimating without a tokenizer.
+// Every number below is an ESTIMATE and the projection labels itself as one; none
+// of them is ever used to compute a rank or to bill anybody.
+
+/**
+ * Characters per token, the standard English-prose approximation. Applied to the
+ * fully rendered prompt text of the requests a run WOULD send, so the input side
+ * of the estimate is measured off real bytes rather than guessed.
+ */
+export const EST_CHARS_PER_TOKEN = 4;
+
+/**
+ * Estimated output tokens for one product-metric cell of a scoring answer: a
+ * score, a handful of deductions, and their <=20-word reasons with JSON framing.
+ * Source: the worst-case derivation already written above for `MAX_TOKENS_SCORE`
+ * ("~110 tokens per scored metric"), reused so the ceiling and the estimate
+ * cannot disagree.
+ */
+export const EST_OUTPUT_TOKENS_PER_SCORED_METRIC = 110;
+
+/**
+ * Estimated output tokens for one row of a uniqueness answer: a scarcity score,
+ * a cluster id and a <=20-word reason. Source: the `MAX_TOKENS_UNIQUENESS`
+ * derivation above ("~60 tokens").
+ */
+export const EST_OUTPUT_TOKENS_PER_UNIQUENESS_ROW = 60;
+
+/**
+ * Estimated output tokens for one persona choice: a cluster id, two product ids,
+ * a strength and a <=20-word reason. Same shape and therefore the same size as a
+ * uniqueness row; see the `MAX_TOKENS_CHOICE` derivation above.
+ */
+export const EST_OUTPUT_TOKENS_PER_CHOICE = 60;

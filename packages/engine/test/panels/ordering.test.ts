@@ -3,7 +3,11 @@ import { existsSync, statSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { CHUNK_SIZE } from '../../src/config/constants.js';
-import { chunkItems } from '../../src/rank/index.js';
+// Imported from the MODULE, not from `src/rank/index.js` — `chunkItems` is not in
+// the public barrel precisely so no orchestration path can reach it (Task 7).
+// These tests reach past that on purpose: the naive split is the defect they
+// exist to demonstrate, and demonstrating it needs the wrong function.
+import { chunkItems } from '../../src/rank/chunk.js';
 import { orderedChunks, panelOrder } from '../../src/panels/index.js';
 import type { PanelOrdering } from '../../src/panels/index.js';
 import { product } from '../helpers/samples.js';

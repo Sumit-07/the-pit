@@ -55,6 +55,33 @@ const FROZEN = {
   MAX_TOKENS_SCORE: 32000,
   MAX_TOKENS_UNIQUENESS: 8000,
   MAX_TOKENS_CHOICE: 4000,
+  // Added by Task 7. The incremental path places one new product against the
+  // fixed cluster roster (`brief §1.5`), which is a single small answer.
+  MAX_TOKENS_ASSIGN: 2000,
+  // Added by Task 7. `01 §7.3` models cost as a CALL COUNT and never prices a
+  // token, so the ledger needs a price table. USD per million tokens, from the
+  // current Anthropic table; the cache rates are the published multipliers on
+  // each model's own input rate and `test/run/ledger.test.ts` re-derives them.
+  CACHE_WRITE_MULTIPLIER: 1.25,
+  CACHE_READ_MULTIPLIER: 0.1,
+  PRICE_HAIKU_INPUT: 1.0,
+  PRICE_HAIKU_OUTPUT: 5.0,
+  PRICE_SONNET_INPUT: 2.0,
+  PRICE_SONNET_OUTPUT: 10.0,
+  TOKENS_PER_PRICE_UNIT: 1_000_000,
+  // Added by Task 7. `01 §4` Step 4's dry run must print a token estimate while
+  // spending nothing, i.e. without a tokenizer. Every one of these is an
+  // ESTIMATE, labelled as one in the projection, and none is ever used to compute
+  // a rank or to bill anybody. The output figures reuse the per-row derivations
+  // already written against the MAX_TOKENS_* constants above, so the ceiling and
+  // the estimate cannot disagree.
+  EST_CHARS_PER_TOKEN: 4,
+  EST_OUTPUT_TOKENS_PER_SCORED_METRIC: 110,
+  EST_OUTPUT_TOKENS_PER_UNIQUENESS_ROW: 60,
+  EST_OUTPUT_TOKENS_PER_CHOICE: 60,
+  // Added by Task 7. Stamped into `results.json.meta` so a stored run says which
+  // build produced it (`brief` Part 7: the score log is the integrity record).
+  ENGINE_VERSION: '0.1.0',
 } as const;
 
 describe('frozen constants', () => {
@@ -77,5 +104,20 @@ describe('frozen constants', () => {
 
   it('bounds the uniqueness tilt well below one population std', () => {
     expect(constants.UNIQ_LAMBDA).toBeLessThan(0.1);
+  });
+
+  it('keeps ENGINE_VERSION equal to the package version', async () => {
+    // Two hand-maintained version strings drift. A stored run that names the
+    // wrong build is a worse integrity record than one that names none.
+    const { readFile } = await import('node:fs/promises');
+    const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as {
+      version: string;
+    };
+    expect(constants.ENGINE_VERSION).toBe(pkg.version);
+  });
+
+  it('prices sonnet above haiku on both input and output', () => {
+    expect(constants.PRICE_SONNET_INPUT).toBeGreaterThan(constants.PRICE_HAIKU_INPUT);
+    expect(constants.PRICE_SONNET_OUTPUT).toBeGreaterThan(constants.PRICE_HAIKU_OUTPUT);
   });
 });

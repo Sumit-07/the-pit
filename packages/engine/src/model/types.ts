@@ -127,10 +127,32 @@ export class ModelCallError extends Error {
   override readonly name = 'ModelCallError';
   readonly retryable: boolean;
   readonly status: number | undefined;
+  readonly code: ModelCallErrorCode | undefined;
 
-  constructor(message: string, options: { retryable: boolean; status?: number; cause?: unknown }) {
+  constructor(
+    message: string,
+    options: { retryable: boolean; status?: number; code?: ModelCallErrorCode; cause?: unknown },
+  ) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
     this.retryable = options.retryable;
     this.status = options.status;
+    this.code = options.code;
   }
 }
+
+/**
+ * A machine-readable cause, for the one caller that must treat a failure
+ * differently from what `retryable` alone says.
+ *
+ * `max_tokens` is the case that forced this field to exist. `MAX_TOKENS_UNIQUENESS`
+ * and `MAX_TOKENS_CHOICE` are derived from an UNBOUNDED category size, so a
+ * category large enough to overflow them truncates on every single attempt.
+ * `extractToolOutput` classifies a truncation `retryable: true` — correct at this
+ * layer, where a truncated answer really might come back shorter next time — but
+ * a phase retry loop that trusts that classification would burn a customer's
+ * whole free-retry budget (`brief §2.3`) on a deterministic failure. Task 7's
+ * dispatcher therefore demotes this one code to terminal, and it must be able to
+ * recognise it without string-matching an error message: the wording of an error
+ * is not a contract, a code is. See `src/run/dispatch.ts`.
+ */
+export type ModelCallErrorCode = 'max_tokens' | 'refusal' | 'no_tool_call';

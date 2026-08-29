@@ -7,7 +7,14 @@
 
 export type { BlendInput, BlendedProduct } from './blend.js';
 export { blend, finalOrder, meritOrder, ranksFrom } from './blend.js';
-export { balancedChunks, chunkItems, partitionSizes } from './chunk.js';
+// `chunkItems` is deliberately NOT re-exported. It chunks a list in the order it
+// arrives, and `Product.id` order IS the incoming leaderboard, so a caller that
+// chunks with it and hands the result to `buildScoreRequest` gets rank-contiguous
+// comparison sets — the defect `src/panels/ordering.ts` exists to close. The
+// prompts still look correct, so nothing downstream would announce the mistake.
+// `orderedChunks` (`src/panels/ordering.ts`) is the only supported way to chunk
+// products for a panel; it orders first and then calls `chunkItems` internally.
+export { balancedChunks, partitionSizes } from './chunk.js';
 export { computeComposite, normalizeWeights } from './composite.js';
 export type { DemandReduction } from './demand.js';
 export { clusterMembers, reduceDemand } from './demand.js';

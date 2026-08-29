@@ -1,0 +1,60 @@
+#!/usr/bin/env node
+/**
+ * `pnpm engine <command>` — the engine's command line.
+ *
+ * One command so far (`seed`). Tasks 8 and 9 add `report`, `rank`, and `seed`'s
+ * `--emit` / `--ingest` rounds, which is why the dispatch is a table rather than
+ * an `if`: a new command is a row here and a module beside `seed.ts`.
+ *
+ * `main` takes an argv and returns an exit code, and does no process I/O of its
+ * own beyond the injected `log`. The bottom of the file is the only place that
+ * touches `process`, so the whole surface is testable without spawning anything.
+ */
+
+import { pathToFileURL } from 'node:url';
+
+import { parseArgs, UsageError } from './args.js';
+import { makeAnthropicClient, SEED_USAGE, seedCommand } from './seed.js';
+
+const USAGE = `the-pit engine
+
+Commands:
+  seed     score a category (01 §4 Steps 4-6)
+
+${SEED_USAGE}`;
+
+/** Dispatch one command line. Returns the exit code; never calls `process.exit`. */
+export async function main(argv: readonly string[], log: (line: string) => void = console.log): Promise<number> {
+  if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h' || argv[0] === 'help') {
+    log(USAGE);
+    return argv.length === 0 ? 1 : 0;
+  }
+
+  try {
+    const args = parseArgs(argv);
+    switch (args.command) {
+      case 'seed':
+        return await seedCommand(args, { log, makeClient: makeAnthropicClient });
+      default:
+        log(`unknown command ${JSON.stringify(args.command)}\n\n${USAGE}`);
+        return 1;
+    }
+  } catch (error) {
+    if (error instanceof UsageError) {
+      log(`error: ${error.message}\n\n${USAGE}`);
+      return 2;
+    }
+    // A real failure. Printed with its message rather than a stack, because the
+    // messages this engine throws are written for the person reading them —
+    // `InsufficientProductsError` names the count, a validator names the field.
+    log(`error: ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
+}
+
+// Entry point. `import.meta.url` rather than `__dirname`: this package is ESM.
+// `pathToFileURL` rather than a hand-built `file://` string, which mis-encodes a
+// path containing a space or a `#` and would silently make the CLI a no-op.
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exitCode = await main(process.argv.slice(2));
+}

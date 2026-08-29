@@ -14,5 +14,13 @@ export { AnthropicClient, buildMessageParams, extractToolOutput, toTokenUsage } 
 export type { FixtureResponse, FixtureScript } from './fixture-client.js';
 export { FixtureClient, FixtureExhaustedError, ZERO_USAGE } from './fixture-client.js';
 export { MODEL_IDS, resolveModelId, supportsEffort } from './model-ids.js';
-export type { Effort, ModelClient, ModelRequest, ModelResponse, ModelTier, TokenUsage } from './types.js';
+export type {
+  Effort,
+  ModelCallErrorCode,
+  ModelClient,
+  ModelRequest,
+  ModelResponse,
+  ModelTier,
+  TokenUsage,
+} from './types.js';
 export { ModelCallError } from './types.js';
