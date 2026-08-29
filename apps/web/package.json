@@ -11,8 +11,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@the-pit/auth": "workspace:*",
     "@the-pit/db": "workspace:*",
     "@the-pit/engine": "workspace:*",
+    "inngest": "^4.18.1",
     "next": "15.5.24",
     "react": "19.2.8",
     "react-dom": "19.2.8"
