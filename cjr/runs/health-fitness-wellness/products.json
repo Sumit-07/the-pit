@@ -1,0 +1,357 @@
+{
+  "category": "Health, Fitness & Wellness",
+  "products": [
+    {
+      "id": 0,
+      "name": "Fuel Log — calorie tracking you'll actually stick to",
+      "description": "Send a photo of your food on Telegram — AI counts the calories and macros, and you take on your squad in the weekly leaderboards. Free, no logins.",
+      "url": "https://fuellog.ai/",
+      "normalized_url": "fuellog.ai",
+      "orig_rank": 1
+    },
+    {
+      "id": 1,
+      "name": "A simple workout logger for serious lifters",
+      "description": "A fast, private workout tracker, available now on iPhone and in development for Android. Completely free forever, with no account, subscriptions, ads, or paid features.",
+      "url": "https://myworkoutlogs.com/",
+      "normalized_url": "myworkoutlogs.com",
+      "orig_rank": 2
+    },
+    {
+      "id": 2,
+      "name": "PeptiPrices - Compare Peptide Prices Across Top Suppliers",
+      "description": "Find the best prices for research peptides including Retatrutide, Tirzepatide, BPC-157, and more. Compare prices across verified suppliers with real-time stock status and detailed product information.",
+      "url": "https://peptiprices.com/",
+      "normalized_url": "peptiprices.com",
+      "orig_rank": 3
+    },
+    {
+      "id": 3,
+      "name": "PeptideBenchmark — Independent Peptide Vendor Reviews & Research Hub",
+      "description": "Compare peptide vendors by trust evidence, live pricing, and public COA records. Independent reviews for research buyers.",
+      "url": "https://peptidebenchmark.com/",
+      "normalized_url": "peptidebenchmark.com",
+      "orig_rank": 4
+    },
+    {
+      "id": 4,
+      "name": "Teen & Young Adult Behavioral Healthcare Services",
+      "description": "Newport Healthcare is changing the face of behavioral health services for children, teens, and young adults by providing sustainable healing.",
+      "url": "https://newporthealthcare.com/",
+      "normalized_url": "newporthealthcare.com",
+      "orig_rank": 5
+    },
+    {
+      "id": 5,
+      "name": "Recovery.com: Find Addiction & Mental Health Treatment",
+      "description": "We independently research each addiction and mental health treatment center to help you find the best rehab center in the world for you.",
+      "url": "https://recovery.com/",
+      "normalized_url": "recovery.com",
+      "orig_rank": 6
+    },
+    {
+      "id": 6,
+      "name": "meteoric: Burn fat. Not muscle.",
+      "description": "The app that keeps your muscle while the weight comes off. Built for Ozempic, Wegovy, Mounjaro & Zepbound users.",
+      "url": "https://getmeteoric.app/",
+      "normalized_url": "getmeteoric.app",
+      "orig_rank": 7
+    },
+    {
+      "id": 7,
+      "name": "Track AI: Calorie Counter App with Photo Recognition",
+      "description": "TrackAI makes it easy to count calories from a photo. Snap your meal and AI recognizes ingredients to estimate calories and macros in seconds. Try it free.",
+      "url": "https://trackai.app/",
+      "normalized_url": "trackai.app",
+      "orig_rank": 9
+    },
+    {
+      "id": 8,
+      "name": "SoloUno – Take Control of Hair Pulling, Nail Biting, Skin Picking & More",
+      "description": "Take Control of Hair Pulling, Nail Biting & Skin Picking",
+      "url": "https://www.solouno.io/",
+      "normalized_url": "solouno.io",
+      "orig_rank": 10
+    },
+    {
+      "id": 9,
+      "name": "GLP-1 Journey Log App - App Store",
+      "description": "Download GLP-1 Journey Log by JMF LABS LLC on the App Store. See screenshots, ratings and reviews, user tips, and more apps like GLP-1 Journey Log.",
+      "url": "https://go.glp1journey.app/outbid-1",
+      "normalized_url": "go.glp1journey.app/outbid-1",
+      "orig_rank": 11
+    },
+    {
+      "id": 10,
+      "name": "quitsmoking.lol",
+      "description": "Spend the dollar, skip the cigarette.",
+      "url": "https://quitsmoking.lol/",
+      "normalized_url": "quitsmoking.lol",
+      "orig_rank": 12
+    },
+    {
+      "id": 11,
+      "name": "FitLocker — Turn your saves into gains",
+      "description": "The workouts you save on Instagram and TikTok become structured, trackable training programs.",
+      "url": "https://fitlocker.app/",
+      "normalized_url": "fitlocker.app",
+      "orig_rank": 13
+    },
+    {
+      "id": 12,
+      "name": "StepStreak | Step goals, friends & streaks | iPhone",
+      "description": "Turn Apple Health steps into daily goals, streaks, badges, XP and friendly races. See who is ahead, who is behind and how many steps it takes to pass them.",
+      "url": "https://stepstreak.com/",
+      "normalized_url": "stepstreak.com",
+      "orig_rank": 14
+    },
+    {
+      "id": 13,
+      "name": "MoveTogether: Fitness Competition App for iOS and Android",
+      "description": "Only app that syncs fitness data across all major wearables into a single leaderboard. Live competition across iOS and the Android public beta.",
+      "url": "https://movetogetherfitness.com/",
+      "normalized_url": "movetogetherfitness.com",
+      "orig_rank": 15
+    },
+    {
+      "id": 14,
+      "name": "Blisswell — Science-Backed Wellness Apps",
+      "description": "Science-based wellness apps for sexual health, relationships and anxiety — built by a licensed clinical psychologist. Structured, private programs.",
+      "url": "https://blisswell.app/",
+      "normalized_url": "blisswell.app",
+      "orig_rank": 16
+    },
+    {
+      "id": 15,
+      "name": "Ellua: Stop the Food Noise App",
+      "description": "Download Ellua: Stop the Food Noise by Adnan Urwani on the App Store. See screenshots, ratings and reviews, user tips, and more apps like Ellua: Stop the Food…",
+      "url": "https://apps.apple.com/us/app/ellua-stop-the-food-noise/id6758876641",
+      "normalized_url": "apps.apple.com/us/app/ellua-stop-the-food-noise/id6758876641",
+      "orig_rank": 17
+    },
+    {
+      "id": 16,
+      "name": "Kenso Forge — AI-Powered Strength Training App",
+      "description": "Kenso understands the training you already do — everywhere you do it — and shows you what it's producing. Not a workout builder. Not a faster logbook.",
+      "url": "https://kensoforge.com/",
+      "normalized_url": "kensoforge.com",
+      "orig_rank": 18
+    },
+    {
+      "id": 17,
+      "name": "Free Peptide Reconstitution Calculator",
+      "description": "Enter vial mg, water mL, and desired dose - instantly see units to draw. Presets for BPC-157, Semaglutide, TB-500 and more.",
+      "url": "https://new-u.io/blog/reconstitution-calculator",
+      "normalized_url": "new-u.io/blog/reconstitution-calculator",
+      "orig_rank": 19
+    },
+    {
+      "id": 18,
+      "name": "Kenso Workout Tracker Gym Log App",
+      "description": "Download Kenso Workout Tracker Gym Log by Zenmonkeys Digital LLC on the App Store. See screenshots, ratings and reviews, user tips, and more apps like Kenso…",
+      "url": "https://apps.apple.com/us/app/kenso-workout-tracker-gym-log/id6757764992",
+      "normalized_url": "apps.apple.com/us/app/kenso-workout-tracker-gym-log/id6757764992",
+      "orig_rank": 20
+    },
+    {
+      "id": 19,
+      "name": "HabitBox — Smart Habit Tracker for iOS & Android",
+      "description": "Build daily habits, track streaks, and hit your goals with HabitBox — a simple, private habit tracker for iOS and Android.",
+      "url": "https://habitbox.app/",
+      "normalized_url": "habitbox.app",
+      "orig_rank": 21
+    },
+    {
+      "id": 20,
+      "name": "Quit Zyn and Nicotine Pouches | QuitNicPouches App",
+      "description": "A private iPhone quit plan built for nicotine pouch users, with tapering, Craving-SOS, trigger tracking, and slip recovery.",
+      "url": "https://quitzynapp.com/",
+      "normalized_url": "quitzynapp.com",
+      "orig_rank": 22
+    },
+    {
+      "id": 21,
+      "name": "The Peptide App: iPhone Peptide Calculator & Tracker",
+      "description": "An iPhone peptide calculator and tracker for reconstitution math, protocol schedules, dose reminders, logging, progress tracking, and a free web calculator.",
+      "url": "https://thepeptide.app/",
+      "normalized_url": "thepeptide.app",
+      "orig_rank": 23
+    },
+    {
+      "id": 22,
+      "name": "Train With Manal",
+      "description": "IFBB Pro coaching. Email or Instagram — no templates, no price on this page.",
+      "url": "https://train.manal.pro/",
+      "normalized_url": "train.manal.pro",
+      "orig_rank": 24
+    },
+    {
+      "id": 23,
+      "name": "modelme",
+      "description": "Modelme run transformative workshops that blend mental health, movement, and community. Designed for ambitious individuals ready to overcome imposter syndrome, silence negative self-talk, and reconnect with their authentic identity, connecting the heart, mind and body.",
+      "url": "https://www.modelmemission.co.uk/course",
+      "normalized_url": "modelmemission.co.uk/course",
+      "orig_rank": 25
+    },
+    {
+      "id": 24,
+      "name": "Fitnessnord | Find alt til træninger i vores store online univers",
+      "description": "Vælg blandt mere end 6000 populære produkter hos Fitnessnord og få mere ud af din træning i dag | ✓ Prisgaranti | ✓ 30 dages returret…",
+      "url": "https://www.fitnessnord.com/",
+      "normalized_url": "fitnessnord.com",
+      "orig_rank": 26
+    },
+    {
+      "id": 25,
+      "name": "tanro",
+      "description": "Tanro — one training log for hybrid athletes. Lifting and running, fused into a single load engine (ACWR, TRIMP, the real stuff), queryable in plain English. Built for people who train like it",
+      "url": "https://tanro.app/",
+      "normalized_url": "tanro.app",
+      "orig_rank": 27
+    },
+    {
+      "id": 26,
+      "name": "Clutch AI: Sport Specific Training and Injury Recovery for Athletes at Every Level",
+      "description": "Clutch AI builds personalized performance and recovery plans for tennis players, basketball athletes, footballers, Hyrox competitors, and gym goers. Evidence based protocols from injury rehab to elite sport conditioning. From broken to beast.",
+      "url": "https://www.beclutch.fit/",
+      "normalized_url": "beclutch.fit",
+      "orig_rank": 28
+    },
+    {
+      "id": 27,
+      "name": "TennisTale: live scores, results, history",
+      "description": "Live tennis scores, results and the full history of the sport, in one clean place. ATP and WTA, ad-free.",
+      "url": "https://tennistale.com/",
+      "normalized_url": "tennistale.com",
+      "orig_rank": 30
+    },
+    {
+      "id": 28,
+      "name": "Caring Co - Find your dream aged care provider",
+      "description": "Find the best home care providers in Australia",
+      "url": "https://caringco.com.au/",
+      "normalized_url": "caringco.com.au",
+      "orig_rank": 31
+    },
+    {
+      "id": 29,
+      "name": "Tottli — Baby Tracker for Pregnancy Through Toddlerhood",
+      "description": "The baby tracker that starts before the baby does. From first kicks to first foods, one app for the whole journey.",
+      "url": "https://tottli.com/",
+      "normalized_url": "tottli.com",
+      "orig_rank": 33
+    },
+    {
+      "id": 30,
+      "name": "Stillee — Anxiety, panic, and 3 AM sleep, built on the evidence",
+      "description": "One tap opens a guided panic flow. Free, forever. The daily anxiety practice lives in the same app. Sleep tracks written for 3 AM, not bedtime. iOS.",
+      "url": "https://stillee.com/",
+      "normalized_url": "stillee.com",
+      "orig_rank": 34
+    },
+    {
+      "id": 31,
+      "name": "JustGains - The Complete Social Workout Platform",
+      "description": "Track any workout, share routines with friends, follow creators, and build custom plans without getting locked into another premium silo.",
+      "url": "https://justgains.com/",
+      "normalized_url": "justgains.com",
+      "orig_rank": 35
+    },
+    {
+      "id": 32,
+      "name": "Affilist: Voice Affirmations App",
+      "description": "Download Affilist: Voice Affirmations by Viktor Gorbatiuk on the App Store. See screenshots, ratings and reviews, user tips, and more apps like Affilist: Voice…",
+      "url": "https://apps.apple.com/us/app/affilist-voice-affirmations/id6752816843",
+      "normalized_url": "apps.apple.com/us/app/affilist-voice-affirmations/id6752816843",
+      "orig_rank": 36
+    },
+    {
+      "id": 33,
+      "name": "Affilist — Wake Up to Affirmations in Your Own Voice",
+      "description": "An alarm that rings with your own recorded voice, even in silent mode. AI writes affirmations for your exact situation, in your language. Record your Manifesto and wake up to it.",
+      "url": "https://affilist.app/",
+      "normalized_url": "affilist.app",
+      "orig_rank": 37
+    },
+    {
+      "id": 34,
+      "name": "Ambient Works",
+      "description": "Elevate your space with beautifully designed IoT hardware. Discover the ambient one, precision indoor air quality tracker.",
+      "url": "https://www.ambientworks.io/",
+      "normalized_url": "ambientworks.io",
+      "orig_rank": 38
+    },
+    {
+      "id": 35,
+      "name": "Lorie - Calorie Tracker App",
+      "description": "Download Lorie - Calorie Tracker by Micha Kownacki on the App Store. See screenshots, ratings and reviews, user tips, and more apps like Lorie - Calorie Tracker…",
+      "url": "https://apps.apple.com/app/lorie-calorie-tracker/id6760226278",
+      "normalized_url": "apps.apple.com/app/lorie-calorie-tracker/id6760226278",
+      "orig_rank": 39
+    },
+    {
+      "id": 36,
+      "name": "MedSpa Compass - Compare Med Spa Profiles Near You",
+      "description": "Compare med spa and aesthetic clinic profiles by location, recorded treatments, opening hours, public review data and direct contact details.",
+      "url": "https://medspacompass.com/",
+      "normalized_url": "medspacompass.com",
+      "orig_rank": 40
+    },
+    {
+      "id": 37,
+      "name": "Pushup RPG",
+      "description": "Turn real pushups and squats into an epic RPG. The camera counts every rep on-device — your reps are the only weapon.",
+      "url": "https://pushup.quest/",
+      "normalized_url": "pushup.quest",
+      "orig_rank": 41
+    },
+    {
+      "id": 38,
+      "name": "SleepSats App",
+      "description": "Download SleepSats by Michael Bush on the App Store. See screenshots, ratings and reviews, user tips and more games like SleepSats.",
+      "url": "https://apps.apple.com/gb/app/sleepsats/id6761456736",
+      "normalized_url": "apps.apple.com/gb/app/sleepsats/id6761456736",
+      "orig_rank": 43
+    },
+    {
+      "id": 39,
+      "name": "Goby AI — Food, Calorie, Nutrition & Ingredient Intelligence",
+      "description": "Goby AI is the AI-powered food, calorie, nutrition, ingredient and cosmetic intelligence platform. Scan products, check ingredients, count calories and get personalized health guidance.",
+      "url": "https://gobyai.app/",
+      "normalized_url": "gobyai.app",
+      "orig_rank": 44
+    },
+    {
+      "id": 40,
+      "name": "SleepAudit AI — Score the room you sleep in",
+      "description": "One photo, twelve questions, a score out of 100 against par 75 — and what your room is costing you, fixed one night at a time.",
+      "url": "https://getsleepaudit.vercel.app/",
+      "normalized_url": "getsleepaudit.vercel.app",
+      "orig_rank": 45
+    },
+    {
+      "id": 41,
+      "name": "Crutch Reviews | Honest, Independent Crutch Reviews",
+      "description": "Independent reviews of forearm and underarm crutches, scored on a consistent rubric. Find your crutch type first, then the best pick for your situation.",
+      "url": "https://crutchreviews.com/",
+      "normalized_url": "crutchreviews.com",
+      "orig_rank": 47
+    },
+    {
+      "id": 42,
+      "name": "SoftMaxx AI — Brutally honest AI facial scoring",
+      "description": "Scan your face. Get scored across 11 categories. Track real improvement over 90 days. Free, no sign-up.",
+      "url": "https://softmaxx.io/",
+      "normalized_url": "softmaxx.io",
+      "orig_rank": 49
+    },
+    {
+      "id": 43,
+      "name": "Annoyify — Break Bad Habits with Annoying Push Notifications",
+      "description": "Your habits won",
+      "url": "https://annoyify.com/",
+      "normalized_url": "annoyify.com",
+      "orig_rank": 50
+    }
+  ]
+}

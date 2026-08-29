@@ -1,0 +1,89 @@
+{
+  "persona_version": "v1",
+  "personas": [
+    {
+      "name": "Priya Raghunathan",
+      "description": "41, hospital pharmacist, fourteen months into tirzepatide and down 22kg, now genuinely frightened by how much of that came off her legs and arms. She reads the trial literature herself, sees an endocrinologist every eight weeks, and treats this as a medical project with a budget attached rather than a hobby.",
+      "needs": [
+        "Tracks lean mass and body composition trend, not just scale weight",
+        "Protein and calorie targets that recalculate when her GLP-1 dose escalates",
+        "A resistance program that progresses load week over week, not the same circuit forever",
+        "Flags rapid lean-mass loss early enough to act on it",
+        "Exports a clean report she can hand her endocrinologist at the next appointment",
+        "Cites the actual studies behind its recommendations",
+        "Willing to pay $200+/year; a free app that only logs weight is useless to her at any price"
+      ],
+      "price_sensitivity": "low"
+    },
+    {
+      "name": "Dez Okonkwo",
+      "description": "24, works rotating shifts in a warehouse outside Leeds, sharing a flat and putting money aside every month. He wants to eat better and lift three times a week, and he has decided in advance that he is not paying a subscription for either.",
+      "needs": [
+        "Genuinely free forever, not a trial that expires",
+        "No card details at signup, ever",
+        "No account or email required to start using it",
+        "Runs inside an app he already has on his phone rather than another install",
+        "Works on a cheap Android handset with patchy signal in the warehouse",
+        "Will drop a clearly better app the moment it introduces a paywall on anything he uses",
+        "If every option in front of him costs money, he takes none of them"
+      ],
+      "price_sensitivity": "high"
+    },
+    {
+      "name": "Marguerite Sallis",
+      "description": "58, retired schoolteacher, legal guardian of her 17-year-old grandson since last year and now trying to place him in a residential behavioral health program after two ER visits. She is not shopping for herself, she has never done this before, and she is terrified of picking a bad facility.",
+      "needs": [
+        "Named, licensed clinicians with verifiable credentials and state accreditation",
+        "A real human on the phone the same day, not a form and a wait",
+        "Clear disclosure of whether facilities paid to be listed",
+        "Structured family involvement in the program, not just the patient",
+        "Handles insurance verification before she commits to anything",
+        "Adolescent-specific care with schooling continued during treatment",
+        "Rejects anything that is app-only with no in-person component"
+      ],
+      "price_sensitivity": "low"
+    },
+    {
+      "name": "Tobias Lindqvist",
+      "description": "36, backend engineer in Malmo, has logged every set he has lifted since 2019 in a spreadsheet he maintains himself. He is not trying to fix anything; he wants his own numbers back in a form he controls, and he distrusts any product that turns his body into someone else's dataset.",
+      "needs": [
+        "Full raw data export as CSV or via an API, not a PDF summary",
+        "Stores data on device or somewhere he can self-host",
+        "A written, specific statement of what leaves the phone and who receives it",
+        "No AI guessing at numbers he could enter exactly himself",
+        "No streaks, XP, badges, or friend leaderboards anywhere in the interface",
+        "One-time purchase preferred; refuses recurring billing for a local app",
+        "Works with no account and no cloud sync at all"
+      ],
+      "price_sensitivity": "medium"
+    },
+    {
+      "name": "Bianca Ferraro",
+      "description": "29, ad sales in Chicago, admits she only exercises when other people can see whether she did. She has a Garmin, her sister has a Fitbit, and two friends from work have iPhones and nothing else, and she wants all four of them on one board arguing about it.",
+      "needs": [
+        "Pulls steps and workouts from Apple Health, Garmin and Fitbit into one shared ranking",
+        "Friends on Android can join without buying hardware or paying",
+        "Live standing during the week, not a summary delivered on Sunday",
+        "Head-to-head races and a way to talk trash inside the app",
+        "Worthless to her unless at least three friends actually sign up",
+        "She will pay for herself, but not if her friends hit a paywall",
+        "Rejects anything solo, silent, or private by default"
+      ],
+      "price_sensitivity": "medium"
+    },
+    {
+      "name": "Hannah Oyelaran",
+      "description": "34, community college admissions officer with two kids under six and recently diagnosed ADHD. She has started and abandoned six health apps in three years, is trying to stop vaping and to stop picking at her cuticles, and knows the thing that kills her every time is the week everything falls apart.",
+      "needs": [
+        "Survives a missed week without wiping progress or shaming her",
+        "Tells her the one thing to do today instead of showing a dashboard to interpret",
+        "Under sixty seconds of interaction a day",
+        "Nothing to wear, charge, or remember to put on at night",
+        "No photographing or logging every meal",
+        "Onboarding under two minutes with no long intake quiz",
+        "Free or a single small one-off payment; will not add another monthly charge she expects to abandon"
+      ],
+      "price_sensitivity": "high"
+    }
+  ]
+}

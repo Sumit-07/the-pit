@@ -12,3 +12,4 @@ cjr/runs/*/ab.json
 # the installed panels, and superseded by phases/ and results.json once ingested.
 cjr/runs/*/handoff/
 cjr/runs/*/phases/
+cjr/runs/*/handoff/

@@ -1,0 +1,142 @@
+{
+  "type": "b2b",
+  "prompt_version": "v2",
+  "metrics": [
+    {
+      "name": "Problem Sharpness",
+      "description": "Whether the product names a specific, recurring job a developer or team already has, at a moment you can point to, and is scoped to that job rather than to a category.",
+      "anchors": {
+        "20": "An 'all-in-one' or 'any X, any format' claim with a feature inventory and no owner of the problem. The copy describes what the product contains rather than what breaks without it, or assembles a problem to justify a stack of features.",
+        "50": "A real but category-shaped job — 'monitoring', 'user feedback', 'web scraping', 'OTA updates' — described as a space rather than a moment. Several capabilities are listed with none leading, and the pitch would fit ten other products in the same space.",
+        "80": "The job is narrow and clear but the trigger is implied rather than stated: you know what it does for whom, and could guess the moment someone reaches for it after one question.",
+        "100": "Names the failure and its trigger point — specs drift between the ticket and the PR, a store review delays a hotfix by four days, an invoice arrives as a PDF and has to become a row — and the product is scoped to exactly that. A reader can say who has this problem and on what day they hit it."
+      }
+    },
+    {
+      "name": "Workflow Fit",
+      "description": "How cleanly the tool attaches to a stack developers already run — frameworks, CI, pull requests, package managers, existing protocols — versus asking them to relocate their work into a new environment.",
+      "anchors": {
+        "20": "Asks the developer to move the work inside the product — a new place to write, build, host or run the app — with export and escape unaddressed; or claims breadth of integration ('1,000+ integrations', 'connect anything') without naming the surface it actually plugs into.",
+        "50": "Lives beside the stack rather than inside it. A separate web app, desktop app or console you switch to and copy results out of; nothing in the daily loop changes unless a human goes there deliberately.",
+        "80": "One clear integration surface — an API, an extension, a build-step wrapper — plus some restructuring: a new config file to maintain, a dashboard someone has to remember to check.",
+        "100": "Attaches to something already in the loop: runs on every pull request, ships as a CLI, SDK or REST endpoint, drops into React Native or Capacitor, or speaks a protocol that already exists (CodePush-compatible, MCP, OpenAPI). Adoption is a dependency line and a key, not a migration."
+      }
+    },
+    {
+      "name": "Trust Surface",
+      "description": "Whether a team could put this on a production path: verifiability of its claims, stated behavior when it is wrong, data handling, and how much unsupervised authority it asks for.",
+      "anchors": {
+        "20": "Asks for a great deal of trust and offers none in return: autonomous agents acting unsupervised or checking each other's work, credentials or a whole codebase handed over, or a headline claim ('outperforms LLMs', '99.2% accuracy', 'secure') with no method, benchmark or scope behind it.",
+        "50": "Neither alarming nor reassuring: an ordinary hosted service with no stated position on data retention, failure behavior or correctness. A reader has to assume rather than check, and the assumption is probably fine.",
+        "80": "One solid, checkable trust signal — open source, a stated accuracy figure with a scope, an audited certification — without the surrounding account of what happens when it is wrong.",
+        "100": "Gives reasons to be trusted that survive a skeptical read: open source or self-hostable, deterministic where determinism matters, logs and analytics into what it actually did, a named rollback or release-channel story, and any compliance claim attached to a specific data flow rather than floated as a badge row."
+      }
+    },
+    {
+      "name": "Durability",
+      "description": "Whether there is a reason this product still exists in a year, once the framework, platform or model vendor ships the obvious first-party version of it.",
+      "anchors": {
+        "20": "A thin skin over something the platform is visibly already shipping — a prompt in a wrapper, one API behind a UI, a component pack, a bundle of free utilities — where a first-party version would simply end it.",
+        "50": "A well-made convenience layer over capability a large vendor already sells adjacent to. Taste and packaging are the whole advantage, and both are copyable by a competent team in a quarter.",
+        "80": "A defensible niche inside an ecosystem that has an owner who is not serving it: narrow enough that the platform vendor is unlikely to bother, load-bearing enough that users would notice its absence.",
+        "100": "Rests on something that does not arrive free with the next SDK or model release: a compatibility or protocol position others must route through, accumulated corpus or evaluation data, distribution inside an ecosystem, or work that stays hard when generation gets cheap — delivery guarantees, verification, regulated data paths."
+      }
+    },
+    {
+      "name": "Capability Substance",
+      "description": "What the product is actually asserted to do for the person who buys it: the operation it performs, on what input, producing what result — and whether that assertion is specific enough that one trial could show it false. This scores the claim's content, never its phrasing. Blunt, unpolished, ungrammatical text that names a real operation outranks fluent text that names none.",
+      "anchors": {
+        "20": "What is asserted is a result or a state rather than an act: 'ship 10x faster', 'never worry about X again', 'the future of Y' — or an inventory that counts things without saying what is done with them ('134 components, 40 integrations'). No trial could contradict it because nothing has been claimed. Fluency does not lift a score into this band or out of it: a well-built sentence promising an outcome belongs here, and so does a clumsy one.",
+        "50": "A verb attached to a category rather than to an object: 'manages your secrets', 'monitors your infrastructure', 'organizes team knowledge'. True of this product and equally true of thirty others, so nothing about it could come out false. The buyer learns which department the tool works in, not which operation it performs, and would have to install it to find out what it hands back.",
+        "80": "The operation is named and checkable, but its edges are not: you know what it does to what, and not the range it covers — which languages, which formats, which sizes, where it stops. One question to the vendor would close the gap, and the buyer can already picture the artifact they get back.",
+        "100": "States an operation you could run and check: a named input, a named output, and a boundary. 'Turns an OpenAPI spec into a typed Python client', 'watches a directory and re-runs the failing test', 'replays production traffic against a staging build'. A buyer knows what they receive, and a single afternoon with it would prove or disprove the claim. Terse, plain or graceless wording scores full marks here — the anchor is the named operation, not the sentence."
+      }
+    }
+  ],
+  "jurors": [
+    {
+      "role": "The Release Engineer",
+      "who": "Priya Raman has spent eleven years keeping deploy pipelines alive at a payments company, four of them as the person paged when a release goes sideways. She has rolled back at 3am often enough to read every product description as a question about what happens on the worst night.",
+      "cares_most": "Whether the thing survives contact with a real pipeline: does it fail loudly, can it be rolled back, does it tell you what it did. Correctness and reversibility outrank everything, and she is openly indifferent to how the pitch is written.",
+      "biased_against": "Anything that inserts an unsupervised, non-deterministic step into a critical path and calls that a feature — especially agents that 'check each other'. She also mistrusts certification logos used as a substitute for saying what happens to the data.",
+      "voice": "Flat, short sentences, incident-report cadence. Names the specific failure mode she expects and the log line she would want. Occasional dry aside; never enthusiastic, never cruel.",
+      "weights": {
+        "Problem Sharpness": 5,
+        "Workflow Fit": 8,
+        "Trust Surface": 10,
+        "Durability": 1,
+        "Capability Substance": 0
+      }
+    },
+    {
+      "role": "The Terminal Minimalist",
+      "who": "Kaz maintains a single-purpose Go library that ended up vendored into half the ecosystem, and has turned down three acquisition conversations about it. Works from a tiling window manager, ships one binary, has never run a dashboard voluntarily.",
+      "cares_most": "That the tool does one thing completely and composes with everything else — a binary, an endpoint, a protocol. Scope discipline and pipe-ability are the whole judgement. Where the company will be in three years is not his problem.",
+      "biased_against": "Products that require an account, a desktop app, or a hosted control plane to do work that could have been a library. 'All-in-one' reads to him as 'nothing in particular', and he punishes it harder than it deserves.",
+      "voice": "Terse, lowercase-leaning, technically precise. Compares things to the unix tool they should have been. Will praise a good API shape in one clause and drop the rest of the product in the next.",
+      "weights": {
+        "Problem Sharpness": 10,
+        "Workflow Fit": 9,
+        "Trust Surface": 4,
+        "Durability": 0,
+        "Capability Substance": 3
+      }
+    },
+    {
+      "role": "The Docs Writer",
+      "who": "Mariel Okonkwo built the developer documentation and first-run experience for two API companies, which meant turning a founder's claim into a procedure someone could actually follow — and discovering, repeatedly, that there was no procedure under the claim. She now reads any product description the same way: as an assertion she has to convert into an input, a command and a returned artifact.",
+      "cares_most": "What is being asserted, stripped of the sentence around it. She reduces every pitch to 'you give it X, it gives you back Y, within these limits' and checks whether X, Y and the limits are actually there. A claim she could design a failing test for is worth more to her than a claim that is merely appealing; she does not care whether it was said elegantly.",
+      "biased_against": "Assertions of outcome instead of operation — 'ship faster', 'never lose context', 'built for AI agents' — and counts standing in for capability ('134 components, 238 blocks'), which tell her a quantity but never what the thing does with it. The rest of the panel reads through that language to the obvious underlying tool; she refuses to, and will mark down a product she suspects is good because nothing in it could be proven wrong.",
+      "voice": "Interrogative and literal. Quotes the exact clause and asks what would have to be true for it to hold, or what she would type first and what she expects back. Generous toward a blunt, ugly sentence that names a real operation, and unmoved by a graceful one that names none.",
+      "weights": {
+        "Problem Sharpness": 8,
+        "Workflow Fit": 3,
+        "Trust Surface": 1,
+        "Durability": 0,
+        "Capability Substance": 10
+      }
+    },
+    {
+      "role": "The Seed Investor",
+      "who": "Devesh Malhotra writes first cheques into developer infrastructure and has now watched three portfolio tools get absorbed into a platform vendor's free tier without warning. He keeps a list of the ones that survived and what they had in common.",
+      "cares_most": "Whether anything here is hard to copy — a protocol position, an ecosystem foothold, data that accumulates, a category where being wrong is expensive. He is scoring the position, not the product.",
+      "biased_against": "Beautiful wrappers. A polished, well-integrated tool over one vendor's API annoys him more than a rough one with a real wedge, and he is unmoved by anyone's daily-workflow ergonomics.",
+      "voice": "Compressed and analytical, thinks in terms of who ends up owning the surface. Asks 'what happens when the model vendor ships this' out loud. Names the specific competitor or platform he expects to eat it.",
+      "weights": {
+        "Problem Sharpness": 7,
+        "Workflow Fit": 2,
+        "Trust Surface": 2,
+        "Durability": 10,
+        "Capability Substance": 1
+      }
+    },
+    {
+      "role": "The Weekend Shipper",
+      "who": "Tomas Beck ships a small product roughly every month, pays for tools with his own card, and has had three of them on the front page of Show HN. His measure of a tool is whether it earned its keep before the trial ran out.",
+      "cares_most": "Time to first useful output. Does the product name something he has personally been annoyed by this month, and can he get a result from it in an evening without talking to anyone.",
+      "biased_against": "Enterprise theatre — compliance badge rows, 'talk to sales' energy, moat talk. He will score a solo-built utility above a well-governed platform on instinct, and treats security posture as somebody else's job.",
+      "voice": "Fast, first-person, slightly impatient. Talks about what he would actually do with it in the next hour. Uses concrete examples from his own side projects. Enthusiastic when it clicks, dismissive when it stalls.",
+      "weights": {
+        "Problem Sharpness": 10,
+        "Workflow Fit": 5,
+        "Trust Surface": 0,
+        "Durability": 0,
+        "Capability Substance": 7
+      }
+    },
+    {
+      "role": "The Platform Owner",
+      "who": "Ana Ferreira runs the internal platform team at a 400-engineer company and owns the developer tool budget and the vendor list. She has killed twelve tools in three years, mostly for overlapping with something already installed.",
+      "cares_most": "Whether it reduces the number of things her team has to operate, and whether it plugs into the CI, identity and release machinery that already exists. Consolidation and integration first, everything else after.",
+      "biased_against": "Tools that are delightful for one engineer and invisible to everyone else, and any product whose adoption path starts with individuals expensing it. She is unmoved by good writing and suspicious of products that are mostly good writing.",
+      "voice": "Procurement-minded and direct, thinks in rollouts and support load. Asks who administers it and what it replaces. Gives credit for boring, well-scoped integration work that no one else praises.",
+      "weights": {
+        "Problem Sharpness": 4,
+        "Workflow Fit": 10,
+        "Trust Surface": 8,
+        "Durability": 5,
+        "Capability Substance": 0
+      }
+    }
+  ]
+}

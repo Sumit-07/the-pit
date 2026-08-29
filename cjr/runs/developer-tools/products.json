@@ -1,0 +1,389 @@
+{
+  "category": "Developer Tools",
+  "products": [
+    {
+      "id": 0,
+      "name": "Modulate | Frontier voice AI company",
+      "description": "Modulate is a frontier voice AI company building the world’s first Ensemble Listening Model that outperforms LLMs at understanding real conversations.",
+      "url": "https://www.modulate.ai/",
+      "normalized_url": "modulate.ai",
+      "orig_rank": 1
+    },
+    {
+      "id": 1,
+      "name": "Context.dev: Web Scraping API for AI Agents & LLMs",
+      "description": "Scrape any URL to markdown, crawl entire websites, and extract structured data. One REST web scraping API built for AI agents and LLM pipelines.",
+      "url": "https://link.context.dev/outbid",
+      "normalized_url": "link.context.dev/outbid",
+      "orig_rank": 2
+    },
+    {
+      "id": 2,
+      "name": "Codus · The code editor for AGI",
+      "description": "A crew of autonomous agents per person, routed by a Brain and checked by each other. Coding, SEO, video, research and support in one desktop app.",
+      "url": "https://trycodus.com/",
+      "normalized_url": "trycodus.com",
+      "orig_rank": 3
+    },
+    {
+      "id": 3,
+      "name": "The complete React library for crafting memorable UI",
+      "description": "134 animated React components, 238 page blocks, 300 app UI blocks, 11 templates and an AI Agent Kit. One-time payment, lifetime updates.",
+      "url": "https://pro.reactbits.dev/",
+      "normalized_url": "pro.reactbits.dev",
+      "orig_rank": 4
+    },
+    {
+      "id": 4,
+      "name": "Prelint - Product review for every pull request",
+      "description": "Prelint reviews your product specifications on every pull request. Catch product drift, inconsistencies, and misalignment before they ship.",
+      "url": "https://prelint.com/",
+      "normalized_url": "prelint.com",
+      "orig_rank": 5
+    },
+    {
+      "id": 5,
+      "name": "AI App Builder | OverSkill",
+      "description": "Build production-ready apps in minutes with AI. Connect 1,000+ integrations like Slack, Shopify, and Stripe. No coding required.",
+      "url": "https://overskill.com/",
+      "normalized_url": "overskill.com",
+      "orig_rank": 6
+    },
+    {
+      "id": 6,
+      "name": "Capgo - Live Updates for Ionic and Capacitor Apps",
+      "description": "Open-source live update platform for Ionic and Capacitor apps: OTA updates, native build delivery, release channels, real-time logs, and analytics…",
+      "url": "https://capgo.app/",
+      "normalized_url": "capgo.app",
+      "orig_rank": 7
+    },
+    {
+      "id": 7,
+      "name": "Olvy | Manage your user feedback like never before",
+      "description": "Olvy is built for user-centric product teams to track and analyse their user feedback, ship things faster and smoother, and keep everyone in the loop.",
+      "url": "https://olvy.co/",
+      "normalized_url": "olvy.co",
+      "orig_rank": 8
+    },
+    {
+      "id": 8,
+      "name": "UtilityKit — 500+ Free Online Developer & PDF Tools",
+      "description": "Free online tools for PDF, image, text, JSON, code and calculations. No signup, no watermark, secure and fast.",
+      "url": "https://utilitykit.tools/",
+      "normalized_url": "utilitykit.tools",
+      "orig_rank": 9
+    },
+    {
+      "id": 9,
+      "name": "Invofox — One API to extract data from any document",
+      "description": "Turn invoices, payslips, contracts and any document into structured JSON via one API. 99.2% accuracy with continuous learning. SOC 2, GDPR, ISO 27001.",
+      "url": "https://invofox.com/",
+      "normalized_url": "invofox.com",
+      "orig_rank": 10
+    },
+    {
+      "id": 10,
+      "name": "All-in-one browser extension for web developers | Hoverify",
+      "description": "An all-in-one browser extension for web developers: inspect and edit CSS live, test responsive layouts, capture screenshots, pull assets and audit SEO.",
+      "url": "https://tryhoverify.com/",
+      "normalized_url": "tryhoverify.com",
+      "orig_rank": 11
+    },
+    {
+      "id": 11,
+      "name": "Revopush — The Ultimate React Native OTA Update Platform",
+      "description": "Instant OTA updates for React Native. CodePush-compatible SaaS pushes real-time fixes and security patches — no store delays, no user friction.",
+      "url": "https://revopush.org/",
+      "normalized_url": "revopush.org",
+      "orig_rank": 12
+    },
+    {
+      "id": 12,
+      "name": "VibeDash - AI ships. VibeDash proves it.",
+      "description": "Plan, ship, charge, and verify AI-built software. Connect Claude Code, Cursor, OpenClaw, or Hermes with Skill.md + MCP, run QA and security loops, and hand clients proof instead of promises.",
+      "url": "https://vibedash.app/",
+      "normalized_url": "vibedash.app",
+      "orig_rank": 13
+    },
+    {
+      "id": 13,
+      "name": "MoniTao - Surveillez vos services. Dormez tranquille.",
+      "description": "Surveillance de sites, d'API, de certificats SSL et de tâches planifiées. Soyez alerté avant vos utilisateurs, par email ou SMS. Offre gratuite, sans carte bancaire.",
+      "url": "https://monitao.com/",
+      "normalized_url": "monitao.com",
+      "orig_rank": 14
+    },
+    {
+      "id": 14,
+      "name": "SummonAI Kit",
+      "description": "Claude Code builds faster when it actually knows your project.",
+      "url": "https://summonaikit.com/",
+      "normalized_url": "summonaikit.com",
+      "orig_rank": 15
+    },
+    {
+      "id": 15,
+      "name": "Live chat for Slack - Chatlio",
+      "description": "Chat with your visitors directly from Slack",
+      "url": "https://chatlio.com/",
+      "normalized_url": "chatlio.com",
+      "orig_rank": 16
+    },
+    {
+      "id": 16,
+      "name": "BuildAI - Build AI Apps In Minutes, No Coding Required",
+      "description": "BuildAI is the easiest way to build professional AI apps, products, and online businesses without coding. Turn your ideas into fully functional apps instantly with AI.",
+      "url": "https://buildai.space/",
+      "normalized_url": "buildai.space",
+      "orig_rank": 17
+    },
+    {
+      "id": 17,
+      "name": "Carillon — Push notifications for iOS and Android, hosted in Europe",
+      "description": "Mobile push with a full delivery trace on every notification. Hosted in the EU, DPA included on every plan.",
+      "url": "https://carillon.dev/",
+      "normalized_url": "carillon.dev",
+      "orig_rank": 18
+    },
+    {
+      "id": 18,
+      "name": "Sshly — SSH, made friendly",
+      "description": "A friendly, native SSH client for Mac. Connections, keys, files — all in one app. One-time purchase, no subscriptions.",
+      "url": "https://sshly.app/",
+      "normalized_url": "sshly.app",
+      "orig_rank": 19
+    },
+    {
+      "id": 19,
+      "name": "SMTP Relay and Email API | Maileroo",
+      "description": "Boost email delivery and engagement with Maileroo. Enjoy advanced analytics, dedicated IPs, and seamless integration for fast and reliable email campaigns.",
+      "url": "https://maileroo.com/",
+      "normalized_url": "maileroo.com",
+      "orig_rank": 20
+    },
+    {
+      "id": 20,
+      "name": "Localdock — every local project gets a real address",
+      "description": "dashboard.localhost on your Mac, dashboard.local on your Wi-Fi, and a real HTTPS link anyone can open — one control moves any project up the ladder, whatever…",
+      "url": "https://localdock.dev/",
+      "normalized_url": "localdock.dev",
+      "orig_rank": 21
+    },
+    {
+      "id": 21,
+      "name": "Kifas: Take QA automation off your to-do list",
+      "description": "Connect your repo. Kifas agents write and run end-to-end tests on real browsers, emulators, and devices. Vibe-test in plain language. 1,000 credits ($10), no card.",
+      "url": "https://kifas.io/",
+      "normalized_url": "kifas.io",
+      "orig_rank": 22
+    },
+    {
+      "id": 22,
+      "name": "Getatext – SMS Verification Online, SIM Card Based / Non-VoIP",
+      "description": "Getatext is an Online SMS verification service providing real US mobile numbers backed by physical SIM cards. Our Non-VoIP Phone Numbers ensure seamless compatibility for all types of online account registrations without exposing your primary number. Access US-based services globally via our automat",
+      "url": "https://getatext.com/",
+      "normalized_url": "getatext.com",
+      "orig_rank": 23
+    },
+    {
+      "id": 23,
+      "name": "Troobly - Native-language monitoring for any web app",
+      "description": "Stop guessing what broke. Troobly watches any web app and explains every error in native language, plus exactly how to fix it.",
+      "url": "https://www.troobly.com/",
+      "normalized_url": "troobly.com",
+      "orig_rank": 24
+    },
+    {
+      "id": 24,
+      "name": "QName AI: AI Domain Search & Model News for AI SaaS Builders",
+      "description": "QName AI helps AI SaaS builders discover brandable domains with AI-powered domain search, and timely updates on new video, image, and music generation models.",
+      "url": "https://qname.ai/",
+      "normalized_url": "qname.ai",
+      "orig_rank": 25
+    },
+    {
+      "id": 25,
+      "name": "HTML/CSS to Image API - Automate your image generation",
+      "description": "Convert HTML to an image (jpg, png, webp). Renders images exactly like Google Chrome. Works with PHP, JavaScript, Ruby, .NET and more.",
+      "url": "https://htmlcsstoimage.com/",
+      "normalized_url": "htmlcsstoimage.com",
+      "orig_rank": 26
+    },
+    {
+      "id": 26,
+      "name": "Android SMS Gateway & API, free to start",
+      "description": "Send SMS programmatically from your apps using your own Android device. No gateway fees, a simple REST API, and two-way messaging with textbee.dev.",
+      "url": "https://textbee.dev/",
+      "normalized_url": "textbee.dev",
+      "orig_rank": 27
+    },
+    {
+      "id": 27,
+      "name": "boldrouter - One API for every model",
+      "description": "A unified, OpenAI-compatible gateway to every major LLM provider. One endpoint, one key, one bill - with automatic routing and failover.",
+      "url": "https://boldrouter.com/",
+      "normalized_url": "boldrouter.com",
+      "orig_rank": 28
+    },
+    {
+      "id": 28,
+      "name": "Premium WordPress Themes by WPZOOM",
+      "description": "WordPress themes with modern features and professional support. Responsive themes for photographers, business, ecommerce, video, artists, blogs.",
+      "url": "https://www.wpzoom.com/",
+      "normalized_url": "wpzoom.com",
+      "orig_rank": 29
+    },
+    {
+      "id": 29,
+      "name": "Inline Manual | Digital Adoption Platform",
+      "description": "Light the way to success for your users - Guide your users with interactive tours, tips and tutorials to reach their goals and get results.",
+      "url": "https://inlinemanual.com/",
+      "normalized_url": "inlinemanual.com",
+      "orig_rank": 30
+    },
+    {
+      "id": 30,
+      "name": "Voice interviews with your real users, inside your product",
+      "description": "Voice interviews with your real users, inside your product — evidence you and your coding agent can inspect before it becomes work.",
+      "url": "https://usertold.ai/",
+      "normalized_url": "usertold.ai",
+      "orig_rank": 31
+    },
+    {
+      "id": 31,
+      "name": "Sequo — stop re-explaining your project to your coding agent",
+      "description": "You keep re-explaining your project; your agent keeps forgetting it. Sequo writes the plan and the decisions into files you keep in your repo, then hands you one prompt per step.",
+      "url": "https://sequo.app/",
+      "normalized_url": "sequo.app",
+      "orig_rank": 32
+    },
+    {
+      "id": 32,
+      "name": "Lunaris: The Autonomous Local-First AI Agent for VS Code",
+      "description": "Lunaris is a local-first, autonomous AI coding agent for VS Code. Run open-weights models privately on your machine or connect to cloud models.",
+      "url": "https://getlunaris.dev/",
+      "normalized_url": "getlunaris.dev",
+      "orig_rank": 33
+    },
+    {
+      "id": 33,
+      "name": "Customer Feedback, Roadmaps & Changelogs | Featul",
+      "description": "Privacy‑first, EU‑hosted product feedback, public roadmap, and changelog—built for alignment and customer‑driven delivery. Built for SaaS teams to collect...",
+      "url": "https://featul.com/",
+      "normalized_url": "featul.com",
+      "orig_rank": 34
+    },
+    {
+      "id": 34,
+      "name": "One inbox and one booking page, per project",
+      "description": "Every project gets a real email address. Publish a meeting type for a booking page. Appointments land without the back-and-forth. Free while in beta.",
+      "url": "https://kontacts.dev/",
+      "normalized_url": "kontacts.dev",
+      "orig_rank": 35
+    },
+    {
+      "id": 35,
+      "name": "Vim Cheat Sheet — 428 Neovim Commands | ViMaster",
+      "description": "Free Vim and Neovim cheat sheet with 428 commands across 16 sections. Keycaps, examples, and an interactive playground for every command.",
+      "url": "https://vimaster.dev/",
+      "normalized_url": "vimaster.dev",
+      "orig_rank": 38
+    },
+    {
+      "id": 36,
+      "name": "Cap — Beautiful screen recordings, owned by you.",
+      "description": "Cap is the open source alternative to Loom. Lightweight, powerful, and cross-platform. Record and share in seconds.",
+      "url": "https://cap.so/",
+      "normalized_url": "cap.so",
+      "orig_rank": 39
+    },
+    {
+      "id": 37,
+      "name": "AI website builder. Describe it. Get a live site.",
+      "description": "Build an AI website in minutes, then keep it current with a simple built-in CMS for news, blogs, events, catalogs, FAQs, and contact forms. Your first build is free to preview. $19 / year.",
+      "url": "https://nanopage.site/",
+      "normalized_url": "nanopage.site",
+      "orig_rank": 40
+    },
+    {
+      "id": 38,
+      "name": "pour · Make the web work for everyone",
+      "description": "One in six people experience the web differently. pour shows you what",
+      "url": "https://pour.dev/",
+      "normalized_url": "pour.dev",
+      "orig_rank": 41
+    },
+    {
+      "id": 39,
+      "name": "Hold My Lid — Close the lid. Keep coding.",
+      "description": "Keeps your Mac awake while Claude Code, Codex, and your other coding agents finish the job — even with the lid shut and the laptop in your bag.",
+      "url": "https://holdmylid.app/",
+      "normalized_url": "holdmylid.app",
+      "orig_rank": 42
+    },
+    {
+      "id": 40,
+      "name": "Deploy-f",
+      "description": "Самый удобный и простой хостинг для приложений",
+      "url": "https://deploy-f.com/",
+      "normalized_url": "deploy-f.com",
+      "orig_rank": 43
+    },
+    {
+      "id": 41,
+      "name": "BesTest - Test Management for Jira",
+      "description": "Requirements and test management for Jira teams. Complete testing visibility from requirements to release with comprehensive reporting.",
+      "url": "https://getbestest.com/",
+      "normalized_url": "getbestest.com",
+      "orig_rank": 44
+    },
+    {
+      "id": 42,
+      "name": "MintAPI | Unified Paid APIs for AI Agents and Teams",
+      "description": "Unified paid APIs for AI agents and teams. Access social, video, maps, reviews, marketplace, and search data through one structured API layer.",
+      "url": "https://mintapi.dev/",
+      "normalized_url": "mintapi.dev",
+      "orig_rank": 45
+    },
+    {
+      "id": 43,
+      "name": "Free Website Builder – Build Your Site in Minutes | Beste",
+      "description": "Build your website in hours, not weeks. Free custom domain, 32 languages, unlimited pages. No code, no drag-drop chaos. Start free today.",
+      "url": "https://beste.co/",
+      "normalized_url": "beste.co",
+      "orig_rank": 46
+    },
+    {
+      "id": 44,
+      "name": "AlwaysQA | Agent-first MCP QA after deploys",
+      "description": "Your coding agent ships the change. AlwaysQA checks whether the app still works after deployment and sends fix-ready QA context back through MCP.",
+      "url": "https://alwaysqa.com/",
+      "normalized_url": "alwaysqa.com",
+      "orig_rank": 47
+    },
+    {
+      "id": 45,
+      "name": "Mon IP publique - Connaître son adresse IP en un clic",
+      "description": "Découvrez instantanément votre adresse IP publique, votre géolocalisation et votre FAI. Guide complet sur les adresses IP.",
+      "url": "https://mon-ip.io/",
+      "normalized_url": "mon-ip.io",
+      "orig_rank": 48
+    },
+    {
+      "id": 46,
+      "name": "Publish documents on your website · EmbedFox",
+      "description": "Upload a PDF, share a browser reader and embed it on your website with one snippet.",
+      "url": "https://embedfox.com/",
+      "normalized_url": "embedfox.com",
+      "orig_rank": 49
+    },
+    {
+      "id": 47,
+      "name": "FeedFast — Changelog, feedback and uptime",
+      "description": "Publish release notes, collect and prioritise feedback, and monitor uptime from one dashboard. One public hub page per project, five minutes to set up.",
+      "url": "https://feedfa.st/",
+      "normalized_url": "feedfa.st",
+      "orig_rank": 50
+    }
+  ]
+}

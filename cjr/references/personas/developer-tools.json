@@ -1,0 +1,86 @@
+{
+  "persona_version": "v1",
+  "personas": [
+    {
+      "name": "Priya Raghunathan",
+      "description": "Staff platform engineer at a Series C fintech with 90 engineers, holding a tooling budget she signs off on herself and a mandate to cut incident time in half this year. She evaluates by putting the top two candidates on the same nasty real workload and keeping whichever wins, and she has never once picked the cheaper one.",
+      "needs": [
+        "Published accuracy or latency numbers on a workload I can reproduce, not a demo video",
+        "Highest ceiling on the hard cases, even if the first 80% is a commodity everyone does",
+        "SOC 2 Type II and a signed DPA available before I ask twice",
+        "A real API with versioning and a changelog, not just a UI",
+        "99.9% SLA with credits, and a support channel with a human on it",
+        "Willing to pay 5-10x the cheapest option if it is measurably better at the core job"
+      ],
+      "price_sensitivity": "low"
+    },
+    {
+      "name": "Deniz Aksoy",
+      "description": "Solo bootstrapper in Izmir running two small SaaS products at about $2,100 MRR combined, with a hard $60/month ceiling across every tool he uses. He has abandoned tools he genuinely liked the week their free tier changed, and he treats any set of products where none has a usable free tier as a set he simply does not buy from.",
+      "needs": [
+        "A permanent free tier that covers one developer, not a 14-day trial",
+        "No credit card required to start",
+        "Usage caps that a hobby-scale project will not blow through in a month",
+        "Self-hostable or exportable so I can leave without losing my data",
+        "Will drop a better tool for a 70%-as-good free one without hesitating",
+        "No annual-only billing and no per-seat pricing that punishes me for having one seat",
+        "If the whole set is paid-only, I write the script myself instead"
+      ],
+      "price_sensitivity": "high"
+    },
+    {
+      "name": "Marcus Whitfield",
+      "description": "Engineering manager of 14 at a 400-person logistics company, buying on behalf of people who did not ask for a new tool and will resent it if it slows them down. Anything over $5k a year goes through procurement and a security questionnaire, so he optimizes for the thing he can actually get approved and get adopted, not the thing that scores best.",
+      "needs": [
+        "SSO/SAML and SCIM provisioning on a plan I can actually afford, not gated to Enterprise-call-us",
+        "Per-seat price under $30/user/month with visible published pricing",
+        "Admin controls: seat reassignment, audit log, and a way to see who is actually using it",
+        "Onboards a mid-level engineer in under an hour with no training session",
+        "Answers a standard vendor security questionnaire without a two-month legal cycle",
+        "Rolls out to one squad first without contaminating the other teams' repos",
+        "Month-to-month escape hatch so a failed rollout is not a year of sunk cost"
+      ],
+      "price_sensitivity": "medium"
+    },
+    {
+      "name": "Yuki Tanaka",
+      "description": "Contract mobile developer running a two-person agency that maintains eleven client React Native and Capacitor apps she did not write. She will pay for a tool, but the migration cost of touching eleven live codebases dominates every other consideration, so a drop-in replacement beats a better product every time.",
+      "needs": [
+        "Drop-in compatible with the SDK and config I already have, ideally a one-line endpoint swap",
+        "Migration path for existing projects, not just a greenfield quickstart",
+        "Works across multiple client accounts and lets me bill each project separately",
+        "No forced upgrade of my framework or toolchain version to adopt it",
+        "Documented rollback if a release goes bad on a client's production users",
+        "Stable enough that I am not re-migrating in eighteen months",
+        "I will pay more to avoid a weekend of touching eleven repos"
+      ],
+      "price_sensitivity": "medium"
+    },
+    {
+      "name": "Elena Vasquez",
+      "description": "Director of product operations at a 200-person B2B SaaS company, technical enough to read a JSON payload but with no ability to install anything on a laptop her IT team locks down or to merge a config file into a repo. She has real budget and buys tools for PMs and designers who will abandon anything that requires an engineer's help.",
+      "needs": [
+        "Runs entirely in the browser with nothing to install and no CLI step",
+        "I can set it up and get value the same afternoon without filing an engineering ticket",
+        "Non-engineers on my team can use the output without reading a terminal",
+        "Integrates with Slack, Jira and Notion out of the box, not through a webhook I have to build",
+        "Managed hosting only; I have nowhere to run a server and no one to run it",
+        "Budget exists, but I will reject the strongest tool in the set if it needs a developer to operate"
+      ],
+      "price_sensitivity": "low"
+    },
+    {
+      "name": "Ravi Chandrasekaran",
+      "description": "Principal engineer at a defense-adjacent contractor where code and customer documents cannot leave a network with no outbound internet, and every new dependency goes through an internal mirror. He has budget for a commercial license but will take a visibly worse tool over a better one if the better one is cloud-only.",
+      "needs": [
+        "Self-hostable or on-prem install; a cloud-only product is disqualified regardless of price",
+        "Works fully air-gapped with no phone-home telemetry or license check over the network",
+        "Source available or open-source license so I can audit and patch it myself",
+        "Vendored dependencies that pass an internal mirror and an SBOM I can hand to security",
+        "No sending source code, documents, or prompts to a third-party model API",
+        "Perpetual or self-managed license rather than a subscription that dies if we lose connectivity"
+      ],
+      "price_sensitivity": "medium"
+    }
+  ]
+}

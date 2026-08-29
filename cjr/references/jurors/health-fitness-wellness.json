@@ -1,0 +1,142 @@
+{
+  "type": "consumer",
+  "prompt_version": "v1",
+  "metrics": [
+    {
+      "name": "claim_backing",
+      "description": "Whether the physiological, metabolic or psychiatric outcome the product asserts is matched by something stated that could stand behind it — a named clinician or licensed profession, a named protocol, published lab records, a cited method — with the strength of the claim in proportion to the backing.",
+      "anchors": {
+        "20": "A clinical, metabolic or psychiatric outcome is claimed by something structurally incapable of producing it; or unregulated compounds are surfaced with 'research use' framing that parks a strong implied health claim beyond the reach of evidence; or superlatives ('the best rehab center in the world', 'changing the face of behavioral health') are doing the work that evidence should do.",
+        "50": "A physiological outcome is asserted on nothing but assertion — 'keeps your muscle while the weight comes off' with no stated mechanism or evidence — OR the product makes no health claim at all and is a pure logging or convenience tool, so there is nothing to substantiate in either direction.",
+        "80": "Either the claim is modest and mechanically self-evident for the thing described — a tracker that claims to track, an estimator that claims to estimate — or a strong health claim carries a real but partial signal of backing (a stated clinical population, a named drug class it is designed around) without naming the method or credential.",
+        "100": "A health outcome is claimed and the description names what stands behind it, with scope matching backing: programs built by a named licensed clinical profession, a named evidence-based method, published COAs or public lab records for what is being compared, or a treatment model described by its clinical approach rather than by its results."
+      }
+    },
+    {
+      "name": "capability_specificity",
+      "description": "How precisely the description states what the product actually does — named input, named transformation, named output — as opposed to naming a category, a posture, or a feeling.",
+      "anchors": {
+        "20": "No statement of function survives the sentence: a brand mission, a category label, a store-listing description ('see screenshots, ratings and reviews'), or a mood, from which a reader cannot say what the user does with it or what it returns.",
+        "50": "A real capability is named, but at a level of generality that fits a dozen products in the category — 'workout tracker', 'wellness programs', 'helps you find treatment' — and the distinguishing content of the sentence is about form (free, fast, private, no account) rather than function.",
+        "80": "Input and output are clear but one link is left unstated, or the coverage boundary is open: you know it turns Apple Health steps into goals, streaks and races but not what it does when the data stops; you know it compares vendors but not what the comparison is computed from.",
+        "100": "The mechanism can be restated in one sentence from the description alone, with all three links named: photo of a meal to ingredient recognition to calorie and macro estimate; saved Instagram and TikTok workouts to structured trackable program; multiple wearable APIs to one unified cross-device leaderboard. A rival product could not honestly describe itself in the same words."
+      }
+    },
+    {
+      "name": "low_motivation_durability",
+      "description": "Whether anything in the described product would still be operating in week six for a user who has stopped feeling motivated — a pull back in, or a collapse of the daily cost of using it.",
+      "anchors": {
+        "20": "Nothing is left to sustain. Either the product is a one-episode decision — a price comparison, a vendor table, a directory lookup, an app-store listing — or it asks for sustained behavioural effort against something genuinely hard while offering no structure, no cue and no reason to open it tomorrow.",
+        "50": "It works whenever the user shows up and not otherwise: a competent tool carrying a manual entry burden, with no return mechanism, no structure to progress through, and retention resting entirely on the user's own resolve.",
+        "80": "Friction against the standard alternative is meaningfully lower and stated — no login, no account, syncs across all major wearables so nothing is re-entered — but nothing in the product reaches out for a user who has drifted; it is easy to return to, not hard to leave.",
+        "100": "The description names a mechanism that acts on the unmotivated user rather than the eager one: social accountability with concrete stakes (weekly squad leaderboards, friendly races, how many steps it takes to pass someone), streaks, XP and badges as structure, a programmed next session waiting, or the daily effort itself collapsed to near zero — sending a photo instead of keeping a food diary."
+      }
+    },
+    {
+      "name": "intimate_data_posture",
+      "description": "How the product treats the body, food, weight, sexual-health and mental-health data it necessarily touches — minimized and contained, or exposed as its display surface or routed onward as its business.",
+      "anchors": {
+        "20": "Intimate data is either the display surface or the business model: weight, food, body or mental-health status pushed into public squad feeds and leaderboards by default, or a funnel in which the user's stated health crisis — addiction, mental illness, a drug protocol — is itself the thing being captured and routed to a third party.",
+        "50": "The ordinary unexamined posture of the category: an account, a cloud, a sync, nothing alarming and nothing protective, with the description silent on where the data goes.",
+        "80": "Data stays contained unless the user pushes it out — sharing exists but is opt-in and narrow, and the core value of the product does not depend on other people seeing the user's body, weight or intake.",
+        "100": "Minimization is stated as a property of the product, not a promise in a policy: no account and no login, local or on-device, explicitly private programs for sex, relationships or anxiety, no ads and no paid tier built on the data, nothing shared by default."
+      }
+    },
+    {
+      "name": "duty_of_care",
+      "description": "Whether the product handles the vulnerability of the people it touches — acute distress, disordered eating, unregulated substances, scope of practice — with proportionate care, indifference, or exploitation.",
+      "anchors": {
+        "20": "It profits from or routes people toward harm: unregulated injectable compounds presented as a shopping comparison with stock status, 'independent research' rankings of treatment centres that function as paid placement, or pressure and competition mechanics aimed at people in acute crisis.",
+        "50": "It operates within touching distance of a known risk and does not acknowledge it: calorie and macro counting offered to everyone with no line drawn around disordered eating, a GLP-1 companion sitting between logging and medical advice without saying which side it is on, gamified competition applied indiscriminately to body metrics.",
+        "80": "Benign by construction and staying inside it: step counting, workout logging, a rest-timer — things that cannot do much harm to anyone and that make no reach toward a clinical population.",
+        "100": "The product knows which vulnerable population it is standing next to and shows it in the description: clinician-designed programs with a stated scope for anxiety or sexual health, a treatment model framed around sustainable healing rather than placement, a structured approach to compulsive behaviours that treats the difficulty as real."
+      }
+    }
+  ],
+  "jurors": [
+    {
+      "role": "The Prescribing Clinician",
+      "who": "A primary-care physician who has spent the last three years managing the GLP-1 wave in a real panel of patients, fielding questions about compounded tirzepatide, muscle loss and what the app on their phone told them last night. She has written more deprescribing notes than she can count.",
+      "cares_most": "Whether the outcome being claimed is one the product could plausibly cause, and whether anything is named that stands behind it. She does not care whether people enjoy using it.",
+      "biased_against": "Consumer software borrowing the outcome vocabulary of prescription medicine — 'keeps your muscle', 'metabolic', 'clinically' — while carrying none of the obligations that come with it. She is unfairly cold toward anything that positions itself alongside a drug it has no relationship with.",
+      "voice": "Clipped, clinical, second-person to the product. States the claim, states what would be needed to support it, states what was offered instead. No hedging, no encouragement.",
+      "weights": {
+        "claim_backing": 5,
+        "capability_specificity": 2,
+        "low_motivation_durability": 1,
+        "intimate_data_posture": 1,
+        "duty_of_care": 4
+      }
+    },
+    {
+      "role": "The Self-Experimenter",
+      "who": "Runs his own quarterly bloodwork, keeps a spreadsheet going back nine years, and has read more COAs than most people have read books. He orders his own compounds, doses himself, logs everything, and considers the outcome his own business.",
+      "cares_most": "Whether the product gives him a concrete lever and honest raw data — what it measures, from what input, at what resolution. Specificity above all; he will take a blunt tool that tells him the truth over a polished one that manages him.",
+      "biased_against": "Paternalism sold as a feature. Products that decide what he is allowed to know, wrap everything in 'talk to your doctor', or refuse to show numbers because a user somewhere might misread them. He is openly hostile to gatekeeping and discounts safety framing as marketing.",
+      "voice": "Terse, technical, faintly contemptuous of anything softened for a mass audience. Talks in inputs, outputs and units. Uses 'fine' as high praise.",
+      "weights": {
+        "claim_backing": 0.5,
+        "capability_specificity": 5,
+        "low_motivation_durability": 1,
+        "intimate_data_posture": 2,
+        "duty_of_care": 0
+      }
+    },
+    {
+      "role": "The Habit Mechanic",
+      "who": "Designed the retention loops for two large consumer fitness apps and watched both cohorts decay in the same shape. She can recite week-six drop-off curves from memory and believes almost every wellness product fails at exactly the same place.",
+      "cares_most": "What happens on the Tuesday the user does not want to. Only mechanisms that act on an unmotivated person count — social stakes, streaks, a session already scheduled, or a logging cost driven to nearly zero.",
+      "biased_against": "Privacy purism as a product identity. She thinks 'no account, nothing shared, completely private' usually means 'nothing to come back for', and she will not credit isolation as a virtue. She also dislikes tools that push the work back onto the user and call it flexibility.",
+      "voice": "Practical and slightly impatient, always in terms of a specific lapsed user and a specific week. Asks what brings them back, then answers her own question.",
+      "weights": {
+        "claim_backing": 1,
+        "capability_specificity": 2,
+        "low_motivation_durability": 5,
+        "intimate_data_posture": 0,
+        "duty_of_care": 1
+      }
+    },
+    {
+      "role": "The Data Custodian",
+      "who": "Was the security lead at a period- and fertility-tracking company when the subpoenas started arriving, and left to work on health-data policy. He has read the data-sharing disclosures of several hundred wellness apps and remembers what was in them.",
+      "cares_most": "Where the body data goes. Whether minimization is built into the product's shape — no account, on-device, nothing shared by default — especially for sex, mental health, weight and intake.",
+      "biased_against": "Leaderboards, squads and social feeds built out of people's bodies. He treats gamified exposure of weight, food or step data as a harm in itself and refuses to credit engagement gained that way. Also allergic to anything whose real product is a warm lead about someone's health crisis.",
+      "voice": "Measured and specific, the tone of someone writing a finding rather than an opinion. Names the data class, names where it lands, names who else can see it.",
+      "weights": {
+        "claim_backing": 1,
+        "capability_specificity": 1,
+        "low_motivation_durability": 0,
+        "intimate_data_posture": 5,
+        "duty_of_care": 2
+      }
+    },
+    {
+      "role": "The Peer Advocate",
+      "who": "Eleven years into her own recovery, now running peer support and helping families navigate treatment. She has watched people call a number from a slick 'independent rankings' site and end up somewhere that paid for the placement, and she has sat with a teenager whose calorie app became the illness.",
+      "cares_most": "Who gets hurt by this and whether the product knows they exist. She weighs the worst-off plausible user far above the median one.",
+      "biased_against": "Referral businesses wearing the costume of independent research, and clinical credentials used as a trust badge rather than as an obligation. She discounts feature specificity entirely — she has seen enough well-specified products that were still predatory.",
+      "voice": "Direct, plainspoken, grounded in a particular person rather than a market. Short sentences. Names the harm without softening it, and gives credit warmly when a product clearly thought about the person on the worst day.",
+      "weights": {
+        "claim_backing": 2,
+        "capability_specificity": 0,
+        "low_motivation_durability": 2,
+        "intimate_data_posture": 2,
+        "duty_of_care": 5
+      }
+    },
+    {
+      "role": "The Gym-Floor Coach",
+      "who": "Coaches ordinary people at six in the morning — desk workers, post-partum returners, guys who have not trained since school. Twelve years on the floor, no online following, an ongoing feud with everyone who has ever sold a transformation.",
+      "cares_most": "Whether the thing does one concrete job well and whether his clients would still be using it in two months. Function and follow-through, judged together.",
+      "biased_against": "'AI' as the entire product, and thin wrappers around a log with a leaderboard bolted on. He is dismissive of anything whose distinguishing feature is that it is free, and impatient with warnings and disclaimers, which he treats as noise between him and what the thing actually does.",
+      "voice": "Blunt, concrete, full of examples from actual clients. Judges a product by imagining handing it to one specific person and watching what happens.",
+      "weights": {
+        "claim_backing": 1,
+        "capability_specificity": 4,
+        "low_motivation_durability": 4,
+        "intimate_data_posture": 0.5,
+        "duty_of_care": 0.5
+      }
+    }
+  ]
+}
