@@ -6,7 +6,7 @@
  *
  * The layering, which is the one thing to hold on to when reading it:
  *
- *   identity          accounts
+ *   identity          accounts, account_identities
  *   frozen panels     categories, jury_versions, persona_versions
  *   the population    products
  *   RAW PANEL OUTPUT  score_rows, cluster_members, demand_votes   <- source of truth
@@ -43,6 +43,7 @@ export {
 } from './enums.js';
 
 export { accounts } from './accounts.js';
+export { accountIdentities } from './identities.js';
 export { categories, juryVersions, personaVersions } from './categories.js';
 export { products } from './products.js';
 export { jobs } from './jobs.js';

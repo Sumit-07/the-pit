@@ -29,6 +29,16 @@ export {
 } from './auth-store.js';
 
 export type {
+  AccountIdentityRow,
+  AccountRow,
+  EnsuredAccount,
+  PostgresHandoffStore,
+  PostgresIdentityStore,
+  RotateSlugOutcome,
+} from './identity-store.js';
+export { createPostgresIdentityStore, createPostgresWebhookAccounts } from './identity-store.js';
+
+export type {
   AttemptRowContext,
   DeliveredVerdict,
   LedgerEntry,

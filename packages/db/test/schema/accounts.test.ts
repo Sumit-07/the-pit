@@ -27,11 +27,16 @@ afterAll(async () => {
 let counter = 0;
 
 describe('the shape of an identity', () => {
-  it('has exactly three columns: who they are, how to reach them, and since when', async () => {
+  it('has exactly four columns: who they are, two ways to reach them, and since when', async () => {
     // Deliberately no balance column. `brief §2.3`'s balance is a fold over the
     // `attempts` ledger; a cached integer here would be a second answer to the
     // same question, and the one people would UPDATE.
-    expect(await columnsOf(database.pg, 'accounts')).toEqual(['id', 'email', 'created_at']);
+    //
+    // `capability_slug` is `0004`'s, appended by ALTER TABLE and therefore last.
+    // It is the only column the capability URL needed: rotation must REPLACE a
+    // slug, and one column is what makes the old value disappear in the same
+    // statement that writes the new one.
+    expect(await columnsOf(database.pg, 'accounts')).toEqual(['id', 'email', 'created_at', 'capability_slug']);
   });
 
   it('refuses something that is not an address', async () => {

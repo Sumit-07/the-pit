@@ -42,21 +42,29 @@
  */
 
 import {
+  GitHubOAuthProvider,
   MemoryAuthStore,
   MemoryRateLimiter,
   FixtureMailTransport,
   ResendMailTransport,
   assertUsableKeyring,
   systemTimingFloor,
+  type AccountStore,
   type AuthStore,
+  type HandoffStore,
+  type IdentityStore,
   type MailTransport,
+  type OAuthProvider,
   type SessionKeyring,
 } from '@the-pit/auth';
 
 import { hasDatabaseUrl } from '@the-pit/db';
 
+import type { CapabilityHandlerDeps } from '@/lib/auth/capability-handlers';
+import type { HandoffHandlerDeps } from '@/lib/auth/handoff-handlers';
 import type { AuthHandlerDeps } from '@/lib/auth/handlers';
-import { postgresAuthStore } from '@/lib/auth/store';
+import type { OAuthHandlerDeps } from '@/lib/auth/oauth-handlers';
+import { postgresAuthStore, postgresIdentityStore } from '@/lib/auth/store';
 
 export class AuthNotWiredError extends Error {
   constructor() {
@@ -77,6 +85,8 @@ export class MissingSessionSecretError extends Error {
 }
 
 let registeredStore: AuthStore | null = null;
+let registeredIdentityStore: (IdentityStore & HandoffStore) | null = null;
+let registeredProvider: OAuthProvider | null = null;
 let limiter: MemoryRateLimiter | null = null;
 
 /** Called once at startup by whoever owns the identity schema. */
@@ -84,10 +94,23 @@ export function registerAuthStore(store: AuthStore): void {
   registeredStore = store;
 }
 
+/**
+ * The same seam for the capability and GitHub paths.
+ *
+ * Separate from `registerAuthStore` so a test can install a `MemoryAuthStore` —
+ * which implements both — for one, the other, or both, and so the magic-link
+ * path keeps a three-method surface it cannot reach past.
+ */
+export function registerIdentityStore(store: IdentityStore & HandoffStore): void {
+  registeredIdentityStore = store;
+}
+
 /** Test and local-development escape hatch. */
 export function resetAuthWiring(): void {
   registeredStore = null;
+  registeredIdentityStore = null;
   limiter = null;
+  registeredProvider = null;
 }
 
 function resolveStore(): AuthStore {
@@ -156,6 +179,138 @@ export function appOrigin(): string {
  */
 export function secureCookies(): boolean {
   return !(process.env['AUTH_INSECURE_COOKIES'] === '1' && process.env['NODE_ENV'] !== 'production');
+}
+
+/**
+ * The identity store, by the same precedence rules as `resolveStore`.
+ *
+ * `MemoryAuthStore` implements `AuthStore` AND `IdentityStore`, so the
+ * development fallback is the same object — which is what makes all three paths
+ * converge on one account locally, exactly as they do against Postgres.
+ */
+function resolveIdentityStore(): IdentityStore & HandoffStore {
+  if (registeredIdentityStore !== null) {
+    return registeredIdentityStore;
+  }
+  if (process.env['AUTH_DEV_MEMORY_STORE'] === '1' && process.env['NODE_ENV'] !== 'production') {
+    // Share the one memory store, so a slug minted for an account seeded through
+    // the magic-link path resolves here too.
+    const shared = resolveStore();
+    if (shared instanceof MemoryAuthStore) {
+      registeredIdentityStore = shared;
+      return shared;
+    }
+  }
+  if (hasDatabaseUrl()) {
+    const store = postgresIdentityStore();
+    registeredIdentityStore = store;
+    return store;
+  }
+  throw new AuthNotWiredError();
+}
+
+/**
+ * GitHub, or nothing.
+ *
+ * `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` do not exist in this repository
+ * and are not expected to. When they are absent this returns `null` and the
+ * routes render "GitHub sign-in is not available" — a plain page rather than a
+ * 500, because the other two paths are unaffected and the customer should be
+ * told which door to use rather than shown a stack trace.
+ */
+
+/** Install a provider directly. Tests use the fixture; production uses env. */
+export function registerOAuthProvider(provider: OAuthProvider): void {
+  registeredProvider = provider;
+}
+
+export function githubProvider(): OAuthProvider | null {
+  if (registeredProvider !== null) {
+    return registeredProvider;
+  }
+  const clientId = process.env['GITHUB_CLIENT_ID'];
+  const clientSecret = process.env['GITHUB_CLIENT_SECRET'];
+  if (clientId === undefined || clientId === '' || clientSecret === undefined || clientSecret === '') {
+    return null;
+  }
+  return new GitHubOAuthProvider({ clientId, clientSecret, fetch: (url, init) => fetch(url, init) });
+}
+
+/** The capability path's dependencies. */
+export function capabilityDeps(): CapabilityHandlerDeps {
+  limiter ??= new MemoryRateLimiter();
+  return {
+    origin: appOrigin(),
+    capability: {
+      store: resolveIdentityStore(),
+      limiter,
+      keyring: sessionKeyring(),
+      secureCookies: secureCookies(),
+      // `random` is deliberately not passed: the default is `CAPABILITY_CSPRNG`,
+      // and every slug a customer is ever handed — rotated ones included — comes
+      // from it. See `capability/slug.ts`.
+    },
+  };
+}
+
+/**
+ * One object with both interfaces on it, by DELEGATION rather than by spreading.
+ *
+ * `{ ...auth, ...identity }` looks equivalent and is not: `MemoryAuthStore` and
+ * the Postgres stores keep their methods on a prototype or close over a
+ * connection, and a spread copies neither — it would produce an object whose
+ * methods are missing or unbound, and the failure would be a `TypeError` in a
+ * request path rather than a type error at build time.
+ */
+function composeAccountStore(auth: AuthStore, identity: IdentityStore): AccountStore {
+  return {
+    findAccountByEmail: (email) => auth.findAccountByEmail(email),
+    createToken: (token) => auth.createToken(token),
+    consumeToken: (input) => auth.consumeToken(input),
+    findAccountByCapabilitySlug: (slug) => identity.findAccountByCapabilitySlug(slug),
+    capabilitySlugFor: (accountId) => identity.capabilitySlugFor(accountId),
+    rotateCapabilitySlug: (input) => identity.rotateCapabilitySlug(input),
+    findAccountByProviderIdentity: (input) => identity.findAccountByProviderIdentity(input),
+    linkIdentity: (input) => identity.linkIdentity(input),
+    identitiesFor: (accountId) => identity.identitiesFor(accountId),
+  };
+}
+
+/**
+ * The GitHub path's dependencies, or `null` when it is not configured.
+ *
+ * `store` needs BOTH interfaces here — `findAccountByEmail` to match a purchase
+ * and the link methods to record one — so the two resolvers are intersected. In
+ * every wiring that exists they are the same object.
+ */
+export function oauthDeps(): OAuthHandlerDeps | null {
+  const provider = githubProvider();
+  if (provider === null) {
+    return null;
+  }
+  limiter ??= new MemoryRateLimiter();
+  const store = composeAccountStore(resolveStore(), resolveIdentityStore());
+
+  return {
+    redirectUri: new URL('/auth/github/callback', appOrigin()).toString(),
+    oauth: {
+      provider,
+      store,
+      limiter,
+      keyring: sessionKeyring(),
+      secureCookies: secureCookies(),
+    },
+  };
+}
+
+/** The success page's dependencies. */
+export function handoffDeps(): HandoffHandlerDeps {
+  limiter ??= new MemoryRateLimiter();
+  return {
+    origin: appOrigin(),
+    provider: process.env['PAYMENTS_PROVIDER'] ?? 'dodo',
+    handoff: { store: resolveIdentityStore(), limiter },
+  };
 }
 
 export function authDeps(): AuthHandlerDeps {
