@@ -1,42 +1,163 @@
-import { ENGINE } from '@/lib/engine';
+/**
+ * The homepage — the public face of The Pit.
+ *
+ * `brief` Part 6 is the specification and `the-pit-home.html` is the design. This
+ * route is the founder's page, rebuilt over the real seeded boards: the same
+ * palette, the same compact hero, the same rolling category rail with its 7s
+ * progress bar, the same board-as-a-pit with rows darkening as they descend, the
+ * same three panels and the same closer. Nothing has been restyled or modernised.
+ *
+ * ## Copy
+ *
+ * `brief` Part 5, verbatim, from `lib/boards/copy.ts`. The headline, the sub, the
+ * terms line, the CTA and the closer are constants, not literals, so a reworded
+ * homepage fails a test instead of shipping. The connective word — **cuts** — is
+ * on this surface in the sub, in the board's primary column, in every row's lead
+ * and in the strip beneath it. Outbid is never named. No rank is promised
+ * anywhere: the board carries a time and a product count instead, because
+ * `brief §1.2` moves every rank on every placement.
+ *
+ * ## Reads
+ *
+ * `brief` Part 3: "Boards are CDN snapshots, regenerated on placement. Reads never
+ * touch a model." This route reads JSON from `lib/boards/source.ts` and nothing
+ * else — no database, no model client, no engine import at runtime. It is
+ * prerendered, so a visitor is a cache hit and nothing behind the CDN wakes up.
+ * `test/boards-read-path.test.ts` walks the import graph from here and fails if
+ * that ever stops being true.
+ *
+ * ## What is deliberately absent
+ *
+ * No submission flow, no checkout, no auth. Those are other phases and other
+ * agents. The CTA carries `brief` Part 5's exact words and says plainly that the
+ * door is not open yet, because a button that took a visitor nowhere would be the
+ * one dishonest thing on a page whose entire argument is that it cannot be bought.
+ */
+
+import type { ReactNode } from 'react';
+
+import { CLOSER_PARTS, COPY, HEADLINE_PARTS } from '@/lib/boards/copy';
+import { toHomeBoard, tickerLines } from '@/lib/boards/home';
+import { defaultBoardSource } from '@/lib/boards/source';
+import { toBoardView, type BoardView } from '@/lib/boards/view';
+import { HomeBoard } from '@/components/home-board';
 
 /**
- * A placeholder, and only a placeholder.
- *
- * `brief` Part 6 and the build order put the homepage and the category boards at
- * step 5, and another agent owns them. What this route exists to prove is the one
- * thing Phase 2's shell is for: the app renders, and it reads `@the-pit/engine`
- * as a library. If the workspace link or the engine's build output were wrong,
- * `next build` would fail here rather than three phases from now.
- *
- * The numbers below are read from the engine, never written down. `01 §9` rule 4
- * and `docs/plans/phase-1-engine.md`'s Global Constraint 4 put every constant in
- * `packages/engine/src/config/constants.ts`; a page that hard-coded `0.65` would
- * be a second source of truth for a weight that decides rank.
+ * Revalidated daily, matching `BOARD_CACHE_CONTROL`'s `s-maxage=86400` on the
+ * board JSON. A placement invalidates the path it rewrote; this is the ceiling on
+ * how stale the homepage can get if nothing invalidates anything.
  */
-export default function Home() {
+export const revalidate = 86400;
+
+async function loadBoards(): Promise<BoardView[]> {
+  const source = defaultBoardSource();
+  const views: BoardView[] = [];
+  for (const slug of await source.list()) {
+    const document_ = await source.read(slug);
+    if (document_ !== undefined) views.push(toBoardView(document_));
+  }
+  // Biggest board first: the homepage opens on the category with the most
+  // products, which is the one whose rank means the most.
+  return views.sort((a, b) => b.productCount - a.productCount || a.category.localeCompare(b.category));
+}
+
+export default async function Home(): Promise<ReactNode> {
+  const boards = await loadBoards();
+
   return (
-    <main>
-      <h1>You can&rsquo;t outbid the pit.</h1>
-      <p>Everyone walks in at 100. Fewest cuts wins.</p>
+    <div className="wrap">
+      <nav>
+        <a className="mark" href="/">
+          THE <i>PIT</i>
+        </a>
+        <span className="navr">
+          <a className="navlink" href="/boards">
+            boards
+          </a>
+        </span>
+      </nav>
 
-      <section aria-label="Shell status">
-        <p>
-          Phase 2 shell. The boards, the verdict page and checkout are not built yet.
+      <div className="hero">
+        <h1>
+          {HEADLINE_PARTS[0]}
+          <br />
+          <em>{HEADLINE_PARTS[1]}</em>
+        </h1>
+        <p className="sub">
+          Everyone walks in at <b>100</b>. Fewest <b>cuts</b> wins.
         </p>
-        <dl>
-          <dt>Engine</dt>
-          <dd>{ENGINE.version}</dd>
+        <div className="herorow">
+          {/*
+            `brief` Part 5's CTA, word for word. Disabled rather than pointed at a
+            route that does not exist: checkout is Phase 3 and another agent's, and
+            a dead link is a worse lie than a closed door.
+          */}
+          <button className="cta" type="button" disabled aria-describedby="terms">
+            Throw it in <small>&middot; $5</small>
+          </button>
+          <span className="terms" id="terms">
+            {COPY.terms}
+            <br />
+            <i>the door isn&rsquo;t open yet</i>
+          </span>
+        </div>
+      </div>
 
-          <dt>Jurors</dt>
-          <dd>{ENGINE.jurors}</dd>
+      {boards.length === 0 ? (
+        <div className="empty">
+          No board has been published yet.
+          <br />
+          <br />
+          A board is written only for a DELIVERED run. Seed a category, rank it, and this page reads the
+          snapshot on its next rebuild &mdash; it computes nothing at read time and never will.
+        </div>
+      ) : (
+        <HomeBoard
+          boards={boards.map((board) => toHomeBoard(board))}
+          ticker={tickerLines(boards)}
+        />
+      )}
 
-          <dt>Merit / demand weight</dt>
-          <dd>
-            {ENGINE.meritWeight} / {ENGINE.demandWeight}
-          </dd>
-        </dl>
+      <section>
+        <div className="three">
+          <div className="card six">
+            <h3>The Six</h3>
+            <div className="role">Critics &middot; merit</div>
+            <p>
+              They start you at a hundred and take it apart. Every point comes off with a reason short
+              enough to sting, and the reason is on the board next to the cut.
+            </p>
+          </div>
+          <div className="card floor">
+            <h3>The Floor</h3>
+            <div className="role">Simulated buyers &middot; demand</div>
+            <p>
+              Six customers shown you beside your closest substitutes and made to pick one. No abstaining,
+              no ties. Alone in your cluster, nobody is shown you at all, and the board says so.
+            </p>
+          </div>
+          <div className="card mob">
+            <h3>The Mob</h3>
+            <div className="role">Real people &middot; free &middot; opens next</div>
+            <p>
+              Everyone walking past, given the same choice the floor gets. Where they disagree is the whole
+              point.
+            </p>
+          </div>
+        </div>
       </section>
-    </main>
+
+      <div className="closer">
+        <h2>
+          {CLOSER_PARTS[0]} <em>{CLOSER_PARTS[1]}</em>
+        </h2>
+        <p>same five for everyone &middot; no boosts &middot; no featured slots &middot; no exceptions</p>
+      </div>
+
+      <footer>
+        <span>THE PIT</span>
+        <span>boards are snapshots &middot; rebuilt on every placement</span>
+      </footer>
+    </div>
   );
 }
