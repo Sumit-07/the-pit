@@ -33,7 +33,7 @@ export { runScorePhase } from './phases/score.js';
 export type { ScorePhaseInput } from './phases/score.js';
 export { runUniquenessPhase } from './phases/uniqueness.js';
 export type { UniquenessPhaseInput } from './phases/uniqueness.js';
-export { isDeliverable, runCategory } from './run-category.js';
+export { isDeliverable, phaseVersions, runCategory } from './run-category.js';
 export type { RunCategoryInput, RunConfig } from './run-category.js';
 export { DEFAULT_WORKDIR, FileRunStore, MemoryRunStore } from './store.js';
 export type { RunStore } from './store.js';
@@ -43,6 +43,7 @@ export type {
   DryRunPhase,
   DryRunProjection,
   FailureCode,
+  PersistedPhase,
   PhaseCost,
   PhaseFailed,
   PhaseFailure,
@@ -51,6 +52,7 @@ export type {
   PhaseResult,
   PhaseSkipped,
   PhaseSummary,
+  PhaseVersions,
   RunDemand,
   RunMeta,
   RunOutcome,

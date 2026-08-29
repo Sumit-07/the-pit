@@ -70,16 +70,18 @@ import { dispatch } from './dispatch.js';
 import { buildLedger, PhaseLedger, zeroCost } from './ledger.js';
 import { runCustomerPhase } from './phases/customer.js';
 import { runScorePhase } from './phases/score.js';
-import type { RunConfig } from './run-category.js';
+import { phaseVersions, type RunConfig } from './run-category.js';
 import type { RunStore } from './store.js';
 import { MemoryRunStore } from './store.js';
 import type {
   CustomerPhaseValue,
+  PersistedPhase,
   PhaseCost,
   PhaseFailure,
   PhaseName,
   PhaseResult,
   PhaseSummary,
+  PhaseVersions,
   RunMeta,
   RunResults,
   ScorePhaseValue,
@@ -147,6 +149,7 @@ export async function runIncremental(input: IncrementalInput): Promise<Increment
   const ordering: PanelOrdering = { category: input.category, categoryVersion: input.config.categoryVersion };
   const allProducts = [...input.products, input.product];
   const priorUniqueness = input.results.uniqueness;
+  const versions = phaseVersions(input);
 
   // --- 1. Score, with the calibration sample (`brief §1.1`) -------------------
   const calibration =
@@ -155,6 +158,7 @@ export async function runIncremental(input: IncrementalInput): Promise<Increment
 
   const score = await persist(
     store,
+    versions,
     runScorePhase({
       client: input.client,
       // Deliberately one product: the whole point of the calibration sample is
@@ -169,7 +173,7 @@ export async function runIncremental(input: IncrementalInput): Promise<Increment
   // --- 2. Place it, append-only (`brief §1.5`) --------------------------------
   const placement =
     score.status === 'ok'
-      ? await persist(store, assignCluster(input, priorUniqueness))
+      ? await persist(store, versions, assignCluster(input, priorUniqueness))
       : notRun<Placement>('uniqueness', 'the placement call was not made: the merit panel did not return usable scores');
 
   const merged =
@@ -189,9 +193,10 @@ export async function runIncremental(input: IncrementalInput): Promise<Increment
           // SUCCESSFUL delivery — the same `skipped: 'no_sets'` a full run returns
           // for a category with no multi-member cluster — and emphatically not the
           // `failed` arm above, which is what a placement that never happened gets.
-          await persist(store, Promise.resolve(skippedCustomer()))
+          await persist(store, versions, Promise.resolve(skippedCustomer()))
         : await persist(
             store,
+            versions,
             runCustomerPhase({
               client: input.client,
               products: allProducts,
@@ -456,9 +461,15 @@ function mergeDemandLog(
 
 // --- Bookkeeping ---------------------------------------------------------------
 
-async function persist<T>(store: RunStore, running: Promise<PhaseResult<T>>): Promise<PhaseResult<T>> {
+/** Same version-stamped envelope the full run writes; see `run-category.ts`. */
+async function persist<T>(
+  store: RunStore,
+  versions: PhaseVersions,
+  running: Promise<PhaseResult<T>>,
+): Promise<PhaseResult<T>> {
   const result = await running;
-  await store.writePhase(result.phase, result);
+  const envelope: PersistedPhase<T> = { versions, result };
+  await store.writePhase(result.phase, envelope);
   return result;
 }
 
@@ -544,7 +555,12 @@ function assemble(args: AssembleIncremental): RunResults {
       args.score.status === 'ok'
         ? args.score.value.coverage
         : (args.score.status === 'failed' ? args.score.failure.coverage : undefined) ?? input.results.meta.coverage,
-    warnings: [...args.score.warnings, ...args.placement.warnings, ...args.customer.warnings],
+    warnings: [
+      ...args.score.warnings,
+      ...args.placement.warnings,
+      ...args.customer.warnings,
+      ...unpricedWarning(buildLedger(costs).total.unpriced_models),
+    ],
   };
 
   return {
@@ -557,6 +573,15 @@ function assemble(args: AssembleIncremental): RunResults {
     flaggedInjections,
     meta,
   };
+}
+
+/** See `run-category.ts`: a total booked short must say so. */
+function unpricedWarning(models: readonly string[]): string[] {
+  if (models.length === 0) return [];
+  return [
+    `cost is UNDERSTATED: no price is known for model id(s) ${models.map((m) => JSON.stringify(m)).join(', ')}, ` +
+      'so their tokens were booked at $0. Treat this run’s cost_usd as a lower bound, not a total.',
+  ];
 }
 
 function summarize<T>(result: PhaseResult<T>): PhaseSummary {

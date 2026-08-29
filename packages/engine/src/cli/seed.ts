@@ -79,7 +79,7 @@ export async function seedCommand(args: ParsedArgs, deps: SeedDeps): Promise<num
   const slug = categorySlug(category);
   if (slug === '') throw new UsageError(`--category ${JSON.stringify(category)} has no slug`);
 
-  const productSet = await loadProducts(category, slug, workdir, optionalFlag(args, 'xlsx'));
+  const { productSet, fromDisk } = await loadProducts(category, slug, workdir, optionalFlag(args, 'xlsx'));
   const jury = await loadJury(workdir, slug);
   const personas = await loadPersonas(workdir, slug);
   const categoryVersion = optionalFlag(args, 'version') ?? jury.prompt_version;
@@ -102,6 +102,18 @@ export async function seedCommand(args: ParsedArgs, deps: SeedDeps): Promise<num
   }
 
   const store = new FileRunStore(category, workdir);
+
+  // Pin the ids BEFORE any call is made. `Product.id` is a 0-based index into the
+  // usable rows of the workbook (`01 §4` Step 1), so a sheet that gains or loses
+  // a row renumbers every product — and ids are how scores, clusters and votes
+  // attach to products. Once this file exists, `loadProducts` reads it in
+  // preference to the workbook and the ids stop moving. Written on `--run` only:
+  // the dry run is an approval gate and writes nothing.
+  if (!fromDisk) {
+    await store.writeProducts(productSet);
+    deps.log(`Prepared ${productSet.products.length} products -> ${join(store.path, 'products.json')}`);
+  }
+
   const outcome = await runCategory({
     category,
     products: productSet.products,
@@ -188,12 +200,12 @@ async function loadProducts(
   slug: string,
   workdir: string,
   xlsx: string | undefined,
-): Promise<ProductSet> {
+): Promise<{ productSet: ProductSet; fromDisk: boolean }> {
   const stored = await readJson(join(workdir, 'runs', slug, 'products.json'));
   if (stored !== undefined) {
     const set = stored as Partial<ProductSet>;
     if (Array.isArray(set.products) && set.products.length > 0) {
-      return { category: set.category ?? category, products: set.products as Product[] };
+      return { productSet: { category: set.category ?? category, products: set.products as Product[] }, fromDisk: true };
     }
   }
 
@@ -203,7 +215,9 @@ async function loadProducts(
         'Pass --xlsx PATH to prepare the category from the source workbook (01 §4 Step 1).',
     );
   }
-  return loadCategory(xlsx, category);
+  // `--run` writes this back to `products.json` before spending anything, so the
+  // ids are derived from the workbook exactly once per category.
+  return { productSet: await loadCategory(xlsx, category), fromDisk: false };
 }
 
 /** The installed jury, re-validated. `01 §4` Step 2 (APPROVAL GATE 1). */

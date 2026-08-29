@@ -53,11 +53,13 @@ import type { RunStore } from './store.js';
 import { MemoryRunStore } from './store.js';
 import type {
   CustomerPhaseValue,
+  PersistedPhase,
   PhaseCost,
   PhaseFailure,
   PhaseName,
   PhaseResult,
   PhaseSummary,
+  PhaseVersions,
   RunMeta,
   RunOutcome,
   RunResults,
@@ -111,17 +113,20 @@ export async function runCategory(input: RunCategoryInput): Promise<RunOutcome> 
   const store = input.store ?? new MemoryRunStore(input.category);
   const ordering: PanelOrdering = { category: input.category, categoryVersion: input.config.categoryVersion };
   const resume = input.config.resume === true;
+  const versions = phaseVersions(input);
+  const resumeWarnings: string[] = [];
 
   // --- Round 1: Score || Uniqueness ------------------------------------------
   // Both read only the products, so `01 §2` runs them together. Each is persisted
   // by its own `then`, the moment it lands — not after both settle, or a slow
   // clustering pass would hold six finished juror calls unwritten.
   const [score, uniqueness] = await Promise.all([
-    resumePhase<ScorePhaseValue>(store, 'score', resume).then(
+    resumePhase<ScorePhaseValue>(store, 'score', resume, versions, resumeWarnings).then(
       async (cached) =>
         cached ??
         (await persist(
           store,
+          versions,
           runScorePhase({
             client: input.client,
             products: input.products,
@@ -132,11 +137,12 @@ export async function runCategory(input: RunCategoryInput): Promise<RunOutcome> 
           }),
         )),
     ),
-    resumePhase<UniquenessPhaseValue>(store, 'uniqueness', resume).then(
+    resumePhase<UniquenessPhaseValue>(store, 'uniqueness', resume, versions, resumeWarnings).then(
       async (cached) =>
         cached ??
         (await persist(
           store,
+          versions,
           runUniquenessPhase({ client: input.client, products: input.products, ordering }),
         )),
     ),
@@ -150,9 +156,10 @@ export async function runCategory(input: RunCategoryInput): Promise<RunOutcome> 
   // failure of its own.
   const customer: PhaseResult<CustomerPhaseValue> =
     uniqueness.status === 'ok'
-      ? ((await resumePhase<CustomerPhaseValue>(store, 'customer', resume)) ??
+      ? ((await resumePhase<CustomerPhaseValue>(store, 'customer', resume, versions, resumeWarnings)) ??
         (await persist(
           store,
+          versions,
           runCustomerPhase({
             client: input.client,
             products: input.products,
@@ -173,6 +180,7 @@ export async function runCategory(input: RunCategoryInput): Promise<RunOutcome> 
     score,
     uniqueness,
     customer,
+    extraWarnings: resumeWarnings,
   });
 
   await store.writeResults(results);
@@ -211,31 +219,102 @@ export function isDeliverable(
   return score.status === 'ok' && uniqueness.status === 'ok' && customer.status !== 'failed';
 }
 
-/** Persist a phase result the instant it resolves, then hand it on unchanged. */
-async function persist<T>(store: RunStore, running: Promise<PhaseResult<T>>): Promise<PhaseResult<T>> {
+/** The versions a phase run right now would be produced under. */
+export function phaseVersions(input: {
+  config: RunConfig;
+  jury: Jury;
+  personas: PersonaPanel;
+}): PhaseVersions {
+  return {
+    category_version: input.config.categoryVersion,
+    prompt_version: input.jury.prompt_version,
+    persona_version: input.personas.persona_version,
+    engine_version: ENGINE_VERSION,
+  };
+}
+
+/**
+ * Persist a phase result the instant it resolves, then hand it on unchanged.
+ *
+ * Written as a version-stamped envelope: the file path carries only the slug
+ * (`cjr/runs/<slug>/phases/<phase>.json`), so the only place the versions can
+ * live is inside the file.
+ */
+async function persist<T>(
+  store: RunStore,
+  versions: PhaseVersions,
+  running: Promise<PhaseResult<T>>,
+): Promise<PhaseResult<T>> {
   const result = await running;
-  await store.writePhase(result.phase, result);
+  const envelope: PersistedPhase<T> = { versions, result };
+  await store.writePhase(result.phase, envelope);
   return result;
 }
 
 /**
- * A previously persisted phase result, if resuming and if it was a success.
+ * A previously persisted phase result, if resuming, if it succeeded, AND if it
+ * was produced under the versions this run is using.
  *
  * A persisted FAILURE is deliberately not reused: `brief §2.3` retries the failed
  * phase, so reading one back would make the retry a no-op that re-reports the
  * original failure forever.
+ *
+ * A persisted result from DIFFERENT VERSIONS is refused for a sharper reason.
+ * The phase path carries only the slug, so without this check the sequence
+ * "transient failure -> edit the installed jury and bump `prompt_version` as
+ * `01 §4` Step 2 instructs -> re-run with --resume" reads the old Score phase
+ * straight off disk and delivers it, while `meta.prompt_version` is stamped with
+ * the NEW version. The board would then claim scores from a rubric that never
+ * produced them — exactly what `01 §9` rule 5 and `brief §1.3` exist to prevent.
+ * It would also break this task's own `orderedChunks` guarantee, because the
+ * ordering seed is `(slug, categoryVersion)`: resumed chunks would no longer be
+ * the composition the current version produces.
+ *
+ * A mismatch is not silent. It re-runs the phase and records a warning naming
+ * the version that moved, so the extra spend has a stated reason.
  */
-async function resumePhase<T>(store: RunStore, phase: PhaseName, resume: boolean): Promise<PhaseResult<T> | undefined> {
+async function resumePhase<T>(
+  store: RunStore,
+  phase: PhaseName,
+  resume: boolean,
+  versions: PhaseVersions,
+  warnings: string[],
+): Promise<PhaseResult<T> | undefined> {
   if (!resume) return undefined;
 
   const stored = await store.readPhase(phase);
   if (stored === null || typeof stored !== 'object') return undefined;
 
-  const candidate = stored as Partial<PhaseResult<T>>;
-  if (candidate.phase !== phase) return undefined;
-  if (candidate.status !== 'ok' && candidate.status !== 'skipped') return undefined;
+  const envelope = stored as Partial<PersistedPhase<T>>;
+  const result = envelope.result;
+  if (result === null || typeof result !== 'object') {
+    warnings.push(`resume: the stored ${phase} phase is not a version-stamped result; re-running it`);
+    return undefined;
+  }
+  if (result.phase !== phase) return undefined;
+  if (result.status !== 'ok' && result.status !== 'skipped') return undefined;
 
-  return stored as PhaseResult<T>;
+  const moved = versionsMoved(envelope.versions, versions);
+  if (moved.length > 0) {
+    warnings.push(
+      `resume: refused the stored ${phase} phase because ${moved.join(' and ')}. ` +
+        'A phase produced under different versions is a stale answer, not a saving — it would be ' +
+        'delivered under this run’s version stamps (01 §9 rule 5, brief §1.3). Re-running it.',
+    );
+    return undefined;
+  }
+
+  return result;
+}
+
+/** Which of the four versions differ, named for a human. */
+function versionsMoved(stored: PhaseVersions | undefined, current: PhaseVersions): string[] {
+  if (stored === undefined) return ['it carries no version stamp'];
+
+  const keys: (keyof PhaseVersions)[] = ['category_version', 'prompt_version', 'persona_version', 'engine_version'];
+  return keys
+    .filter((key) => stored[key] !== current[key])
+    .map((key) => `${key} moved from ${JSON.stringify(stored[key])} to ${JSON.stringify(current[key])}`);
 }
 
 /**
@@ -269,6 +348,8 @@ interface AssembleInput {
   score: PhaseResult<ScorePhaseValue>;
   uniqueness: PhaseResult<UniquenessPhaseValue>;
   customer: PhaseResult<CustomerPhaseValue>;
+  /** Warnings raised outside any one phase — a refused resume, for instance. */
+  extraWarnings: readonly string[];
 }
 
 /**
@@ -330,7 +411,13 @@ function assembleResults(input: AssembleInput): RunResults {
       scoreValue?.coverage ??
       (input.score.status === 'failed' ? input.score.failure.coverage : undefined) ??
       emptyCoverage(input.jury.jurors.length),
-    warnings: [...input.score.warnings, ...input.uniqueness.warnings, ...input.customer.warnings],
+    warnings: [
+      ...input.extraWarnings,
+      ...input.score.warnings,
+      ...input.uniqueness.warnings,
+      ...input.customer.warnings,
+      ...unpricedWarning(buildLedger(costs).total.unpriced_models),
+    ],
     engine_version: ENGINE_VERSION,
   };
 
@@ -370,6 +457,23 @@ function emptyCoverage(expected: number): ScoreCoverage {
     jurors_answered: 0,
     jurors_expected: expected === 0 ? JUROR_COUNT : expected,
   };
+}
+
+/**
+ * A cost total that is short, said out loud.
+ *
+ * `callCost` books an unrecognised model id at $0 so a paid run is never lost to
+ * a bookkeeping gap. Left there, the run would report `$0.0000` and Task 8's
+ * report would print it as the Phase 1 cost picture. Task 9's handoff adapter
+ * cannot report a priced id at all, so this is the normal case for every
+ * locally-seeded run, not an edge one.
+ */
+function unpricedWarning(models: readonly string[]): string[] {
+  if (models.length === 0) return [];
+  return [
+    `cost is UNDERSTATED: no price is known for model id(s) ${models.map((m) => JSON.stringify(m)).join(', ')}, ` +
+      'so their tokens were booked at $0. Treat this run’s cost_usd as a lower bound, not a total.',
+  ];
 }
 
 function collectFailures(phases: readonly PhaseResult<unknown>[]): PhaseFailure[] {

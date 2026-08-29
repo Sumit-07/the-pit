@@ -1,12 +1,15 @@
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+import ExcelJS from 'exceljs';
 import { describe, expect, it } from 'vitest';
 
 import { JUROR_COUNT } from '../../src/config/constants.js';
 import { boolFlag, intFlag, parseArgs, rejectUnknownFlags, requireFlag, UsageError } from '../../src/cli/args.js';
 import { seedCommand } from '../../src/cli/seed.js';
 import { FixtureClient } from '../../src/model/fixture-client.js';
+import { ModelCallError } from '../../src/model/types.js';
 import { FileRunStore } from '../../src/run/store.js';
 import type { RunResults } from '../../src/run/types.js';
 import { CATEGORY, JURY, makeProducts, makeScript, PANEL } from '../helpers/run-fixtures.js';
@@ -33,6 +36,47 @@ async function makeWorkdir(products = 10): Promise<string> {
   await writeFile(join(root, 'references', 'jurors', `${SLUG}.json`), JSON.stringify(JURY));
   await writeFile(join(root, 'references', 'personas', `${SLUG}.json`), JSON.stringify(PANEL));
   return root;
+}
+
+/**
+ * A source workbook in the shape `01 §4` Step 1 reads: sheet `All Products`,
+ * with the five columns ingest uses. Written once per test that needs the
+ * `--xlsx` path, so the `products.json` write can be observed for real rather
+ * than stubbed.
+ */
+async function makeWorkbook(root: string, count: number): Promise<string> {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('All Products');
+  sheet.addRow([
+    'Category',
+    'Rank',
+    'Website',
+    'Product Name',
+    'Description',
+    'Desc. Source',
+    'Price (USD)',
+    'Clicks',
+    'Website URL',
+    'outbid.lol Page',
+  ]);
+  for (let rank = 1; rank <= count; rank += 1) {
+    sheet.addRow([
+      CATEGORY,
+      String(rank),
+      'example.com',
+      `Product ${rank}`,
+      `A tool that does thing ${rank} for people who are tired of spreadsheets.`,
+      'fixture',
+      '0',
+      '0',
+      `https://www.example.com/p/${rank}`,
+      'https://outbid.lol/product/example',
+    ]);
+  }
+
+  const path = join(root, 'source.xlsx');
+  await workbook.xlsx.writeFile(path);
+  return path;
 }
 
 function capture(): { log: (line: string) => void; text: () => string } {
@@ -184,18 +228,44 @@ describe('seed --run', () => {
     expect(results.meta.outcome).toBe('delivered');
     expect(results.meta.ledger.total.calls).toBe(JUROR_COUNT + 1 + PANEL.personas.length);
 
-    // Every phase result is on disk too, written as it landed.
+    // Every phase result is on disk too, written as it landed, in a
+    // version-stamped envelope — the path carries only the slug, so the versions
+    // have to live inside the file.
     for (const phase of ['score', 'uniqueness', 'customer']) {
       const stored = JSON.parse(await readFile(join(workdir, 'runs', SLUG, 'phases', `${phase}.json`), 'utf8')) as {
-        status: string;
+        versions: Record<string, string>;
+        result: { status: string };
       };
-      expect(stored.status).toBe('ok');
+      expect(stored.result.status).toBe('ok');
+      expect(stored.versions.prompt_version).toBe(JURY.prompt_version);
+      expect(stored.versions.persona_version).toBe(PANEL.persona_version);
     }
 
     await expect(readFile(join(workdir, 'runs', SLUG, 'ranking.json'), 'utf8')).resolves.toContain('"rank"');
   });
 
-  it('exits non-zero on a failed run and says whether the retry is free', async () => {
+  it('exits non-zero on a retryable failure and says the retry is FREE', async () => {
+    const workdir = await makeWorkdir();
+    const out = capture();
+
+    const code = await seedCommand(parseArgs(['seed', '--category', CATEGORY, '--workdir', workdir, '--run']), {
+      log: out.log,
+      makeClient: () =>
+        new FixtureClient(
+          makeScript({ uniquenessError: () => new ModelCallError('503', { retryable: true, status: 503 }) }),
+        ),
+    });
+
+    expect(code).toBe(1);
+    expect(out.text()).toContain('RUN FAILED');
+    // Asserted as the exact branch, not as an OR that either arm satisfies.
+    expect(out.text()).toContain('this is a FREE retry');
+    expect(out.text()).not.toContain('At least one failure is terminal');
+    // No board is written for a failed run.
+    await expect(readFile(join(workdir, 'runs', SLUG, 'ranking.json'))).rejects.toThrow();
+  });
+
+  it('says a TERMINAL failure is not worth a free retry', async () => {
     const workdir = await makeWorkdir();
     const out = capture();
 
@@ -204,16 +274,89 @@ describe('seed --run', () => {
       makeClient: () =>
         new FixtureClient(
           makeScript({
-            uniquenessError: () => new Error('boom'),
+            uniquenessError: () =>
+              new ModelCallError('truncated at max_tokens', { retryable: true, code: 'max_tokens' }),
           }),
         ),
     });
 
     expect(code).toBe(1);
-    expect(out.text()).toContain('RUN FAILED');
-    expect(out.text()).toMatch(/FREE retry|terminal/);
-    // No board is written for a failed run.
-    await expect(readFile(join(workdir, 'runs', SLUG, 'ranking.json'))).rejects.toThrow();
+    expect(out.text()).toContain('At least one failure is terminal');
+    expect(out.text()).not.toContain('this is a FREE retry');
+  });
+
+  it('prints the unpriced-model warning instead of reporting $0.0000 as fact', async () => {
+    const workdir = await makeWorkdir();
+    const out = capture();
+
+    await seedCommand(parseArgs(['seed', '--category', CATEGORY, '--workdir', workdir, '--run']), {
+      log: out.log,
+      makeClient: () => new FixtureClient(makeScript({ modelId: 'local-subagent' })),
+    });
+
+    expect(out.text()).toContain('$0.0000');
+    expect(out.text()).toContain('cost is UNDERSTATED');
+  });
+});
+
+describe('seed --run — products.json is WRITTEN, not merely read', () => {
+  it('writes the prepared category before spending anything, so ids stop moving', async () => {
+    // `Product.id` is a 0-based index into the usable rows of the workbook, so
+    // re-deriving it from a sheet that gained or lost a row renumbers every
+    // product — and ids are how scores, clusters and votes attach to products.
+    const workdir = await mkdtemp(join(tmpdir(), 'the-pit-cli-'));
+    await mkdir(join(workdir, 'references', 'jurors'), { recursive: true });
+    await mkdir(join(workdir, 'references', 'personas'), { recursive: true });
+    await writeFile(join(workdir, 'references', 'jurors', `${SLUG}.json`), JSON.stringify(JURY));
+    await writeFile(join(workdir, 'references', 'personas', `${SLUG}.json`), JSON.stringify(PANEL));
+
+    const xlsx = await makeWorkbook(workdir, 12);
+    const out = capture();
+
+    const code = await seedCommand(
+      parseArgs(['seed', '--category', CATEGORY, '--workdir', workdir, '--xlsx', xlsx, '--run']),
+      { log: out.log, makeClient: () => new FixtureClient(makeScript({ clusterPlan: 'pairs' })) },
+    );
+
+    expect(code).toBe(0);
+    expect(out.text()).toContain('products.json');
+
+    const written = JSON.parse(await readFile(join(workdir, 'runs', SLUG, 'products.json'), 'utf8')) as {
+      category: string;
+      products: { id: number }[];
+    };
+    expect(written.category).toBe(CATEGORY);
+    expect(written.products.map((p) => p.id)).toEqual([...Array(12).keys()]);
+  });
+
+  it('does not rewrite a products.json that already exists', async () => {
+    const workdir = await makeWorkdir();
+    const before = await readFile(join(workdir, 'runs', SLUG, 'products.json'), 'utf8');
+    const out = capture();
+
+    await seedCommand(parseArgs(['seed', '--category', CATEGORY, '--workdir', workdir, '--run']), {
+      log: out.log,
+      makeClient: () => new FixtureClient(makeScript({ clusterPlan: 'pairs' })),
+    });
+
+    expect(await readFile(join(workdir, 'runs', SLUG, 'products.json'), 'utf8')).toBe(before);
+    expect(out.text()).not.toContain('Prepared');
+  });
+
+  it('writes nothing on a dry run — the approval gate is read-only', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'the-pit-cli-'));
+    await mkdir(join(workdir, 'references', 'jurors'), { recursive: true });
+    await mkdir(join(workdir, 'references', 'personas'), { recursive: true });
+    await writeFile(join(workdir, 'references', 'jurors', `${SLUG}.json`), JSON.stringify(JURY));
+    await writeFile(join(workdir, 'references', 'personas', `${SLUG}.json`), JSON.stringify(PANEL));
+    const xlsx = await makeWorkbook(workdir, 12);
+
+    await seedCommand(
+      parseArgs(['seed', '--category', CATEGORY, '--workdir', workdir, '--xlsx', xlsx, '--dry-run']),
+      { log: capture().log, makeClient: refuseToSpend },
+    );
+
+    await expect(readFile(join(workdir, 'runs', SLUG, 'products.json'))).rejects.toThrow();
   });
 });
 

@@ -14,11 +14,23 @@
  * held its intermediate results in memory because it was a single process that
  * either returned or did not.
  *
+ *   cjr/runs/<slug>/products.json            `01 §4` Step 1's prepared category
  *   cjr/runs/<slug>/phases/score.json        each written the moment its phase lands
  *   cjr/runs/<slug>/phases/uniqueness.json
  *   cjr/runs/<slug>/phases/customer.json
  *   cjr/runs/<slug>/results.json             `01 §4` Step 5's Workflow return value
  *   cjr/runs/<slug>/ranking.json             `01 §6.6`, recomputable offline from the above
+ *
+ * `products.json` is written by this engine, not merely read by it. `Product.id`
+ * is a 0-based index into the USABLE rows of the source workbook, so re-deriving
+ * it from a sheet that has since gained or lost a row renumbers every product —
+ * and ids are how every stored score, cluster and vote attaches to a product. A
+ * resumed phase keyed to ids that shifted underneath it would silently
+ * misattribute scores. Writing the file on the first run is what makes the
+ * "read it first, so ids are stable" path true rather than aspirational.
+ *
+ * The phase files are version-stamped envelopes (`PersistedPhase`); the path
+ * carries only the slug, so the versions have to travel inside the file.
  *
  * The interface exists so tests can watch the ORDER of writes, which is the only
  * way to assert "persisted as it lands" rather than "persisted eventually":
@@ -30,7 +42,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import { categorySlug } from '../panels/seeded.js';
-import type { Ranking } from '../types.js';
+import type { ProductSet, Ranking } from '../types.js';
 import type { PhaseName, RunResults } from './types.js';
 
 /** `cjr/`, per `01 §3`. Relative to the process working directory. */
@@ -42,10 +54,12 @@ export const DEFAULT_WORKDIR = 'cjr';
  */
 export interface RunStore {
   readonly slug: string;
-  /** Write one phase's result the moment it lands. */
-  writePhase(phase: PhaseName, result: unknown): Promise<void>;
-  /** Read a previously persisted phase result, or `undefined` if there is none. */
+  /** Write one phase's version-stamped envelope the moment the phase lands. */
+  writePhase(phase: PhaseName, envelope: unknown): Promise<void>;
+  /** Read a previously persisted envelope, or `undefined` if there is none. */
   readPhase(phase: PhaseName): Promise<unknown>;
+  /** Pin `Product.id` for every later run and every resume. See the header. */
+  writeProducts(products: ProductSet): Promise<void>;
   writeResults(results: RunResults): Promise<void>;
   writeRanking(ranking: Ranking): Promise<void>;
 }
@@ -68,8 +82,12 @@ export class FileRunStore implements RunStore {
     return this.dir;
   }
 
-  async writePhase(phase: PhaseName, result: unknown): Promise<void> {
-    await this.write(join(this.dir, 'phases', `${phase}.json`), result);
+  async writePhase(phase: PhaseName, envelope: unknown): Promise<void> {
+    await this.write(join(this.dir, 'phases', `${phase}.json`), envelope);
+  }
+
+  async writeProducts(products: ProductSet): Promise<void> {
+    await this.write(join(this.dir, 'products.json'), products);
   }
 
   async readPhase(phase: PhaseName): Promise<unknown> {
@@ -116,6 +134,7 @@ export class MemoryRunStore implements RunStore {
   /** Every write, in order: `'phase:score'`, `'results'`, `'ranking'`. */
   readonly writes: string[] = [];
   readonly phases = new Map<PhaseName, unknown>();
+  products: ProductSet | undefined;
   results: RunResults | undefined;
   ranking: Ranking | undefined;
 
@@ -124,11 +143,17 @@ export class MemoryRunStore implements RunStore {
     for (const [phase, value] of seed ?? []) this.phases.set(phase, value);
   }
 
-  writePhase(phase: PhaseName, result: unknown): Promise<void> {
+  writePhase(phase: PhaseName, envelope: unknown): Promise<void> {
     // Round-tripped through JSON so a test cannot pass by holding a live
     // reference to an object the orchestrator mutates after persisting it.
-    this.phases.set(phase, JSON.parse(JSON.stringify(result)) as unknown);
+    this.phases.set(phase, JSON.parse(JSON.stringify(envelope)) as unknown);
     this.writes.push(`phase:${phase}`);
+    return Promise.resolve();
+  }
+
+  writeProducts(products: ProductSet): Promise<void> {
+    this.products = products;
+    this.writes.push('products');
     return Promise.resolve();
   }
 

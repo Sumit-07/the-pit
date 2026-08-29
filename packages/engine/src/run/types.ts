@@ -91,6 +91,21 @@ export interface PhaseCost {
   calls: number;
   usage: TokenUsage;
   cost_usd: number;
+  /**
+   * Model ids seen in this phase that carry no entry in `MODEL_PRICES`, so
+   * `cost_usd` is an UNDERSTATEMENT rather than a total.
+   *
+   * `callCost` returns 0 for an unknown id instead of throwing, because a call
+   * has already been paid for by the time it reaches the ledger and throwing
+   * would lose the result of a paid run. This field is the other half of that
+   * bargain: without it, a repointed alias or a dated snapshot would book
+   * `$0.0000` and a report would print it as fact. `assembleResults` turns a
+   * non-empty list into a `meta.warnings` line.
+   *
+   * Task 9's handoff adapter cannot report a priced model id at all, so every
+   * locally-seeded run lands here by construction.
+   */
+  unpriced_models: string[];
 }
 
 interface PhaseResultBase {
@@ -187,6 +202,43 @@ export interface UniquenessPhaseValue {
 export interface CostLedger {
   phases: Record<PhaseName, PhaseCost>;
   total: PhaseCost;
+}
+
+/**
+ * The versions a persisted phase result was produced under.
+ *
+ * Every one of these changes what a phase would return, so a stored result that
+ * does not match the current run is not a saving — it is a stale answer about to
+ * be delivered as fresh:
+ *
+ * - `category_version` seeds the render order AND the chunk composition
+ *   (`src/panels/ordering.ts`), so resuming across a bump silently delivers
+ *   chunks the current version would never have produced — breaking the
+ *   `orderedChunks` guarantee for that run.
+ * - `prompt_version` is the rubric and the mandates (`01 §4` Step 2 says to bump
+ *   it on any edit, and `01 §4` Step 2 / `brief §1.3` both exist so a bump
+ *   invalidates caches). Resuming across one delivers a board stamped with a
+ *   rubric that never produced its scores.
+ * - `persona_version` is the customer panel (`01 §4` Step 3, same rule).
+ * - `engine_version` is the code that rendered the prompts.
+ *
+ * `resumePhase` refuses a mismatch and names the version that moved.
+ */
+export interface PhaseVersions {
+  category_version: string;
+  prompt_version: string;
+  persona_version: string;
+  engine_version: string;
+}
+
+/**
+ * A phase result as it sits on disk: the result, plus the versions it was
+ * produced under. The envelope is the file format for
+ * `cjr/runs/<slug>/phases/<phase>.json`, whose PATH carries only the slug.
+ */
+export interface PersistedPhase<T> {
+  versions: PhaseVersions;
+  result: PhaseResult<T>;
 }
 
 /** A dry-run projection. Spends nothing; every number in it is an estimate. */

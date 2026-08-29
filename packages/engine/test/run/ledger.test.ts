@@ -84,16 +84,33 @@ describe('PhaseLedger', () => {
     expect(ledger.total().cost_usd).toBe(0);
   });
 
-  it('names unpriced models so a total can say it is incomplete', () => {
+  it('carries unpriced ids OUT with the cost, not merely on the getter', () => {
+    // The getter alone was dead wiring: nothing read it, so an unrecognised id
+    // booked $0.0000 and a report printed it as fact. The id now travels in the
+    // same object as `cost_usd`, which is what survives being copied into a
+    // ledger, a report and a terminal table.
     const ledger = new PhaseLedger();
-    ledger.record('local-subagent', usage({}));
+    ledger.record('local-subagent', usage({ input_tokens: 5000 }));
     expect(ledger.unpricedModels).toEqual(['local-subagent']);
+    expect(ledger.total().unpriced_models).toEqual(['local-subagent']);
+    expect(ledger.total().cost_usd).toBe(0);
+  });
+
+  it('leaves unpriced_models empty when every id is priced', () => {
+    const ledger = new PhaseLedger();
+    ledger.record(MODEL_ID_HAIKU, usage({ input_tokens: 5000 }));
+    expect(ledger.total().unpriced_models).toEqual([]);
   });
 });
 
 describe('buildLedger', () => {
   it('totals the three phases', () => {
-    const phase = (calls: number, cost: number) => ({ calls, usage: { ...ZERO_USAGE, input_tokens: 10 }, cost_usd: cost });
+    const phase = (calls: number, cost: number) => ({
+      calls,
+      usage: { ...ZERO_USAGE, input_tokens: 10 },
+      cost_usd: cost,
+      unpriced_models: [],
+    });
     const ledger = buildLedger({ score: phase(6, 0.1), uniqueness: phase(1, 0.05), customer: phase(4, 0.2) });
 
     expect(ledger.total.calls).toBe(11);
@@ -102,6 +119,16 @@ describe('buildLedger', () => {
   });
 
   it('starts from an empty cost', () => {
-    expect(zeroCost()).toEqual({ calls: 0, usage: { ...ZERO_USAGE }, cost_usd: 0 });
+    expect(zeroCost()).toEqual({ calls: 0, usage: { ...ZERO_USAGE }, cost_usd: 0, unpriced_models: [] });
+  });
+
+  it('unions the unpriced ids across phases, so a short total says so once', () => {
+    const phase = (unpriced: string[]) => ({ calls: 1, usage: { ...ZERO_USAGE }, cost_usd: 0, unpriced_models: unpriced });
+    const ledger = buildLedger({
+      score: phase(['local-subagent']),
+      uniqueness: phase(['local-subagent']),
+      customer: phase(['some-future-model']),
+    });
+    expect(ledger.total.unpriced_models.sort()).toEqual(['local-subagent', 'some-future-model']);
   });
 });

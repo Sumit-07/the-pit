@@ -30,8 +30,22 @@
  * `(category slug, categoryVersion)` — the same seed discipline the calibration
  * sampler uses, from the same module (`src/panels/seeded.ts`) — before chunking
  * and before rendering. Each chunk becomes a random sample across the whole
- * incoming range instead of a rank-contiguous band, and the ordering signal is
- * gone in one move.
+ * incoming range instead of a rank-contiguous band.
+ *
+ * ## What this does NOT remove
+ *
+ * The POSITIONAL signal is gone: reading top to bottom no longer walks the
+ * incoming leaderboard, and no chunk is a rank-contiguous band. The NUMERIC
+ * signal is not. Every prompt still prints `[id N]` markers, and `Product.id` is
+ * itself a monotone function of `orig_rank`, so a model that chose to read the
+ * id numbers could still recover the incoming order.
+ *
+ * That is a deliberate trade, not an oversight. Remapping display ids would put
+ * a translation layer between what a juror scores and what the score log records
+ * — and a translation bug misattributes a score to the wrong product, which is
+ * far worse than the residual signal. Ids are the join key for the score log,
+ * the clusters, the demand log and `ranking.json` alike. The size of what
+ * remains is a question for measurement (Task 8), not for a comment.
  *
  * Two properties are the point, and both are enforced here:
  *

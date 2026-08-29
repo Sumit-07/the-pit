@@ -183,6 +183,11 @@ export interface ScriptOptions {
   personaError?: () => Error;
   /** Token usage attributed to each answered call. */
   usage?: FixtureResponse['usage'];
+  /**
+   * Override the model id every answer reports. Task 9's handoff adapter cannot
+   * report a priced id at all, so this is how a test reaches the unpriced path.
+   */
+  modelId?: string;
   /** Answer for the incremental placement call. */
   assignAnswer?: unknown;
 }
@@ -196,6 +201,8 @@ export interface ScriptOptions {
  */
 export function makeScript(options: ScriptOptions = {}): (request: ModelRequest) => FixtureResponse {
   const usage = options.usage ?? { input_tokens: 1000, output_tokens: 200, cache_read_input_tokens: 800 };
+  const haiku = options.modelId ?? 'claude-haiku-4-5';
+  const sonnet = options.modelId ?? 'claude-sonnet-5';
 
   return (request: ModelRequest): FixtureResponse => {
     switch (request.toolName) {
@@ -203,24 +210,24 @@ export function makeScript(options: ScriptOptions = {}): (request: ModelRequest)
         const mandate = request.messages[0]?.content;
         const role = typeof mandate === 'string' ? (/You are (Juror \d+)\./.exec(mandate)?.[1] ?? '') : '';
         if (options.silentJurors?.includes(role) === true) {
-          return { output: { scores: [] }, usage, model: 'claude-haiku-4-5' };
+          return { output: { scores: [] }, usage, model: haiku };
         }
-        return { output: scoreAnswer(idsShown(request)), usage, model: 'claude-haiku-4-5' };
+        return { output: scoreAnswer(idsShown(request)), usage, model: haiku };
       }
       case UNIQ_TOOL_NAME: {
         if (options.uniquenessError !== undefined) throw options.uniquenessError();
         return {
           output: uniquenessAnswer(idsShown(request), options.clusterPlan ?? 'pairs'),
           usage,
-          model: 'claude-sonnet-5',
+          model: sonnet,
         };
       }
       case CHOICE_TOOL_NAME: {
         if (options.personaError !== undefined) throw options.personaError();
-        return { output: choiceAnswer(request), usage, model: 'claude-sonnet-5' };
+        return { output: choiceAnswer(request), usage, model: sonnet };
       }
       case ASSIGN_TOOL_NAME:
-        return { output: options.assignAnswer ?? {}, usage, model: 'claude-sonnet-5' };
+        return { output: options.assignAnswer ?? {}, usage, model: sonnet };
       default:
         throw new Error(`fixture: no answer for tool ${request.toolName}`);
     }

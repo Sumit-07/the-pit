@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CHUNK_SIZE, JUROR_COUNT } from '../../src/config/constants.js';
+import { CHUNK_SIZE, ENGINE_VERSION, JUROR_COUNT } from '../../src/config/constants.js';
 import { FixtureClient } from '../../src/model/fixture-client.js';
 import { ModelCallError } from '../../src/model/types.js';
 import { SCORE_TOOL_NAME, UNIQ_TOOL_NAME, CHOICE_TOOL_NAME } from '../../src/panels/schemas.js';
@@ -36,6 +36,9 @@ interface RunArgs {
   store?: MemoryRunStore;
   resume?: boolean;
   chunkSize?: number;
+  jury?: typeof JURY;
+  personas?: typeof PANEL;
+  categoryVersion?: string;
 }
 
 async function run(args: RunArgs = {}): Promise<{ outcome: RunOutcome; client: FixtureClient; store: MemoryRunStore }> {
@@ -44,12 +47,12 @@ async function run(args: RunArgs = {}): Promise<{ outcome: RunOutcome; client: F
   const outcome = await runCategory({
     category: CATEGORY,
     products: makeProducts(args.products ?? 10),
-    jury: JURY,
-    personas: PANEL,
+    jury: args.jury ?? JURY,
+    personas: args.personas ?? PANEL,
     client,
     store,
     config: {
-      categoryVersion: CATEGORY_VERSION,
+      categoryVersion: args.categoryVersion ?? CATEGORY_VERSION,
       ...(args.resume === undefined ? {} : { resume: args.resume }),
       ...(args.chunkSize === undefined ? {} : { chunkSize: args.chunkSize }),
     },
@@ -299,10 +302,179 @@ describe('runCategory — persistence and resumability', () => {
     expect(toolsUsed(second.client, UNIQ_TOOL_NAME)).toBe(1);
   });
 
+  it('stamps every persisted phase with the versions it was produced under', async () => {
+    const { store } = await run({ products: 10 });
+    const stored = store.phases.get('score') as { versions: Record<string, string>; result: { status: string } };
+
+    expect(stored.result.status).toBe('ok');
+    expect(stored.versions).toEqual({
+      category_version: CATEGORY_VERSION,
+      prompt_version: JURY.prompt_version,
+      persona_version: PANEL.persona_version,
+      engine_version: ENGINE_VERSION,
+    });
+  });
+
   it('writes ranking.json only on a delivery', async () => {
     const good = await run({ products: 10 });
     expect(good.store.ranking).toBeDefined();
     expect(good.store.writes).toContain('ranking');
+  });
+});
+
+describe('runCategory — --resume refuses a stale phase (01 §9 rule 5, brief §1.3)', () => {
+  const transientFailure: ScriptOptions = {
+    personaError: () => new ModelCallError('gateway timeout', { retryable: true, status: 504 }),
+  };
+
+  /** A failed run whose Score and Uniqueness phases are on disk. */
+  async function failedThenResume(second: RunArgs) {
+    const first = await run({ products: 10, options: transientFailure });
+    expect(first.outcome.status).toBe('failed');
+    return run({ products: 10, store: first.store, resume: true, ...second });
+  }
+
+  it('re-runs the Score phase when prompt_version was bumped between attempts', async () => {
+    // The exact sequence 01 §4 Step 2 invites: edit the installed jury, bump
+    // prompt_version, re-run. Without the version stamp the stored Score phase is
+    // read straight off disk and delivered while meta.prompt_version says "v2" —
+    // a board claiming scores from a rubric that never produced them.
+    const bumped = { ...JURY, prompt_version: 'jury-v2' };
+    const { outcome, client } = await failedThenResume({ jury: bumped });
+
+    expect(outcome.status).toBe('delivered');
+    expect(toolsUsed(client, SCORE_TOOL_NAME)).toBe(JUROR_COUNT);
+    expect(outcome.results.meta.prompt_version).toBe('jury-v2');
+    expect(outcome.results.meta.warnings.some((w) => w.includes('prompt_version moved from "jury-v1" to "jury-v2"'))).toBe(
+      true,
+    );
+  });
+
+  it('re-runs everything when category_version was bumped, because the chunks would differ', async () => {
+    // The ordering seed is (slug, categoryVersion), so a resumed Score phase
+    // would carry a chunk composition the current version never produces —
+    // silently breaking this task's own orderedChunks guarantee for that run.
+    const { outcome, client } = await failedThenResume({ categoryVersion: 'v8' });
+
+    expect(outcome.status).toBe('delivered');
+    expect(toolsUsed(client, SCORE_TOOL_NAME)).toBe(JUROR_COUNT);
+    expect(toolsUsed(client, UNIQ_TOOL_NAME)).toBe(1);
+    expect(outcome.results.meta.warnings.some((w) => w.includes('category_version moved'))).toBe(true);
+  });
+
+  it('re-runs when persona_version was bumped', async () => {
+    const { outcome, client } = await failedThenResume({ personas: { ...PANEL, persona_version: 'personas-v2' } });
+
+    expect(toolsUsed(client, SCORE_TOOL_NAME)).toBe(JUROR_COUNT);
+    expect(outcome.results.meta.warnings.some((w) => w.includes('persona_version moved'))).toBe(true);
+  });
+
+  it('names every version that moved, not just the first', async () => {
+    const { outcome } = await failedThenResume({
+      jury: { ...JURY, prompt_version: 'jury-v2' },
+      categoryVersion: 'v8',
+    });
+    const warning = outcome.results.meta.warnings.find((w) => w.startsWith('resume: refused the stored score'));
+
+    expect(warning).toContain('category_version moved');
+    expect(warning).toContain('prompt_version moved');
+  });
+
+  it('still resumes when nothing moved, so the guard costs a matched run nothing', async () => {
+    const { outcome, client } = await failedThenResume({});
+
+    expect(outcome.status).toBe('delivered');
+    expect(client.callCount).toBe(PANEL.personas.length);
+    expect(outcome.results.meta.warnings.some((w) => w.startsWith('resume: refused'))).toBe(false);
+  });
+
+  it('refuses a stored phase with no version stamp at all', async () => {
+    const store = new MemoryRunStore(CATEGORY);
+    // A file written by an older build, or by hand.
+    await store.writePhase('uniqueness', { phase: 'uniqueness', status: 'ok', value: {} });
+
+    const { outcome, client } = await run({ products: 10, store, resume: true });
+    expect(outcome.status).toBe('delivered');
+    expect(toolsUsed(client, UNIQ_TOOL_NAME)).toBe(1);
+    expect(outcome.results.meta.warnings.some((w) => w.includes('not a version-stamped result'))).toBe(true);
+  });
+});
+
+describe('runCategory — a TERMINAL failure is not a free retry (brief §2.3)', () => {
+  // The boolean that decides "burn one of three free retries" versus "route to
+  // the support queue". MAX_TOKENS_UNIQUENESS is derived from an unbounded
+  // category size, so a category large enough to overflow it overflows on every
+  // attempt — and anthropic-client.ts classifies that truncation as RETRYABLE.
+  const truncating: ScriptOptions = {
+    uniquenessError: () =>
+      new ModelCallError('response was truncated at max_tokens', { retryable: true, code: 'max_tokens' }),
+  };
+
+  it('reports retryable:false end to end, overriding the adapter’s classification', async () => {
+    const { outcome } = await run({ products: 10, options: truncating });
+
+    expect(outcome.status).toBe('failed');
+    if (outcome.status !== 'failed') throw new Error('unreachable');
+    expect(outcome.retryable).toBe(false);
+  });
+
+  it('codes it `truncated` and names the constant to raise', async () => {
+    const { outcome } = await run({ products: 10, options: truncating });
+    if (outcome.status !== 'failed') throw new Error('expected a failure');
+
+    const truncation = outcome.failures.find((failure) => failure.code === 'truncated');
+    expect(truncation).toBeDefined();
+    expect(truncation!.retryable).toBe(false);
+    expect(truncation!.causes.join(' ')).toContain('MAX_TOKENS_');
+    expect(truncation!.causes.join(' ')).toContain('every retry will truncate identically');
+  });
+
+  it('is a DIFFERENT outcome from the same phase failing transiently', async () => {
+    const transient = await run({
+      products: 10,
+      options: { uniquenessError: () => new ModelCallError('503', { retryable: true, status: 503 }) },
+    });
+    const terminal = await run({ products: 10, options: truncating });
+
+    if (transient.outcome.status !== 'failed' || terminal.outcome.status !== 'failed') {
+      throw new Error('expected two failures');
+    }
+    // Same phase, same non-delivery, opposite retry decisions.
+    expect(transient.outcome.retryable).toBe(true);
+    expect(terminal.outcome.retryable).toBe(false);
+  });
+
+  it('stays non-retryable even when another phase failed retryably', async () => {
+    const { outcome } = await run({
+      products: 10,
+      options: { ...truncating, silentJurors: ['Juror 1'] },
+    });
+    if (outcome.status !== 'failed') throw new Error('expected a failure');
+
+    // One terminal failure means the run cannot come out differently, whatever
+    // else also went wrong.
+    expect(outcome.failures.some((failure) => failure.retryable)).toBe(true);
+    expect(outcome.retryable).toBe(false);
+  });
+});
+
+describe('runCategory — an unpriced model understates the cost', () => {
+  it('warns rather than reporting $0.0000 as fact', async () => {
+    // Task 9's handoff adapter cannot report a priced model id at all, so this is
+    // the normal case for every locally-seeded run.
+    const { outcome } = await run({ products: 10, options: { modelId: 'local-subagent' } });
+
+    expect(outcome.status).toBe('delivered');
+    expect(outcome.results.meta.ledger.total.cost_usd).toBe(0);
+    expect(outcome.results.meta.ledger.total.unpriced_models).toEqual(['local-subagent']);
+    expect(outcome.results.meta.warnings.some((w) => w.includes('cost is UNDERSTATED'))).toBe(true);
+    expect(outcome.results.meta.warnings.some((w) => w.includes('lower bound'))).toBe(true);
+  });
+
+  it('says nothing when every id is priced', async () => {
+    const { outcome } = await run({ products: 10 });
+    expect(outcome.results.meta.ledger.total.unpriced_models).toEqual([]);
+    expect(outcome.results.meta.warnings.some((w) => w.includes('cost is UNDERSTATED'))).toBe(false);
   });
 });
 

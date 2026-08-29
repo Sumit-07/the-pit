@@ -72,9 +72,13 @@ function pricesFor(input: number, output: number): ModelPrices {
  *
  * An unpriced model id costs 0 rather than throwing. A call has already been paid
  * for by the time it reaches here, so throwing would lose the result of a paid
- * run over a bookkeeping gap; `unpricedModels` is how a caller learns the total
- * is short, and Task 9's handoff responder — which reports no usage at all — is
- * the case this exists for.
+ * run over a bookkeeping gap. The other half of that bargain is
+ * `PhaseCost.unpriced_models`, which carries the id out with the cost so a
+ * caller learns the total is short — `assembleResults` turns it into a
+ * `meta.warnings` line. Without that, a repointed alias or a dated snapshot
+ * would book `$0.0000` and a report would print it as fact. Task 9's handoff
+ * responder, which cannot report a priced model id at all, is the case this
+ * exists for.
  */
 export function callCost(modelId: string, usage: TokenUsage): number {
   const prices = MODEL_PRICES[modelId];
@@ -98,9 +102,9 @@ export function tierPrices(tier: ModelTier): ModelPrices {
   return prices;
 }
 
-/** An empty cost: no calls, no tokens, no dollars. */
+/** An empty cost: no calls, no tokens, no dollars, nothing unpriced. */
 export function zeroCost(): PhaseCost {
-  return { calls: 0, usage: { ...ZERO_USAGE }, cost_usd: 0 };
+  return { calls: 0, usage: { ...ZERO_USAGE }, cost_usd: 0, unpriced_models: [] };
 }
 
 /**
@@ -137,14 +141,25 @@ export class PhaseLedger {
   }
 
   total(): PhaseCost {
-    return { calls: this.calls, usage: { ...this.usage }, cost_usd: this.cost };
+    // `unpriced_models` travels WITH the cost, not beside it. A caller that reads
+    // `cost_usd` gets, in the same object, the reason it might be short — which
+    // is the only arrangement that survives the number being copied into a
+    // ledger, a report and a terminal table.
+    return {
+      calls: this.calls,
+      usage: { ...this.usage },
+      cost_usd: this.cost,
+      unpriced_models: [...this.unpriced],
+    };
   }
 }
 
 /** Sum phase costs into the ledger written to `results.json.meta`. */
 export function buildLedger(phases: Record<PhaseName, PhaseCost>): CostLedger {
   const total = zeroCost();
+  const unpriced = new Set<string>();
   for (const cost of Object.values(phases)) {
+    for (const model of cost.unpriced_models) unpriced.add(model);
     total.calls += cost.calls;
     total.usage.input_tokens += cost.usage.input_tokens;
     total.usage.output_tokens += cost.usage.output_tokens;
@@ -152,5 +167,6 @@ export function buildLedger(phases: Record<PhaseName, PhaseCost>): CostLedger {
     total.usage.cache_read_input_tokens += cost.usage.cache_read_input_tokens;
     total.cost_usd += cost.cost_usd;
   }
+  total.unpriced_models = [...unpriced];
   return { phases, total };
 }
