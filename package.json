@@ -9,6 +9,7 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "engine": "pnpm --filter @the-pit/engine run --silent build && node packages/engine/dist/cli/main.js"
+    "engine": "pnpm --filter @the-pit/engine run --silent build && node packages/engine/dist/cli/main.js",
+    "board": "pnpm --filter @the-pit/engine run --silent build && node packages/engine/dist/cli/main.js board"
   }
 }

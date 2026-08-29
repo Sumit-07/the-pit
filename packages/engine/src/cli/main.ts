@@ -2,8 +2,9 @@
 /**
  * `pnpm engine <command>` — the engine's command line.
  *
- * Five commands: `panel` (the two approval gates), `seed` (with an API key, or
- * through Task 9's file handoff with none), `rank`, `ab` and `report`. The dispatch is a table rather than an `if`
+ * Six commands: `panel` (the two approval gates), `seed` (with an API key, or
+ * through Task 9's file handoff with none), `rank`, `ab`, `report` and `board`
+ * (the local preview surface). The dispatch is a table rather than an `if`
  * so a new command is a row here and a module beside `seed.ts`.
  *
  * `main` takes an argv and returns an exit code, and does no process I/O of its
@@ -15,6 +16,7 @@ import { pathToFileURL } from 'node:url';
 
 import { abCommand, AB_USAGE } from './ab.js';
 import { parseArgs, UsageError } from './args.js';
+import { boardCommand, BOARD_USAGE } from './board.js';
 import { panelCommand, PANEL_USAGE } from './panel.js';
 import { rankCommand, RANK_USAGE } from './rank.js';
 import { reportCommand, REPORT_USAGE } from './report.js';
@@ -28,6 +30,7 @@ Commands:
   rank     recompute ranking.json from results.json (01 §6; spends nothing)
   ab       produce the fix-1.1 A/B and test-retest evidence (SPENDS)
   report   render the Phase 1 report (spends nothing, needs no API key)
+  board    serve the seeded boards locally as a preview (brief Part 6; spends nothing)
 
 ${PANEL_USAGE}
 
@@ -37,7 +40,9 @@ ${RANK_USAGE}
 
 ${AB_USAGE}
 
-${REPORT_USAGE}`;
+${REPORT_USAGE}
+
+${BOARD_USAGE}`;
 
 /** Dispatch one command line. Returns the exit code; never calls `process.exit`. */
 export async function main(argv: readonly string[], log: (line: string) => void = console.log): Promise<number> {
@@ -59,6 +64,8 @@ export async function main(argv: readonly string[], log: (line: string) => void 
         return await abCommand(args, { log, makeClient: makeAnthropicClient });
       case 'report':
         return await reportCommand(args, { log });
+      case 'board':
+        return await boardCommand(args, { log });
       default:
         log(`unknown command ${JSON.stringify(args.command)}\n\n${USAGE}`);
         return 1;
