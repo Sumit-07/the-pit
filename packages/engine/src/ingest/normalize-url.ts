@@ -8,10 +8,25 @@
  * affiliate / referral / UTM variants).
  *
  * §2.5 also asks for link shorteners to be resolved to their target. That rule
- * is OUT OF SCOPE for Phase 1 (`docs/plans/phase-1-engine.md` Task 2): it needs
- * an SSRF-guarded fetcher — redirect cap, timeout, private-address blocking —
- * and it exists to stop evasion of a paid submission cap that Phase 1 does not
- * have. Deferred to Phase 3. Nothing here performs I/O.
+ * is NO LONGER DEFERRED — it lives in `@the-pit/fetch`'s `resolveProductUrl`,
+ * which follows the URL through an SSRF-guarded fetcher (redirect cap, timeout,
+ * private-address blocking on every hop) and then hands whichever URL wins to
+ * THIS function for the actual normalization.
+ *
+ * It is over there rather than in here for one reason: **nothing in this module
+ * performs I/O**, and that is a property worth keeping. `loadCategory` normalizes
+ * a whole workbook offline, `packages/payments`' `normalizeSubmissionUrl` runs
+ * this in the browser for instant feedback on a typo, and both would become
+ * network-bound if resolution were folded in. The split also means there is
+ * exactly one implementation of the rules below — a resolved shortener and a
+ * directly-typed URL end up as the same string because they went through the
+ * same function, which is the only reason the cap can recognise them as one
+ * product.
+ *
+ * What a caller must know: the string this returns is a key, and for a submitted
+ * URL it is only the RIGHT key once `resolveProductUrl` has had a chance to
+ * follow it. Calling this alone on `bit.ly/x` yields `bit.ly/x`, which is a
+ * truthful normalization of a URL and the wrong identity for a product.
  */
 
 /** `scheme:` at the head of the string, per RFC 3986. */

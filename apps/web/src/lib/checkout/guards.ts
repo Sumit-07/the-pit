@@ -37,14 +37,30 @@
  * someone with four side projects submits all four tonight and none of them sees
  * the other.
  *
- * ## Shortener resolution is still deferred, and it is the open evasion route
+ * ## Shortener resolution: the fetcher now exists, this path does not use it yet
  *
  * `brief §2.5` asks for link shorteners to be resolved to their target before the
- * URL is used as an identity. `normalizeUrl` performs no I/O by design — doing it
- * needs an SSRF-guarded fetcher (redirect cap, timeout, private-address and
- * link-local blocking, scheme allow-list) over an attacker-supplied URL — so
- * `bit.ly/x` and the address behind it are two different products to this code,
- * and the per-product cap does not catch that. Named here, not built here.
+ * URL is used as an identity, and `normalizeUrl` performs no I/O by design. The
+ * SSRF-guarded fetcher that closes the gap is now built —
+ * `@the-pit/fetch`'s `resolveProductUrl`, reached through
+ * `lib/ingest/product-url.ts`'s `resolveSubmittedUrl` — and it returns the
+ * resolved key plus `url_unresolved` / `url_redirected` review flags.
+ *
+ * Wiring it in is ONE change, and it has to be made in two places at once or not
+ * at all:
+ *
+ * 1. here, replacing `normalizeSubmissionUrl(input.draft.url)` below with an
+ *    awaited `resolveSubmittedUrl(input.draft.url)`, so `findByNormalizedUrl` is
+ *    asked about the resolved key;
+ * 2. in `@the-pit/payments`' `checkSubmissionLocal`, which re-normalizes
+ *    `draft.url` itself and mints the clearance from THAT string.
+ *
+ * Doing only (1) would look right and be worse than doing nothing: the listing
+ * would be found under `ledger.example/pricing` while the clearance, the Dodo
+ * metadata, the job idempotency key and the eventual `products.normalized_url`
+ * all still said `bit.ly/x`, so the cap would read one identity and the board
+ * would record another. Until both land, `bit.ly/x` and the page behind it are
+ * two products to this code.
  */
 
 import {
