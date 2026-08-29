@@ -46,7 +46,11 @@ import { runPlacement, type PlacementOutcome } from './placement';
 import { runPipeline, type PipelineResult } from './run';
 import { defaultBindings, type RunnerBindings } from './service';
 import { PlacementPhaseStore } from './store';
-import type { PipelineDeps, PipelineStep, StepRunner } from './types';
+import { deliveryBindings } from '@/lib/delivery/config';
+import { nextBoardInvalidator } from '@/lib/delivery/revalidate';
+import { settleDelivery } from '@/lib/delivery/settle';
+
+import type { DeliveryRecord, PaidPlacement, PipelineDeps, PipelineStep, StepRunner } from './types';
 
 /** `brief §2.3`'s cap on free retries per attempt, before the support queue. */
 export const MAX_FREE_RETRIES = 3;
@@ -113,6 +117,34 @@ export interface PlacementRequestedData {
    * making the field mandatory would only mean the admin path invented a value.
    */
   idempotencyKey?: string;
+  /**
+   * Who bought this placement.
+   *
+   * Absent on an ADMIN placement, which has no submission and no payer — the same
+   * reason `idempotencyKey` is optional. Present on every paid one, and it is
+   * what turns the placement into a paid listing and a chargeable delivery:
+   *
+   * - `products.source = 'paid'` with `submitted_by_email`, which
+   *   `products_source_submitter` requires and which four of `brief §2.4`'s rules
+   *   read (see `pg-store.ts`'s `writeProducts`);
+   * - `verdicts.account_id` and `attempts.account_id`, which are the uuid rather
+   *   than the address;
+   * - `verdicts.attempt_number`, `brief §2.4`'s publicly-shown pitch ordinal,
+   *   computed before the money moved and carried on the `submissions` row.
+   *
+   * The email is here as well as the account id because they answer to different
+   * tables, and resolving one from the other at delivery time would mean a
+   * lookup on the money path that could come back empty.
+   */
+  payer?: PlacementPayer;
+}
+
+/** The customer behind a paid placement, as the event carries them. */
+export interface PlacementPayer {
+  accountId: string;
+  email: string;
+  /** 1-based. `brief §2.4`: "Show the attempt count publicly." */
+  attemptNumber: number;
 }
 
 export const inngest = new Inngest({ id: 'the-pit' });
@@ -240,6 +272,72 @@ export async function executeRun(
 }
 
 /**
+ * The delivered run, settled — the function `pit/run.delivered` had none of.
+ *
+ * ## What was missing
+ *
+ * `deliverStep` has fired `onDelivered` since the pipeline was written, and
+ * `runCategoryFunction` and `placeProductFunction` have both turned it into a
+ * `pit/run.delivered` event. Nothing was registered for that event, so the event
+ * went nowhere: `AttemptsLedger.deliver` had zero callers, `decideAttempt` was
+ * unreferenced, no `DeliveryTx` existed outside a test helper, and a paying
+ * customer's `/v/<slug>` 404'd forever. The board republished and then the money
+ * path simply stopped.
+ *
+ * ## Its own function, not a tail on the pipeline
+ *
+ * A separate function and a separate event, for the same reason the grant is a
+ * separate concern from the run: the two failure modes are different and must be
+ * retried differently. A placement that fails is `brief §2.3`'s free retry and
+ * re-buys a phase; a settle that fails has no model calls in it at all and is
+ * pure database work over rows that already exist. Folding it into
+ * `place-product` would make a transient database error re-enter a pipeline whose
+ * every phase is already persisted, and would put a board republish behind a
+ * ledger write.
+ *
+ * `retries: 3` matches the rest of the system and is safe because every write in
+ * the transaction is idempotent — `verdicts` inserts `ON CONFLICT DO NOTHING`,
+ * `jobs` is updated only `WHERE delivered_at IS NULL`, and the consume is keyed
+ * `delivery:run:<runId>`. A replay reports `already_settled` and charges nothing.
+ *
+ * There is deliberately NO `concurrency` key, unlike the two functions above.
+ * What must not interleave here is two deliveries against one BALANCE, and that
+ * is serialized where it can actually be enforced: `pg_advisory_xact_lock` on the
+ * account, taken as the first statement inside the transaction, exactly as
+ * `migrations/0001_ledger_guards.sql` asks for. A queue-level key on
+ * `event.data.paid.accountId` would look like the same guarantee and be strictly
+ * weaker — it is absent on every unpaid delivery, so the expression would have
+ * nothing to evaluate for a seed run's republish, and it would not serialize
+ * anything the lock does not already.
+ */
+export const settleDeliveryFunction = inngest.createFunction(
+  {
+    id: 'settle-delivery',
+    retries: MAX_FREE_RETRIES,
+    triggers: [{ event: RUN_DELIVERED }],
+  },
+  async ({ event, step }) => {
+    const record = event.data as DeliveryRecord;
+    return step.run('settle', async () => {
+      const result = await settleDelivery(record, {
+        bindings: deliveryBindings(),
+        invalidator: nextBoardInvalidator(),
+      });
+      if (result.outcome === 'not_settleable') {
+        // Loud, and not a throw. The customer has paid, the board is published,
+        // and the attempt is still on their balance — what is owed is a verdict
+        // and a support conversation, not a retry loop against a state that will
+        // not change on its own.
+        console.error(
+          `[delivery] ${record.slug} run ${record.run_id ?? '(none)'} was not settled: ${result.reason}`,
+        );
+      }
+      return result;
+    });
+  },
+);
+
+/**
  * The placement as an Inngest function.
  *
  * A separate function from `run-category` because it is a separate event with a
@@ -303,7 +401,19 @@ export async function executePlacement(
   }
 
   const versions = phaseVersions(category);
+  // Two handles on the same rows. The plain one reads; the second knows which
+  // engine id was bought, and is the one the placement writes its catalogue
+  // through. They are separate constructions rather than one mutable store
+  // because "which row is paid for" is a fact about this submission, not about
+  // the category — a store that could be told later is a store that could be told
+  // twice.
   const categoryStore = bindings.store(category.category, versions);
+  const paidCategoryStore =
+    data.payer === undefined
+      ? categoryStore
+      : bindings.store(category.category, versions, {
+          paid: { engineId: data.product.id, email: data.payer.email },
+        });
   const [results, ranking] = await Promise.all([categoryStore.readResults(), categoryStore.readRanking()]);
 
   if (results === undefined || ranking === undefined) {
@@ -336,6 +446,21 @@ export async function executePlacement(
     if (!claim.mine) throw new PlacementInFlightError(claim.runId);
   }
 
+  // The payer, if there is one, in the two shapes the two stores need. `paid` on
+  // the CATEGORY store marks one row of its catalogue as bought; `paid` on the
+  // deps is what `deliverStep` turns into a settleable record. Both are derived
+  // from the same field of the event, so a placement cannot be paid for on one
+  // side and unclaimed on the other.
+  const paid: PaidPlacement | undefined =
+    data.payer === undefined
+      ? undefined
+      : {
+          accountId: data.payer.accountId,
+          email: data.payer.email,
+          engineId: data.product.id,
+          attemptNumber: data.payer.attemptNumber,
+        };
+
   const deps: PipelineDeps = {
     client,
     // The scope is named to the BINDING rather than smuggled through the category
@@ -345,11 +470,12 @@ export async function executePlacement(
     // work durably — `PgPipelineStore` resolves a real `categories.id` from the
     // slug, and there is no category called "... placement 41".
     store: new PlacementPhaseStore(
-      categoryStore,
+      paidCategoryStore,
       bindings.store(category.category, versions, { placement: data.product.id }),
     ),
     snapshots: bindings.snapshots,
     ...(onDelivered === undefined ? {} : { onDelivered }),
+    ...(paid === undefined ? {} : { paid }),
   };
 
   const outcome = await runPlacement({ ...category, product: data.product, results, ranking }, deps, runner);

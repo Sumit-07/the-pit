@@ -49,6 +49,21 @@ export type { ListingSnapshotRow, PostgresListingStore } from './listing-store.j
 export { createPostgresListingStore } from './listing-store.js';
 
 export type {
+  DeliveredListing,
+  DeliveryAppendOutcome,
+  DeliveryTxOptions,
+  PostgresDeliveryStore,
+  PostgresDeliveryTx,
+  PostgresVerdictStore,
+  StoredVerdictRow,
+  WithPostgresDeliveryTx,
+} from './delivery-store.js';
+export { createPostgresDeliveryStore, createPostgresVerdictStore } from './delivery-store.js';
+
+export type { RankedRow } from './verdict-payload.js';
+export { verdictPayload, verdictPayloadFor, VerdictRowMissingError } from './verdict-payload.js';
+
+export type {
   AppendOutcome,
   AttemptsStoreOptions,
   PaymentsStoreOptions,

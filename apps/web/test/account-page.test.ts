@@ -276,7 +276,12 @@ describe('verdict links are not gated, and are not decorated', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('Set-Cookie')).toBeNull();
     expect(response.headers.get('Cache-Control')).toContain('public');
-  });
+    // The seeded binding materialises 92 frozen verdict payloads off `cjr/`
+    // through the real seed builder, which is real work and is done once per
+    // process. Five seconds is not enough for it while the PGlite suites are
+    // saturating the machine beside it, and the assertion is about the GATE, not
+    // about how fast a cold store builds.
+  }, 30_000);
 });
 
 describe('the capability URL, and what rotating it does', () => {

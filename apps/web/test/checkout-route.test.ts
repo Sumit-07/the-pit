@@ -772,6 +772,27 @@ describe('the funnel, end to end', () => {
     expect(queue.sent[0]?.idempotencyKey).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it('carries the payer to the placement, which is what makes the listing paid', async () => {
+    // The second thing that was broken. The event named a product and nobody who
+    // bought it, so `PgPipelineStore.writeProducts` wrote the customer's listing
+    // as `source = 'seeded'` with a null submitter — `brief` Part 7's "unclaimed"
+    // label on a row somebody paid $5 for, and with it the death of the cycle
+    // cap, the material-change rule and the ownership rule, all of which read
+    // `lastPitchedAt`, which is NULL for a seeded row.
+    const metadata = await buy();
+    await handleDodoWebhookRequest(settled(metadata), webhookDeps);
+
+    expect(queue.sent[0]?.payer).toEqual({
+      accountId: ACCOUNT,
+      // The address Dodo verified, lowercased so `products_email_lowercase` and
+      // `accounts_email_lowercase` agree about who this is.
+      email: PAYER,
+      // `brief §2.4`'s ordinal, computed before the money moved and read back off
+      // the `submissions` row rather than recomputed here.
+      attemptNumber: 1,
+    });
+  });
+
   it('carries the 300-character description through OUR storage and not through Dodo', async () => {
     const long = 'x'.repeat(300);
     const metadata = await buy({ description: long });
@@ -844,7 +865,7 @@ describe('the funnel, end to end', () => {
     // proceeds on the pre-payment clearance rather than guessing.
     const metadata = await buy();
     const result = await enqueuePlacementForPayment(
-      { accountId: ACCOUNT, metadata },
+      { accountId: ACCOUNT, email: PAYER, metadata },
       { ...(webhookDeps.placement as NonNullable<DodoWebhookDeps['placement']>), guards: null },
     );
 

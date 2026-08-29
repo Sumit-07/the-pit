@@ -29,7 +29,14 @@
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { buildSeedRows, loadSeedInput, SEEDED_SLUGS } from '@the-pit/db';
+import {
+  buildSeedRows,
+  createDatabase,
+  createPostgresVerdictStore,
+  hasDatabaseUrl,
+  loadSeedInput,
+  SEEDED_SLUGS,
+} from '@the-pit/db';
 
 import { MemoryVerdictStore, type StoredVerdict, type VerdictStore } from './store';
 
@@ -82,24 +89,73 @@ async function seededVerdicts(): Promise<StoredVerdict[]> {
 }
 
 let cached: Promise<VerdictStore> | undefined;
+let registered: VerdictStore | undefined;
+
+/**
+ * The `verdicts` table, behind the same one-method interface.
+ *
+ * This is the binding a paying customer needs and did not have. The seeded store
+ * below is built from `cjr/` and holds exactly the cold-start rows; a verdict
+ * delivered by the money path is a row in Postgres and is invisible to it, so
+ * until this existed `/v/<slug>` 404'd forever for the one person who paid.
+ *
+ * `deliveredAt` comes off the column, not off a file's mtime. It was written
+ * inside the delivery transaction, which is the same instant `brief` Part 5
+ * stamps on the card, and it must never move — the seeded arm's mtime trick is a
+ * substitute for a column that does not exist for unclaimed listings, not a
+ * policy.
+ */
+function postgresVerdicts(): VerdictStore {
+  const store = createPostgresVerdictStore(createDatabase(undefined, 1).db);
+  return {
+    async bySlug(slug: string): Promise<StoredVerdict | undefined> {
+      const row = await store.bySlug(slug);
+      return row === null ? undefined : row;
+    },
+  };
+}
 
 /**
  * The store this deployment reads.
  *
+ * ## Bound by environment, and the seeded store is not a fallback for a failure
+ *
+ * With `DATABASE_URL` set, `/v/<slug>` reads the table — every delivered verdict,
+ * including the seeded rows, which `db:seed` inserts. Without it, the seeded rows
+ * are materialised from `cjr/` through the seed's own freezing code, which is
+ * what makes local development and CI resolve a verdict URL with no database in
+ * existence.
+ *
+ * The choice is the environment's and there is no silent fallback from one to the
+ * other. A deployment whose database is unreachable must 500 or 404, not quietly
+ * start serving 92 cold-start pages while a customer's paid verdict is missing —
+ * that is the same class of bug as `service.ts`'s refusal to fall back to a local
+ * filesystem store in production, and it is refused here for the same reason.
+ *
  * Cached per process: the seeded rows are derived from files that only a
  * placement rewrites, and rebuilding 92 frozen payloads on every page view would
- * be work done on the one surface `brief` Part 6 wants served from a CDN.
+ * be work done on the one surface `brief` Part 6 wants served from a CDN. The
+ * Postgres arm is cached too, because what it caches is a connection.
  */
 export function verdictStore(): Promise<VerdictStore> {
-  cached ??= seededVerdicts()
-    .then((rows) => new MemoryVerdictStore(rows) as VerdictStore)
-    // A missing or malformed `cjr/` must not take down a route whose only job is
-    // to resolve a slug. Nothing resolves; the page 404s and says so.
-    .catch(() => new MemoryVerdictStore());
+  if (registered !== undefined) return Promise.resolve(registered);
+  cached ??= hasDatabaseUrl()
+    ? Promise.resolve(postgresVerdicts())
+    : seededVerdicts()
+        .then((rows) => new MemoryVerdictStore(rows) as VerdictStore)
+        // A missing or malformed `cjr/` must not take down a route whose only job
+        // is to resolve a slug. Nothing resolves; the page 404s and says so.
+        .catch(() => new MemoryVerdictStore());
   return cached;
+}
+
+/** Install a store directly. Tests use this; production uses the environment. */
+export function registerVerdictStore(store: VerdictStore): void {
+  registered = store;
 }
 
 /** Drop the cached store. Tests only. */
 export function resetVerdictStore(): void {
   cached = undefined;
+  registered = undefined;
 }

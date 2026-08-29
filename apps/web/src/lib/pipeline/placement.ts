@@ -335,26 +335,38 @@ async function rankStep(
 }
 
 /**
- * Deliver — republish the board, then extend the category's catalogue.
+ * Deliver — republish the board, extend the category's catalogue, then settle.
  *
  * The shared `deliverStep` does the publishing and fires `onDelivered`, so
  * `brief §2.3`'s "an attempt is consumed only on delivery" has exactly one
  * implementation for both paths.
  *
- * `products.json` is written LAST, after the board exists, and the order is
- * load-bearing. `Product.id` is pinned by that file, and the guards at the top of
- * `runPlacement` run on every replay: a catalogue that already contained this
- * submission would make `assertPlaceable` throw before the retried step ever
- * started, turning a recoverable publishing failure into a dead run. Written
- * here, a retry still sees the category it was asked to place into.
+ * The catalogue write is handed to `deliverStep` as its `afterPublish` hook
+ * rather than done around the call, and the sandwich is the point. It has to
+ * happen:
+ *
+ * - AFTER the board exists, for the reason it always did. `Product.id` is pinned
+ *   by `products.json`, and the guards at the top of `runPlacement` run on every
+ *   replay: a catalogue that already contained this submission would make
+ *   `assertPlaceable` throw before the retried step ever started, turning a
+ *   recoverable publishing failure into a dead run.
+ * - BEFORE `onDelivered`, which is new. On Postgres this write is the paid
+ *   `products` row — `source = 'paid'` with the payer's address, which is what
+ *   `products_source_submitter` demands and what makes `brief §2.4`'s cycle lock,
+ *   material-change and ownership rules reachable at all. The verdict that
+ *   settlement writes names that row through a foreign key, so a settle fired
+ *   before it existed would fail inside the transaction that has already
+ *   published a board.
+ *
+ * Both writes are idempotent, so a replayed step lands on the same rows.
  */
 async function placementDeliverStep(input: PlacementInput, deps: PipelineDeps): Promise<DeliverReport> {
-  const report = await deliverStep(input.config.categoryVersion, deps);
-  await deps.store.writeProducts({
-    category: input.category,
-    products: [...input.products, input.product],
+  return deliverStep(input.config.categoryVersion, deps, async () => {
+    await deps.store.writeProducts({
+      category: input.category,
+      products: [...input.products, input.product],
+    });
   });
-  return report;
 }
 
 /** Which of the three phases did not come back, for a failure that names them. */

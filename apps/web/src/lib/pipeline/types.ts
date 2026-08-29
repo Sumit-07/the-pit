@@ -42,6 +42,7 @@ import type {
   Product,
   RunConfig,
 } from '@the-pit/engine';
+import type { AttemptDecision } from '@the-pit/payments';
 
 import type { SnapshotSink } from './snapshot';
 import type { PipelineStore } from './store';
@@ -150,17 +151,92 @@ export interface PipelineDeps {
    * called before the snapshot is published.
    */
   onDelivered?: (record: DeliveryRecord) => Promise<void>;
+  /**
+   * Who bought this run, when somebody did.
+   *
+   * Absent on a seed run and on an admin re-run: those deliver a board and spend
+   * nothing, because there is no attempt behind them. Present on every paid
+   * placement, and it is the ONLY thing that distinguishes the two on this path —
+   * `deliverStep` publishes the same board either way, and only a record carrying
+   * a payer can be settled into a verdict and a decrement.
+   *
+   * It carries an account id AND an email because they answer to two different
+   * tables: `attempts.account_id` and `verdicts.account_id` are the uuid,
+   * `products.submitted_by_email` is the address Dodo verified, and
+   * `products_source_submitter` requires the address on any row marked `paid`.
+   */
+  paid?: PaidPlacement;
   /** Injected so a snapshot's `generated_at` is deterministic in a test. */
   now?: () => Date;
 }
 
-/** What a delivered run hands to whatever consumes an attempt. */
+/** The customer behind one paid placement. */
+export interface PaidPlacement {
+  /** `accounts.id`, resolved by the webhook from the address Dodo verified. */
+  readonly accountId: string;
+  /** That same address. `products.submitted_by_email`, lowercased upstream. */
+  readonly email: string;
+  /** The engine id of the product being placed — `Product.id` for this submission. */
+  readonly engineId: number;
+  /**
+   * Which pitch this is, 1-based. `brief §2.4`: shown publicly as "3rd pitch".
+   *
+   * Computed by `checkSubmissionLocal` before the money moved and carried on the
+   * `submissions` row, so it counts PITCHES and not runs: a free retry re-enters
+   * the pipeline with the same submission and the same ordinal.
+   */
+  readonly attemptNumber: number;
+}
+
+/**
+ * What a delivered run hands to whatever consumes an attempt.
+ *
+ * This shape crosses a queue — it is the body of `pit/run.delivered` — so every
+ * field is JSON, and it carries everything the settling side needs to write a
+ * verdict without re-deriving anything from a board that has since moved
+ * (`brief §1.2`).
+ */
 export interface DeliveryRecord {
   slug: string;
   category: string;
+  /** The population version the board was computed over (`brief §1.3`). */
+  category_version: string;
   /** ISO-8601, the same stamp the published snapshot carries. */
   delivered_at: string;
   product_count: number;
   /** The CDN keys the board was republished under, absent if no sink was configured. */
   published?: { board: string; dated: string };
+  /**
+   * `jobs.id` — the row this run persisted its phases into.
+   *
+   * Absent when the store is not durable (the filesystem and memory stores have
+   * no run identity), which is also every environment in which there is nothing
+   * to settle.
+   */
+  run_id?: string;
+  /** Present exactly when a customer paid for this delivery. */
+  paid?: PaidDelivery;
+}
+
+/** The payer, the decision, and the document — everything a settle needs. */
+export interface PaidDelivery extends PaidPlacement {
+  /**
+   * `decideAttempt`'s answer, made where the run's own report is.
+   *
+   * Carried rather than re-derived at the settling end, because the input it
+   * reads — `RunResults.meta.phases` — is the run's, and the settling end has
+   * only an event. `AttemptsLedger.deliver` refuses anything that is not the
+   * `consume` arm, so an arm that ever appears here stops the money rather than
+   * being interpreted.
+   */
+  readonly decision: AttemptDecision;
+  /**
+   * The verdict document, frozen at this instant by `verdictPayload`.
+   *
+   * Frozen HERE and not at the settling end because this is where the ranking is:
+   * `brief §1.2` moves every z-score on the next placement, so a payload built a
+   * moment later off "the current board" would be a permanent public page about a
+   * board the customer never saw.
+   */
+  readonly payload: unknown;
 }

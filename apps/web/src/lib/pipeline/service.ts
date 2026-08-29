@@ -51,7 +51,7 @@ import {
 } from './mode';
 import { PgPlacementClaims } from './pg-claims';
 import { PgCategorySource } from './pg-catalog';
-import { PgPipelineStore } from './pg-store';
+import { PgPipelineStore, type PaidListing } from './pg-store';
 import { defaultSnapshotSink } from './sink';
 import { readRunStatus, type RunStatus } from './status';
 import type { SnapshotSink } from './snapshot';
@@ -75,6 +75,7 @@ export {
 } from './mode';
 export type { Env, StorageMode } from './mode';
 export { defaultSnapshotSink } from './sink';
+export type { PaidListing } from './pg-store';
 
 /**
  * Which run's phases a store is for, when it is not the category's own.
@@ -91,6 +92,20 @@ export { defaultSnapshotSink } from './sink';
 export interface RunScope {
   /** The engine id of the product being placed. */
   placement?: number;
+  /**
+   * The payer behind the product being placed, when one paid.
+   *
+   * Separate from `placement` because they name different things and are needed
+   * in different places: `placement` scopes the PHASE envelopes to their own job
+   * row, and this marks one row of the CATEGORY's catalogue as bought. A store
+   * built with it writes `products.source = 'paid'` and the submitter's address
+   * for that engine id; `PgPipelineStore`'s `writeProducts` says why that matters
+   * and which four rules die without it.
+   *
+   * The filesystem store ignores it. `cjr/products.json` has no `source` column,
+   * and the rules that read one are Postgres rules.
+   */
+  paid?: PaidListing;
 }
 
 /** What a deployment binds. */
@@ -273,6 +288,7 @@ export function defaultBindings(env: Env = process.env): RunnerBindings {
       new PgPipelineStore(db, category, {
         versions,
         ...(scope?.placement === undefined ? {} : { placement: scope.placement }),
+        ...(scope?.paid === undefined ? {} : { paid: scope.paid }),
       }),
     // Same factory as the filesystem branch and as the board read path.
     snapshots: defaultSnapshotSink(env),

@@ -144,6 +144,22 @@ export interface PlacementEnqueueDeps {
 
 export interface EnqueuePlacementInput {
   readonly accountId: string;
+  /**
+   * The address Dodo verified and billed.
+   *
+   * `brief §2.1`: there is no login at submission, and "the email IS the account
+   * key at this phase". It travels beside the account id rather than instead of
+   * it because the two answer to different tables —
+   * `products.submitted_by_email` is the address,
+   * `verdicts.account_id`/`attempts.account_id` are the uuid — and
+   * `products_source_submitter` requires the address on any row marked `paid`.
+   *
+   * Without it the placement writes the paying customer's listing as a seeded,
+   * unclaimed row, which is what `brief` Part 7 reserves for the cold-start
+   * boards and what silently disables `brief §2.4`'s cycle cap, its
+   * material-change rule and the ownership rule (see `lib/pipeline/pg-store.ts`).
+   */
+  readonly email: string;
   /** Dodo's `metadata`, verbatim. Attacker-influenced; only the id is read. */
   readonly metadata: Readonly<Record<string, string>>;
 }
@@ -243,6 +259,19 @@ export async function enqueuePlacementForPayment(
     categoryVersion: category.config.categoryVersion,
     product,
     idempotencyKey,
+    payer: {
+      accountId: input.accountId,
+      // Lowercased because `products_email_lowercase` and
+      // `accounts_email_lowercase` are the same rule on two tables: one address
+      // is one person, and `A@b.com` and `a@b.com` must not become two.
+      email: input.email.trim().toLowerCase(),
+      // `brief §2.4`'s publicly-shown ordinal, computed by `checkSubmissionLocal`
+      // BEFORE the money moved and carried on the `submissions` row since. It
+      // counts pitches and not runs, which is why it is read back here rather
+      // than derived from anything the pipeline can see: a free retry re-enters
+      // the pipeline with the same submission and must not advance it.
+      attemptNumber: submission.attemptNumber,
+    },
   };
 
   await deps.queue.send(event);

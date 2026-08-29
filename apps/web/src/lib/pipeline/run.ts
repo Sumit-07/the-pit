@@ -58,9 +58,13 @@ import {
   type PhaseName,
   type PhaseResult,
   type PhaseVersions,
+  type Ranking,
   type ScorePhaseValue,
   type UniquenessPhaseValue,
 } from '@the-pit/engine';
+
+import { verdictPayloadFor } from '@the-pit/db';
+import { decideAttempt, type AttemptDecision } from '@the-pit/payments';
 
 import { NoModelClient, PhaseFailedError } from './errors';
 import { reusableStoredPhase } from './resume';
@@ -68,6 +72,8 @@ import type { PublishedSnapshot } from './snapshot';
 import { buildSnapshot } from './snapshot-build';
 import {
   PHASE_OF_STEP,
+  type PaidDelivery,
+  type PaidPlacement,
   type PipelineDeps,
   type PipelineInput,
   type PipelineStep,
@@ -292,7 +298,11 @@ async function rankStep(input: PipelineInput, deps: PipelineDeps): Promise<StepR
  * called AFTER the snapshot exists, so an attempt can never be spent on a verdict
  * that was not published.
  */
-export async function deliverStep(categoryVersion: string, deps: PipelineDeps): Promise<DeliverReport> {
+export async function deliverStep(
+  categoryVersion: string,
+  deps: PipelineDeps,
+  afterPublish?: () => Promise<void>,
+): Promise<DeliverReport> {
   const ranking = await deps.store.readRanking();
   if (ranking === undefined) {
     throw new PhaseFailedError('deliver', [
@@ -305,21 +315,34 @@ export async function deliverStep(categoryVersion: string, deps: PipelineDeps): 
     ]);
   }
 
+  const generatedAt = (deps.now ?? (() => new Date()))();
   const snapshot = buildSnapshot({
     slug: deps.store.slug,
     ranking,
     categoryVersion,
-    generatedAt: (deps.now ?? (() => new Date()))(),
+    generatedAt,
   });
 
   const published = deps.snapshots === undefined ? undefined : await deps.snapshots.publish(snapshot);
 
+  // The catalogue, on the paths that extend one. It runs BETWEEN the publish and
+  // the settlement and neither side is negotiable: the board has to exist before
+  // anything is charged for it, and the paid `products` row has to exist before a
+  // verdict can name it — `verdicts.product_id` is a foreign key, and the
+  // settling transaction is the wrong place to discover that.
+  await afterPublish?.();
+
   await deps.onDelivered?.({
     slug: snapshot.slug,
     category: snapshot.category,
+    category_version: snapshot.category_version,
     delivered_at: snapshot.generated_at,
     product_count: snapshot.product_count,
     ...(published === undefined ? {} : { published }),
+    ...(deps.store.runId === undefined ? {} : { run_id: deps.store.runId }),
+    ...(deps.paid === undefined
+      ? {}
+      : { paid: await settlement(deps.paid, deps, ranking, categoryVersion, generatedAt) }),
   });
 
   return {
@@ -332,6 +355,90 @@ export async function deliverStep(categoryVersion: string, deps: PipelineDeps): 
         : `${snapshot.product_count} product(s) delivered; board republished at ${published.board}`,
     ...(published === undefined ? {} : { published }),
     product_count: snapshot.product_count,
+  };
+}
+
+/**
+ * What the settling side is handed for a paid run: the decision, and the document.
+ *
+ * ## The decision is made HERE, where the run's own report is
+ *
+ * `decideAttempt` is `brief §2.3`'s four outcomes as a pure function over the
+ * engine's unions, and the input it reads is `RunResults.meta.phases` — which
+ * belongs to this run and is on this run's store. The settling side has an event.
+ * Re-deriving the decision there would mean re-deriving it from a board, and a
+ * board cannot carry the distinction: a category whose every cluster holds one
+ * product and a category whose clustering call FAILED produce byte-identical
+ * rankings (`test/pipeline-delivery.test.ts` drives both). One is `DECISIONS.md`
+ * S11's successful delivery and the common case — 32 of 48 and 26 of 44 seeded
+ * products have no cluster peers — and the other must never be charged for.
+ *
+ * `skipped` is a terminal SUCCESS in the engine's `PhaseResult`, so a solo
+ * cluster comes back `consume` with `customerPhase: 'skipped'`, which is exactly
+ * what it should be. A failed clustering pass never reaches this function at all:
+ * `phaseStep` throws before the persona step runs, so there is no `deliver` step
+ * and no record.
+ *
+ * ## A decision that is not `consume` stops the delivery
+ *
+ * Unreachable while the rank step asserts `outcome.status === 'delivered'`. If it
+ * ever is reached, the stored report and the step that ran disagree about whether
+ * this run finished — and the honest response is to fail the step rather than to
+ * hand a customer a verdict on a run nothing will be charged for, or to charge
+ * for one the results say failed. `AttemptsLedger.deliver` refuses the same thing
+ * at the other end, from the other direction.
+ */
+async function settlement(
+  paid: PaidPlacement,
+  deps: PipelineDeps,
+  ranking: Ranking,
+  categoryVersion: string,
+  deliveredAt: Date,
+): Promise<PaidDelivery> {
+  const results = await deps.store.readResults();
+  if (results === undefined) {
+    throw new PhaseFailedError('deliver', [
+      {
+        code: 'internal',
+        retryable: false,
+        message:
+          'a paid run reached delivery with no results.json persisted. brief §2.3 consumes an attempt only ' +
+          'on a delivery the run itself reports as whole, and there is nothing here to report it.',
+        causes: [],
+      },
+    ]);
+  }
+
+  const decision: AttemptDecision = decideAttempt({
+    outcome: { status: 'delivered', ranking, results },
+    // The counter belongs to the job row and to the executor's `retries: 3`; it
+    // is passed as zero because this arm is only ever reached on a DELIVERED
+    // outcome, where `decideAttempt` never consults it. Inventing a number that
+    // could change the answer would be inventing a retry policy here.
+    freeRetriesUsed: 0,
+  });
+
+  if (decision.action !== 'consume') {
+    throw new PhaseFailedError('deliver', [
+      {
+        code: 'internal',
+        retryable: false,
+        message:
+          `the rank step reported a delivered run and decideAttempt answered '${decision.action}'. ` +
+          'These cannot both be true, and brief §2.3 does not allow either resolution to be guessed at ' +
+          'on the money path.',
+        causes: [],
+      },
+    ]);
+  }
+
+  return {
+    ...paid,
+    decision,
+    // Frozen against THIS board, at THIS instant. `brief §1.2` moves every
+    // z-score on the next placement, so a payload built later would describe a
+    // board the customer never saw, on a URL that is permanent.
+    payload: verdictPayloadFor(ranking, paid.engineId, categoryVersion, deliveredAt),
   };
 }
 

@@ -46,6 +46,19 @@ import {
 export interface PipelineStore extends RunStore {
   readResults(): Promise<RunResults | undefined>;
   readRanking(): Promise<Ranking | undefined>;
+  /**
+   * The durable identity of this run — `jobs.id` — when the store has one.
+   *
+   * `undefined` on the filesystem and memory stores, which key a run by a
+   * directory and by nothing at all. It is on the interface rather than reached
+   * for with a cast because it is what the delivery transaction names: `brief
+   * §2.3` puts the attempt decrement in the same transaction that "marks it
+   * delivered", `attempts_consume_requires_delivery` reads `jobs.delivered_at`
+   * to enforce that, and a delivery with no run to mark cannot be settled at all.
+   * Optional is therefore the honest type: a run that cannot be charged for is a
+   * run whose store has no id, and the two facts should not be able to disagree.
+   */
+  readonly runId?: string;
 }
 
 /**
@@ -133,6 +146,20 @@ export class PlacementPhaseStore implements PipelineStore {
 
   get slug(): string {
     return this.category.slug;
+  }
+
+  /**
+   * The PLACEMENT's run, not the category's.
+   *
+   * `slug` above is deliberately the category's, because a placement republishes
+   * the category's board. The run identity is deliberately the other way round: a
+   * placement's phases live on their own job row (see `placementScope`), and that
+   * row is what `jobs.delivered_at` must be set on and what
+   * `consumeIdempotencyKey` keys the decrement to. Naming the category's seed run
+   * here would mark a run somebody else paid for as delivered.
+   */
+  get runId(): string | undefined {
+    return this.scoped.runId;
   }
 
   writePhase(phase: PhaseName, envelope: unknown): Promise<void> {

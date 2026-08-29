@@ -162,6 +162,36 @@ export interface PgPipelineStoreOptions {
    * seed run's, or the other way round.
    */
   placement?: number;
+  /**
+   * The listing somebody paid for, when this store is writing a paid placement's
+   * catalogue.
+   *
+   * `writeProducts` receives a whole `ProductSet` and cannot tell which of its
+   * rows is the submission — the engine's `Product` has a name, a URL and a
+   * description and no notion of a payer, and it must not grow one. So the
+   * identity arrives beside the store, from the enqueue site that read it off the
+   * settled payment.
+   *
+   * Without it every row this store writes is `source = 'seeded'` with a null
+   * submitter, which `products_source_submitter` accepts and which quietly kills
+   * four rules: `brief §2.4`'s one-pitch-per-cycle cap and its
+   * materially-changed-description requirement both hang off
+   * `ListingSnapshot.lastPitchedAt`, which `createPostgresListingStore` reports as
+   * NULL for a seeded row; the ownership rule joins an account through
+   * `submitted_by_email`; and `/account` finds a customer's listing by the same
+   * column. A paying customer's row labelled "unclaimed" is also `brief` Part 7
+   * read backwards — that label is reserved for the cold-start listings nobody
+   * has pitched.
+   */
+  paid?: PaidListing;
+}
+
+/** The payer behind one row of a placement's catalogue. */
+export interface PaidListing {
+  /** The engine id of the product that was bought. */
+  readonly engineId: number;
+  /** The address Dodo verified, lowercased. `products.submitted_by_email`. */
+  readonly email: string;
 }
 
 /**
@@ -179,6 +209,7 @@ export class PgPipelineStore implements PipelineStore {
   private readonly versions: PhaseVersions;
   private readonly kind: RunJobKind;
   private readonly jobId: string;
+  private readonly paid: PaidListing | undefined;
   /** Memoized so a run does not re-resolve the category on every phase. */
   private categoryIdPromise: Promise<string> | undefined;
 
@@ -191,6 +222,7 @@ export class PgPipelineStore implements PipelineStore {
     this.versions = options.versions;
     this.kind = options.kind ?? 'full_run';
     this.jobId = runJobId(this.slug, options.versions, this.kind, options.placement);
+    this.paid = options.paid;
   }
 
   /**
@@ -287,8 +319,14 @@ export class PgPipelineStore implements PipelineStore {
    *   refused by the trigger, and it should be — the score log is the integrity
    *   record and it has to keep naming the sentence the juror deducted from.
    *
-   * Rows this store DOES create are `seeded`/`pending`: a category being run has
-   * a population, and nothing in it is placed until the board is published.
+   * Rows this store DOES create are `seeded`/`pending` — a category being run has
+   * a population, and nothing in it is placed until the board is published — with
+   * ONE exception. When the store was built for a paid placement (`paid` in
+   * `PgPipelineStoreOptions`), the row for that engine id is written
+   * `source = 'paid'` with the payer's address, because that is the submission
+   * path and this is where it writes. `products_source_submitter` enforces the
+   * pairing in the database: paid implies an address, seeded implies none, and
+   * there is no third state for a row to drift into.
    *
    * `normalized_url` is recomputed with the engine's `normalizeUrl` rather than
    * copied from the product, for the reason `packages/db/src/seed/build.ts`
@@ -303,19 +341,25 @@ export class PgPipelineStore implements PipelineStore {
     await this.db
       .insert(products)
       .values(
-        set.products.map((product) => ({
-          id: deterministicUuid('product', this.slug, String(product.id)),
-          categoryId,
-          engineId: product.id,
-          name: product.name,
-          url: product.url,
-          normalizedUrl: normalizeUrl(product.url),
-          description: product.description,
-          descriptionHash: digest(product.description),
-          source: 'seeded' as const,
-          status: 'pending' as const,
-          submittedByEmail: null,
-        })),
+        set.products.map((product) => {
+          const bought = this.paid !== undefined && this.paid.engineId === product.id;
+          return {
+            id: deterministicUuid('product', this.slug, String(product.id)),
+            categoryId,
+            engineId: product.id,
+            name: product.name,
+            url: product.url,
+            normalizedUrl: normalizeUrl(product.url),
+            description: product.description,
+            descriptionHash: digest(product.description),
+            source: bought ? ('paid' as const) : ('seeded' as const),
+            status: 'pending' as const,
+            // `products_email_lowercase` and `accounts_email_lowercase` are the
+            // same rule on two tables: one address is one person. Lowercased here
+            // rather than trusted, because the value crosses a queue.
+            submittedByEmail: bought ? this.paid?.email.toLowerCase() ?? null : null,
+          };
+        }),
       )
       .onConflictDoNothing({ target: [products.categoryId, products.engineId] });
   }

@@ -19,11 +19,12 @@
  * No database: these are pure functions producing row objects.
  */
 
-import type { AttemptEntry, VerdictWrite } from '@the-pit/payments';
+import type { AttemptEntry, DeliveryTx, VerdictWrite, WithDeliveryTx } from '@the-pit/payments';
 import { describe, expect, it } from 'vitest';
 
 import type { LedgerEntry, DeliveredVerdict } from '../src/identity.js';
 import { attemptRow, PAYMENTS_IDENTITY_MAPPING, verdictRow, verdictSlug } from '../src/identity.js';
+import type { PostgresDeliveryTx, WithPostgresDeliveryTx } from '../src/delivery-store.js';
 
 /**
  * Mutual assignability. `A extends B ? B extends A ? true : never : never` is
@@ -34,6 +35,20 @@ type Exact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 
 const ENTRY_MIRRORS_PAYMENTS: Exact<LedgerEntry, AttemptEntry> = true;
 const VERDICT_MIRRORS_PAYMENTS: Exact<DeliveredVerdict, VerdictWrite> = true;
+
+/**
+ * The third mirror, and the one that carries the money.
+ *
+ * `createPostgresDeliveryStore` is what `AttemptsLedger.deliver` runs inside —
+ * `brief §2.3`'s "same transaction that writes the verdict and marks it
+ * delivered" — and `src/delivery-store.ts` re-declares its interface locally for
+ * the same reason the two above are re-declared. A method added or a signature
+ * changed over in `@the-pit/payments` has to fail this package's typecheck: the
+ * alternative is a `DeliveryTx` that compiles, satisfies the interface it thinks
+ * it implements, and silently stops being handed to the ledger.
+ */
+const DELIVERY_TX_MIRRORS_PAYMENTS: Exact<PostgresDeliveryTx, DeliveryTx> = true;
+const WITH_DELIVERY_TX_MIRRORS_PAYMENTS: Exact<WithPostgresDeliveryTx, WithDeliveryTx> = true;
 
 const AT = new Date('2026-03-01T12:00:00.000Z');
 
@@ -48,7 +63,12 @@ describe('the type mirror', () => {
   it('is structurally identical to what @the-pit/payments produces', () => {
     // The assertion is the two `const` declarations above; this asserts they were
     // evaluated rather than tree-shaken out of the compilation.
-    expect([ENTRY_MIRRORS_PAYMENTS, VERDICT_MIRRORS_PAYMENTS]).toEqual([true, true]);
+    expect([
+      ENTRY_MIRRORS_PAYMENTS,
+      VERDICT_MIRRORS_PAYMENTS,
+      DELIVERY_TX_MIRRORS_PAYMENTS,
+      WITH_DELIVERY_TX_MIRRORS_PAYMENTS,
+    ]).toEqual([true, true, true, true]);
   });
 
   it('records the mapping the two packages disagreed about', () => {

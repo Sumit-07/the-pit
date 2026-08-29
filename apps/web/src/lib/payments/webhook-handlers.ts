@@ -169,7 +169,10 @@ async function startTheRun(accountId: string, event: DodoEvent, deps: DodoWebhoo
 
   try {
     const enqueued = await enqueuePlacementForPayment(
-      { accountId, metadata: event.metadata },
+      // The address Dodo verified travels with the account id: `brief §2.1` has
+      // no login at submission, so this is the only identity the paid listing can
+      // carry, and `products_source_submitter` requires it on a paid row.
+      { accountId, email: event.customerEmail, metadata: event.metadata },
       deps.placement,
     );
     if (!enqueued.enqueued) {

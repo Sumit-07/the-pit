@@ -20,7 +20,7 @@ import { CallMeter, RecordingStepRunner } from '@/lib/pipeline/local';
 import { runPlacement, type PlacementInput, type PlacementOutcome } from '@/lib/pipeline/placement';
 import { MemorySnapshotSink } from '@/lib/pipeline/snapshot';
 import { MemoryPipelineStore, PlacementPhaseStore, placementScope } from '@/lib/pipeline/store';
-import type { DeliveryRecord, PipelineDeps } from '@/lib/pipeline/types';
+import type { DeliveryRecord, PaidPlacement, PipelineDeps } from '@/lib/pipeline/types';
 
 import {
   CATEGORY,
@@ -30,7 +30,7 @@ import {
   makeScript,
   type ScriptOptions,
 } from './panel.js';
-import { makeHarness, run, FIXED_NOW } from './run.js';
+import { IdentifiedMemoryStore, makeHarness, run, FIXED_NOW } from './run.js';
 
 /** The seeded category's size. Eight products, clustered into four pairs. */
 export const SEED_SIZE = 8;
@@ -111,6 +111,17 @@ export interface PlacementOptions extends ScriptOptions {
   /** Reuse an earlier placement's phase scope — this is how a retry is set up. */
   phases?: MemoryPipelineStore;
   snapshots?: MemorySnapshotSink;
+  /**
+   * Bill this placement to somebody — which is what every real placement is.
+   *
+   * Absent, this is an ADMIN placement: no submission, no payer, and nothing to
+   * settle. `engineId` is overwritten with the product's own id, because a payer
+   * pointed at a different product than the one being placed is a state the
+   * enqueue site cannot produce and a test should not be able to fabricate.
+   */
+  paid?: Omit<PaidPlacement, 'engineId'>;
+  /** The durable run identity, when the test needs one to settle against. */
+  runId?: string;
 }
 
 /** Wire one placement against a seeded category. */
@@ -119,7 +130,11 @@ export async function makePlacementHarness(options: PlacementOptions = {}): Prom
   const product = options.product ?? seeded.input.product;
   const input: PlacementInput = { ...seeded.input, product };
 
-  const phases = options.phases ?? new MemoryPipelineStore(placementScope(CATEGORY, product.id));
+  const phases =
+    options.phases ??
+    (options.runId === undefined
+      ? new MemoryPipelineStore(placementScope(CATEGORY, product.id))
+      : new IdentifiedMemoryStore(placementScope(CATEGORY, product.id), options.runId));
   const store = new PlacementPhaseStore(seeded.store, phases);
   const snapshots = options.snapshots ?? new MemorySnapshotSink();
   const fixture = new FixtureClient(makeScript(options));
@@ -143,6 +158,9 @@ export async function makePlacementHarness(options: PlacementOptions = {}): Prom
       store,
       snapshots,
       now: () => FIXED_NOW,
+      ...(options.paid === undefined
+        ? {}
+        : { paid: { ...options.paid, engineId: product.id } satisfies PaidPlacement }),
       onDelivered: (record) => {
         delivered.push(record);
         return Promise.resolve();
