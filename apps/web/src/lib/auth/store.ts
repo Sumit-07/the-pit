@@ -31,17 +31,54 @@
  * shutdown hook to close it in. The pool dies with the instance.
  */
 
-import { createDatabase, createPostgresAuthStore, type PostgresAuthStore } from '@the-pit/db';
+import {
+  createDatabase,
+  createPostgresAuthStore,
+  createPostgresIdentityStore,
+  type Database,
+  type PostgresAuthStore,
+  type PostgresHandoffStore,
+  type PostgresIdentityStore,
+} from '@the-pit/db';
 
 let store: PostgresAuthStore | null = null;
+let identities: (PostgresIdentityStore & PostgresHandoffStore) | null = null;
+let handle: Database | null = null;
+
+/**
+ * One pool for every store in this process.
+ *
+ * The capability and GitHub paths arrived after the magic link and must NOT open
+ * a second connection: `max: 1` per lambda is what keeps Neon's pooled endpoint
+ * from being exhausted, and two memoized handles would quietly make it two.
+ */
+function database(): Database {
+  handle ??= createDatabase(undefined, 1).db;
+  return handle;
+}
 
 /** The store, opening the connection on first use. */
 export function postgresAuthStore(): PostgresAuthStore {
-  store ??= createPostgresAuthStore(createDatabase(undefined, 1).db);
+  store ??= createPostgresAuthStore(database());
   return store;
 }
 
-/** Drop the memoized handle. Tests only; nothing in a request path calls it. */
+/**
+ * The slug and provider-link store, over the same connection.
+ *
+ * Separate from `postgresAuthStore` because the interfaces are separate: the
+ * magic-link path is given an `AuthStore` with three methods and no way to reach
+ * a capability slug, which is what keeps `brief §2.1`'s surface exactly as it
+ * was while the other two paths get what they need.
+ */
+export function postgresIdentityStore(): PostgresIdentityStore & PostgresHandoffStore {
+  identities ??= createPostgresIdentityStore(database());
+  return identities;
+}
+
+/** Drop the memoized handles. Tests only; nothing in a request path calls it. */
 export function resetPostgresAuthStore(): void {
   store = null;
+  identities = null;
+  handle = null;
 }

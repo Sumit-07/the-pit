@@ -85,15 +85,37 @@ const MINUTE_MS = 60 * 1000;
  *   if guessing is also unprofitable, and an unlimited verify endpoint is a free
  *   oracle. 20 accommodates a mail client that retries and a user who clicks
  *   twice.
+ * - `capabilityPerIp` — 30 per 15 minutes. The capability URL is a bookmark, so
+ *   a person hits it once and then not again for weeks; anything doing it in
+ *   volume is walking the keyspace. The budget is deliberately looser than
+ *   `verifyPerIp` because a shared office NAT can carry several genuine
+ *   bookmarks, and deliberately finite because 256 bits is only unguessable if
+ *   guessing also costs something.
+ * - `oauthPerIp` — 20 per 15 minutes, on the callback. Each one costs two
+ *   outbound HTTP requests to GitHub, so an unlimited callback is a way to spend
+ *   our rate limit at GitHub using someone else's browser.
+ * - `handoffPerIp` — 20 per 15 minutes, on the success page's capability
+ *   handoff. That endpoint turns a payment id into a bearer URL, so it is the
+ *   one place a leaked provider id could be walked; see `capability/handoff.ts`,
+ *   which also bounds it by time.
  */
 export const AUTH_RATE_LIMITS = {
   requestPerEmail: { limit: 3, windowMs: 15 * MINUTE_MS },
   requestPerIp: { limit: 10, windowMs: 15 * MINUTE_MS },
   verifyPerIp: { limit: 20, windowMs: 15 * MINUTE_MS },
+  capabilityPerIp: { limit: 30, windowMs: 15 * MINUTE_MS },
+  oauthPerIp: { limit: 20, windowMs: 15 * MINUTE_MS },
+  handoffPerIp: { limit: 20, windowMs: 15 * MINUTE_MS },
 } as const satisfies Record<string, RateLimitPolicy>;
 
 /** The namespaces. Separate prefixes are what makes the buckets independent. */
-export type RateLimitScope = 'auth:request:email' | 'auth:request:ip' | 'auth:verify:ip';
+export type RateLimitScope =
+  | 'auth:request:email'
+  | 'auth:request:ip'
+  | 'auth:verify:ip'
+  | 'auth:capability:ip'
+  | 'auth:oauth:ip'
+  | 'auth:handoff:ip';
 
 /**
  * Namespace a subject into a bucket key.

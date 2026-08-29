@@ -21,15 +21,21 @@ afterAll(async () => {
 });
 
 /**
- * The eighteen tables, plus nothing. An extra table is as much a defect as a
+ * The nineteen tables, plus nothing. An extra table is as much a defect as a
  * missing one: it means a concept was modelled twice, or that something another
  * agent owns leaked in here.
  *
  * Sixteen were Phase 2's. `accounts` and `verdicts` are `0003`'s: the identity
  * `brief §2.1` describes without naming, and the frozen delivered verdict
  * `brief` Part 6 requires to stay addressable while the board moves under it.
+ *
+ * `account_identities` is `0004`'s, and it is the only table the second and
+ * third sign-in paths needed. The capability URL added no table at all — it is
+ * one column on `accounts`, because rotation has to REPLACE a slug rather than
+ * add one, and a table of slugs would permit two live at once.
  */
 const REQUIRED_TABLES = [
+  'account_identities',
   'accounts',
   'attempts',
   'categories',
@@ -51,7 +57,7 @@ const REQUIRED_TABLES = [
 ];
 
 describe('tables', () => {
-  it('creates exactly the eighteen required tables', async () => {
+  it('creates exactly the nineteen required tables', async () => {
     const tables = await tablesOf(database.pg);
     expect(tables).toEqual(REQUIRED_TABLES);
   });

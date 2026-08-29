@@ -62,6 +62,67 @@ export const accounts = pgTable(
     email: text('email').notNull(),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+
+    /**
+     * The capability URL's secret half — the account is reachable at
+     * `/a/<capability_slug>` with no email, no password and no session.
+     *
+     * ## Why this column exists
+     *
+     * `brief §2.1` reaches a returning customer with a magic link, and a magic
+     * link is a bet on DNS: SPF, DKIM and DMARC want a fortnight at `p=none`
+     * before anything tightens, plus warm-up on a new sending domain. Until then
+     * "check your inbox" is a promise the infrastructure cannot keep, and it
+     * fails worst for the corporate mailboxes most likely to have paid. This
+     * column is the path that depends on nothing being delivered: it is minted
+     * when the webhook creates the account and shown on the success page while
+     * the buyer is still looking at it.
+     *
+     * ## One column, not a table of slugs
+     *
+     * A bearer URL cannot be un-shared, so rotation is the only revocation it
+     * has — and rotation has to mean the old one STOPS WORKING. A single column
+     * gives that for free: the `UPDATE` that writes the new slug removes the old
+     * one in the same statement, so there is no window in which both resolve. A
+     * `capability_slugs` table would allow two live rows per account, which is
+     * precisely what rotation exists to prevent.
+     *
+     * ## It is stored in the clear, and that is a real trade-off
+     *
+     * `tokens.token_hash` stores a digest because a magic-link token only ever
+     * has to be VERIFIED. This one has to be DISPLAYED — on the success page, in
+     * the backup email, and again whenever a customer asks support for it — and
+     * a digest cannot be displayed. So the column holds a bearer credential at
+     * rest: anyone with read access to this table can reach any account.
+     *
+     * What that buys, and why it is accepted: the alternative is that a customer
+     * who closes the tab before bookmarking has no way back except email, which
+     * is the dependency this whole column exists to remove. What bounds it:
+     * rotation is one request, the route sends `Referrer-Policy: no-referrer`
+     * and redirects without the slug, and nothing logs it. Read access to this
+     * table is also read access to `orders` and `attempts`, so it is not the
+     * marginal disclosure it first looks like.
+     *
+     * ## The DEFAULT is a floor, not the mechanism
+     *
+     * Slugs are normally minted by `@the-pit/auth`'s `mintCapabilitySlug` — 32
+     * bytes from the OS CSPRNG — and passed in. The default below exists so that
+     * an account can never be created WITHOUT one, because an account with no
+     * capability URL is a customer who cannot reach what they paid for.
+     *
+     * It builds 43 base64url characters out of two `gen_random_uuid()` values.
+     * `gen_random_uuid()` is core Postgres since 13 and draws from
+     * `pg_strong_random`, the same OS CSPRNG — deliberately not `random()`, and
+     * deliberately not `gen_random_bytes()`, which lives in the `pgcrypto`
+     * contrib extension that this schema refuses to depend on for the reason
+     * given above about `citext`. Two uuids carry 244 bits of entropy (256 minus
+     * six version and variant bits each), comfortably past the 128-bit floor.
+     */
+    capabilitySlug: text('capability_slug')
+      .notNull()
+      .default(
+        sql`translate(encode(decode(replace(gen_random_uuid()::text,'-','') || replace(gen_random_uuid()::text,'-',''), 'hex'), 'base64'), '+/=', '-_')`,
+      ),
   },
   (t) => [
     /** One row per address. Two would be two balances for one payer. */
@@ -84,5 +145,24 @@ export const accounts = pgTable(
      * name, a customer id, or an empty string because a webhook field moved.
      */
     check('accounts_email_shape', sql`${t.email} ~ '^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$'`),
+
+    /**
+     * One account per slug. Without this, a bug in a rotation could hand two
+     * customers the same URL and each would sign in as whichever row the
+     * planner reached first.
+     */
+    unique('accounts_capability_slug_uk').on(t.capabilitySlug),
+
+    /**
+     * Exactly 43 base64url characters — 256 bits, or 244 from the SQL default.
+     *
+     * The length is the security property, so the database enforces it rather
+     * than trusting every writer. A `text` column with no check would accept
+     * `'1'`, and an account addressable at `/a/1` is an account addressable by
+     * anyone who can count. The alphabet is checked too: `+`, `/` and `=` are
+     * the standard-base64 characters a mis-encoded mint emits, and each of them
+     * breaks or changes meaning inside a URL path.
+     */
+    check('accounts_capability_slug_shape', sql`${t.capabilitySlug} ~ '^[A-Za-z0-9_-]{43}$'`),
   ],
 );

@@ -1,5 +1,46 @@
 /**
- * `@the-pit/auth` — the magic link, and nothing else.
+ * `@the-pit/auth` — three ways into one account.
+ *
+ * ## What changed, and what did not
+ *
+ * The magic link below is unchanged: same tables, same SHA-256 hashes, same
+ * single-use atomic consume, same no-enumeration posture, same button-then-POST
+ * verify that stops a mail scanner burning a token. Nothing in this section has
+ * been relaxed and nothing new can reach it — `verifyMagicLink` still takes an
+ * `AuthStore` with three methods and no way to reach a capability slug or a
+ * provider link.
+ *
+ * What it gained is two siblings, because a single path that depends on email
+ * delivery is a single point of failure with a one-to-two-week lead time on it.
+ * SPF, DKIM and DMARC want `p=none` for a fortnight before anything tightens,
+ * plus reputation warm-up on a new domain, and until that is done "check your
+ * inbox" is a promise the infrastructure cannot keep — worst of all for the
+ * corporate addresses most likely to have paid.
+ *
+ * | Path | Depends on | Reached by |
+ * |---|---|---|
+ * | Magic link | email delivering | `requestMagicLink` → `verifyMagicLink` |
+ * | Capability URL | nothing | `openCapabilityUrl`, shown at `capabilityHandoff` |
+ * | GitHub | GitHub being up | `startOAuthSignIn` → `completeOAuthSignIn` |
+ *
+ * All three end at the same `accounts` row, keyed on the verified payment email.
+ * There is no path here that creates one: `AuthStore` has no `createAccount`,
+ * `IdentityStore` has none either, and `completeOAuthSignIn` answers
+ * `no_purchase_found` rather than inventing an account for a stranger. An
+ * account is a purchase — see `identity-store.ts`.
+ *
+ * `brief §2.1` says "No GitHub, no Google", and it says it as the answer to
+ * *"what identifies the payer"*. That answer is unchanged: the payment email
+ * still is, GitHub matches against it and never replaces it, and a GitHub
+ * identity that matches no purchase gets no account. What §2.1 rules out —
+ * an identity system that could mint accounts, and a guest-payment claiming
+ * flow — is still ruled out here.
+ *
+ * GitHub is also never on the buying path. Guest checkout stays the default on
+ * every device; OAuth is an upgrade a customer applies before or after paying,
+ * and both orders converge on the same row. See `oauth/sign-in.ts`.
+ *
+ * ---
  *
  * `brief §2.1` is short and every line of it is a decision:
  *
@@ -83,3 +124,95 @@ export { CHECK_YOUR_INBOX, INVALID_EMAIL_MESSAGE, RATE_LIMITED_MESSAGE, requestM
 
 export type { VerifyDeps, VerifyInput, VerifyRejection, VerifyResult } from './verify.js';
 export { verifyMagicLink } from './verify.js';
+
+// --- Path 2: the capability URL, which depends on nothing being delivered ---
+
+export type { RandomBytes } from './capability/slug.js';
+export {
+  CAPABILITY_CSPRNG,
+  CAPABILITY_SLUG_BYTES,
+  CAPABILITY_SLUG_LENGTH,
+  CAPABILITY_SLUG_MIN_BITS,
+  CAPABILITY_SLUG_PATTERN,
+  capabilityPath,
+  capabilityUrl,
+  isCapabilitySlug,
+  mintCapabilitySlug,
+} from './capability/slug.js';
+
+export type {
+  CapabilityDeps,
+  CapabilityRejection,
+  OpenCapabilityInput,
+  OpenCapabilityResult,
+  RotateCapabilityInput,
+  RotateCapabilityResult,
+} from './capability/access.js';
+export { openCapabilityUrl, rotateCapability } from './capability/access.js';
+
+export type { HandoffDeps, HandoffInput, HandoffResult, HandoffStore } from './capability/handoff.js';
+export { capabilityHandoff, HANDOFF_WINDOW_MS } from './capability/handoff.js';
+
+export type { CapabilityMessageInput } from './mail/capability-render.js';
+export { capabilityIdempotencyKey, renderCapabilityEmail } from './mail/capability-render.js';
+
+// --- The second store seam: slugs and provider links ---
+
+export type { AccountIdentity, AccountStore, IdentityStore, RotateSlugResult } from './identity-store.js';
+
+// --- Path 3: GitHub, an upgrade and never a gate ---
+
+export type {
+  AuthorizationRequest,
+  CodeExchange,
+  FetchLike as OAuthFetchLike,
+  OAuthIdentityResult,
+  OAuthProvider,
+  OAuthTokenResult,
+  ProviderEmail,
+  ProviderIdentity,
+} from './oauth/types.js';
+
+export { unverifiedProviderEmails, verifiedProviderEmails } from './oauth/verified-emails.js';
+
+export type { OAuthStatePayload, OAuthStateVerification } from './oauth/state.js';
+export {
+  clearOAuthStateCookie,
+  codeChallengeFor,
+  INSECURE_OAUTH_STATE_COOKIE_NAME,
+  mintCodeVerifier,
+  mintOAuthState,
+  OAUTH_STATE_BYTES,
+  OAUTH_STATE_COOKIE_NAME,
+  OAUTH_STATE_TTL_MS,
+  oauthStateCookieName,
+  readOAuthState,
+  serializeOAuthStateCookie,
+  signOAuthState,
+  statesMatch,
+  verifyOAuthState,
+} from './oauth/state.js';
+
+export type {
+  CompleteOAuthInput,
+  CompleteOAuthResult,
+  OAuthDeps,
+  OAuthRejection,
+  StartOAuthInput,
+  StartOAuthResult,
+} from './oauth/sign-in.js';
+export { completeOAuthSignIn, startOAuthSignIn } from './oauth/sign-in.js';
+
+export type { FixtureProviderOptions } from './oauth/fixture-provider.js';
+export { FixtureOAuthProvider, unverifiedEmail, verifiedEmail } from './oauth/fixture-provider.js';
+
+export type { GitHubProviderOptions } from './oauth/github-provider.js';
+export {
+  GITHUB_API_VERSION,
+  GITHUB_AUTHORIZE_ENDPOINT,
+  GITHUB_EMAILS_ENDPOINT,
+  GITHUB_SCOPES,
+  GITHUB_TOKEN_ENDPOINT,
+  GITHUB_USER_ENDPOINT,
+  GitHubOAuthProvider,
+} from './oauth/github-provider.js';
