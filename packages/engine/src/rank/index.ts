@@ -7,6 +7,7 @@
 
 export type { BlendInput, BlendedProduct } from './blend.js';
 export { blend, finalOrder, meritOrder, ranksFrom } from './blend.js';
+export { balancedChunks, chunkItems, partitionSizes } from './chunk.js';
 export { computeComposite, normalizeWeights } from './composite.js';
 export type { DemandReduction } from './demand.js';
 export { clusterMembers, reduceDemand } from './demand.js';
