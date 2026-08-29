@@ -46,15 +46,23 @@
  * claim resolves it to the first placement's outcome without spending a model
  * call (`claims.ts`).
  *
- * ## What is NOT re-checked here, and should be
+ * ## The guards run again on this path, and that is the authoritative run
  *
  * `brief §2.4` wants the submission guards run twice — "before payment (client,
  * fast feedback) and before enqueue (server, authoritative)" — because the board
- * moves in between. The pre-payment half runs at checkout. The pre-enqueue half
- * needs a listing lookup by normalized URL and the category classifier, neither
- * of which is bound in this app yet, so it does not run. The consequence is
- * bounded and named: a submission that became cycle-locked or category-mismatched
- * between checkout and settlement is placed anyway. See the phase report.
+ * moves in between. The pre-payment half runs in `handleCheckoutCreate`; the
+ * pre-enqueue half runs inside `enqueuePlacementForPayment`, before the event is
+ * sent, so a submission that became cycle-locked or category-mismatched between
+ * checkout and settlement is refused rather than placed. A refusal is not a
+ * failure of this handler: the grant has already landed, the attempts are on the
+ * balance unspent (`brief §2.3` consumes only on delivery), and the event goes to
+ * the review queue where a person decides what the customer is owed.
+ *
+ * This is also the first point at which the OWNERSHIP rule can be evaluated at
+ * all. Guest checkout means there is no identity until this webhook resolves one
+ * from the address Dodo verified, so the conflict is a post-payment hold by
+ * necessity rather than by choice — except for a submitter who was signed in when
+ * they submitted, whose conflict was already refused before the charge.
  */
 
 import {

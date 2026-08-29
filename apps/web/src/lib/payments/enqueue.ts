@@ -45,11 +45,44 @@
  * and their rank already move together. Giving a paid row its own position keeps
  * `report/leak.ts`'s `id_vs_orig_rank` measuring what it measures instead of
  * being pulled by an arbitrary constant.
+ *
+ * ## The authoritative half of `brief §2.4`'s two checks
+ *
+ * > "Check before payment (client, fast feedback) **and** before enqueue
+ * > (server, authoritative)."
+ *
+ * The pre-payment half runs in `handleCheckoutCreate`. This is the other half,
+ * and it is the binding one, because the board moves between the two: minutes
+ * pass while a card is authorised, and in that window a nightly rebuild can close
+ * the cycle or another pitch can land on the same normalized URL. A submission
+ * that was clear at checkout and is cycle-locked at settlement must not be placed
+ * — it would be the second pitch for one product in one cycle, which is exactly
+ * what `brief §2.4` caps.
+ *
+ * It runs BEFORE `queue.send`, which is what makes it worth running at all: a
+ * placement is six juror calls, a clustering pass and four forced choices, and a
+ * guard that fired after the event was sent would be a guard that had already
+ * paid for the run it was refusing.
+ *
+ * **The ownership conflict is here on purpose and does not move earlier.** Under
+ * guest checkout there is no identity until the webhook resolves one from the
+ * address Dodo verified, so this is the first moment the rule can be evaluated at
+ * all — `checkSubmissionLocal` skips it whenever `accountId` is null, and at
+ * checkout it is null. The one exception is a submitter who was signed in when
+ * they submitted: `handleCheckoutCreate` passes their account id, the conflict is
+ * refused before the charge, and this hold never fires for them.
+ *
+ * **No attempt is consumed by any of this.** `brief §2.3` spends an attempt only
+ * when a verdict is delivered, inside the delivery transaction. A refusal here
+ * costs the customer their money's worth of attempts sitting on their balance,
+ * unspent, and a support conversation — which is why the caller parks the event
+ * for review rather than discarding it.
  */
 
 import type { Product } from '@the-pit/engine';
 import { jobIdempotencyKey } from '@the-pit/payments';
 
+import { rejectionSummary, runSubmissionGuards, type SubmissionGuardDeps } from '@/lib/checkout/guards';
 import type { CategorySource } from '@/lib/pipeline/catalog';
 import type { PlacementRequestedData } from '@/lib/pipeline/inngest';
 
@@ -89,6 +122,24 @@ export interface PlacementEnqueueDeps {
   readonly submissions: SubmissionLookup;
   readonly categories: CategorySource;
   readonly queue: PlacementQueue;
+  /**
+   * `brief §2.4`'s authoritative check, re-run against the board as it stands at
+   * settlement. See the module header.
+   *
+   * Nullable, and the null arm is a real deployment rather than a convenience: a
+   * process with no listing store bound cannot answer "has this product already
+   * been pitched tonight", and answering it wrongly in either direction is worse
+   * than saying so. So `null` means the check does not run, the placement
+   * proceeds on the pre-payment clearance, and the caller has one greppable
+   * reason for why. It is never the default in `lib/payments/config.ts`.
+   */
+  readonly guards?: SubmissionGuardDeps | null;
+  /**
+   * The clock the re-check runs against. Injected so the cycle arithmetic is
+   * testable at a fixed instant, exactly as `CheckoutHandlerDeps.now` is —
+   * every rule this re-check applies is a rule about *when*.
+   */
+  readonly now?: () => Date;
 }
 
 export interface EnqueuePlacementInput {
@@ -125,6 +176,38 @@ export async function enqueuePlacementForPayment(
   const submission = await deps.submissions.find(submissionId);
   if (submission === null) {
     return { enqueued: false, reason: `no pending submission ${JSON.stringify(submissionId)}` };
+  }
+
+  // `brief §2.4`, the authoritative half: every guard re-run against the board
+  // as it stands now, BEFORE a single model call is bought. A submission that was
+  // clear when the buyer clicked pay and is cycle-locked, materially unchanged,
+  // category-mismatched or owned by somebody else at settlement stops here.
+  if (deps.guards !== undefined && deps.guards !== null) {
+    const rechecked = await runSubmissionGuards(
+      {
+        draft: {
+          url: submission.url,
+          name: submission.name,
+          description: submission.description,
+          categorySlug: submission.categorySlug,
+        },
+        now: (deps.now ?? (() => new Date()))(),
+        // The identity Dodo verified. This is the first point in a guest checkout
+        // at which the ownership rule can be evaluated at all.
+        accountId: input.accountId,
+      },
+      deps.guards,
+    );
+
+    if (rechecked.status === 'rejected') {
+      return {
+        enqueued: false,
+        // Prefixed, so the review queue can be filtered to the payments that
+        // landed and were then refused — which is a different conversation from
+        // a payment that could not find its submission.
+        reason: `the submission no longer passes its guards — ${rejectionSummary(rechecked.rejection)}`,
+      };
+    }
   }
 
   // The category as it stands NOW, not as it stood when checkout opened. A

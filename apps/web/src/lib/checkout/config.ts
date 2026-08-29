@@ -1,0 +1,124 @@
+/**
+ * Where the checkout route gets its dependencies at runtime.
+ *
+ * Same seam and the same precedence as `lib/auth/config.ts` and
+ * `lib/payments/config.ts`: an explicit `registerCheckoutDeps()` wins, so a test
+ * installs in-memory stores and a fixture transport with no environment
+ * variable; otherwise everything is resolved from the environment, and with
+ * nothing to resolve from the route throws a named error rather than running
+ * with something silently inert.
+ *
+ * ## The transport is chosen, never defaulted into production
+ *
+ * `HttpDodoTransport` needs `DODO_API_KEY`. Without one:
+ *
+ * - **outside production** we fall back to `FixtureDodoTransport` and say so on
+ *   stderr, because the whole point of that class living in `src` rather than in
+ *   `test` is that the purchase flow is clickable locally with no Dodo account;
+ * - **in production** we refuse. A production deployment that quietly handed
+ *   buyers `https://test.checkout.dodopayments.com/...` would be a checkout that
+ *   takes no money and looks like it works, which is the worst of the available
+ *   failures.
+ *
+ * The same rule `lib/auth/config.ts` applies to `AUTH_DEV_MEMORY_STORE`, for the
+ * same reason: the convenient fallback is the one that ships if it is allowed to.
+ *
+ * ## The guards' own inputs live in `bindings.ts`
+ *
+ * `listingLookup` and `candidateCategories` are shared with
+ * `lib/payments/config.ts`, which binds the same guards to the pre-enqueue check.
+ * They sit in a third module so both configs point at one answer — and so neither
+ * config has to import the other.
+ */
+
+import {
+  createDatabase,
+  createPostgresSubmissionStore,
+  hasDatabaseUrl,
+  type Database,
+} from '@the-pit/db';
+import { acceptAllClassifier, FixtureDodoTransport, type DodoTransport } from '@the-pit/payments';
+
+import { capabilityDeps } from '@/lib/auth/config';
+import { candidateCategories, listingLookup } from '@/lib/checkout/bindings';
+import type { CheckoutHandlerDeps } from '@/lib/checkout/handlers';
+import { HttpDodoTransport } from '@/lib/checkout/transport';
+import { dodoConfig, PaymentsNotWiredError } from '@/lib/payments/config';
+
+let registered: CheckoutHandlerDeps | null = null;
+let handle: Database | null = null;
+let transport: DodoTransport | null = null;
+
+/** Install dependencies directly. Tests use this; production uses the environment. */
+export function registerCheckoutDeps(deps: CheckoutHandlerDeps): void {
+  registered = deps;
+}
+
+/** Drop everything this module memoized. Tests only. */
+export function resetCheckoutWiring(): void {
+  registered = null;
+  handle = null;
+  transport = null;
+}
+
+/** One pool per process, opened on first use. See `lib/payments/config.ts`. */
+function database(): Database {
+  handle ??= createDatabase(undefined, 1).db;
+  return handle;
+}
+
+function isProduction(): boolean {
+  return process.env['NODE_ENV'] === 'production';
+}
+
+/**
+ * The Dodo client. Real when there is a key, a fixture when there is not and we
+ * are not in production, and an error otherwise.
+ */
+export function dodoTransport(): DodoTransport {
+  if (transport !== null) return transport;
+
+  const apiKey = process.env['DODO_API_KEY'];
+  if (apiKey === undefined || apiKey === '') {
+    if (isProduction()) {
+      throw new PaymentsNotWiredError('DODO_API_KEY is not set');
+    }
+    console.warn(
+      '[checkout] DODO_API_KEY is not set — opening FIXTURE checkout sessions. ' +
+        'No money will move and the payment link goes nowhere real.',
+    );
+    transport = new FixtureDodoTransport();
+    return transport;
+  }
+
+  transport = new HttpDodoTransport({ apiKey, mode: dodoConfig().mode });
+  return transport;
+}
+
+export function checkoutDeps(): CheckoutHandlerDeps {
+  if (registered !== null) return registered;
+  if (!hasDatabaseUrl()) throw new PaymentsNotWiredError('DATABASE_URL is not set');
+
+  const db = database();
+  const submissions = createPostgresSubmissionStore(db);
+
+  return {
+    config: dodoConfig(),
+    transport: dodoTransport(),
+    submissions: {
+      create: (draft) => submissions.create(draft),
+    },
+    guards: {
+      listings: listingLookup(db),
+      // `DECISIONS.md` S12's documented stub. The interface and the blocking
+      // policy are built and tested; the model call is not, because an untuned
+      // classifier produces exactly the confident false rejections S12 avoids.
+      classifier: acceptAllClassifier,
+      candidateCategories,
+    },
+    // Read only to upgrade an ownership conflict from a post-payment hold to a
+    // pre-payment refusal. It gates nothing — see `handlers.ts`.
+    keyring: capabilityDeps().capability.keyring,
+    secureCookies: capabilityDeps().capability.secureCookies,
+  };
+}

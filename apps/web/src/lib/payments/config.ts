@@ -35,8 +35,9 @@ import {
   type Database,
   type PostgresAccountStore,
 } from '@the-pit/db';
-import { AttemptsLedger, type DodoConfig } from '@the-pit/payments';
+import { acceptAllClassifier, AttemptsLedger, type DodoConfig } from '@the-pit/payments';
 
+import { candidateCategories, listingLookup } from '@/lib/checkout/bindings';
 import type { DodoWebhookDeps } from '@/lib/payments/webhook-handlers';
 import type { PendingSubmission, PlacementEnqueueDeps, PlacementQueue } from '@/lib/payments/enqueue';
 import { inngest, PLACEMENT_REQUESTED } from '@/lib/pipeline/inngest';
@@ -131,7 +132,8 @@ export function inngestPlacementQueue(): PlacementQueue {
  */
 export function placementDeps(): PlacementEnqueueDeps | null {
   try {
-    const submissions = createPostgresSubmissionStore(database());
+    const db = database();
+    const submissions = createPostgresSubmissionStore(db);
     return {
       categories: defaultBindings().categories,
       queue: inngestPlacementQueue(),
@@ -139,6 +141,16 @@ export function placementDeps(): PlacementEnqueueDeps | null {
         async find(submissionId: string): Promise<PendingSubmission | null> {
           return await submissions.find(submissionId);
         },
+      },
+      // `brief §2.4`'s authoritative check. The same three dependencies the
+      // checkout route uses — one listing lookup, one classifier, one roster —
+      // resolved from `lib/checkout/bindings.ts` rather than assembled a second
+      // time, because two answers to "what is on the board at this URL" is how
+      // the pre-payment and pre-enqueue checks start disagreeing.
+      guards: {
+        listings: listingLookup(db),
+        classifier: acceptAllClassifier,
+        candidateCategories,
       },
     };
   } catch (error) {

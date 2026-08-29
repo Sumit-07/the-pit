@@ -45,6 +45,9 @@ export type {
 } from './account-store.js';
 export { createPostgresAccountStore } from './account-store.js';
 
+export type { ListingSnapshotRow, PostgresListingStore } from './listing-store.js';
+export { createPostgresListingStore } from './listing-store.js';
+
 export type {
   AppendOutcome,
   AttemptsStoreOptions,

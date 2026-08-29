@@ -131,6 +131,29 @@ Anything proposed later that cannot be put in one of those two columns is refuse
 account, a session, or an identity, so a positional perk cannot be implemented without a
 new argument someone has to review.
 
+### S16 — The cycle cap's clock reads `products`, never `submissions`
+`brief §2.4` caps pitches at one per product per recalibration cycle, and the obvious
+place to read "when was this last pitched" is the `submissions` row the checkout route
+writes. That is wrong, and the reason is the ordering S12 already fixed.
+
+A `submissions` row is written **before** the buyer leaves for Dodo — it has to be,
+because a 300-character description does not fit in Dodo metadata and only its id may
+cross a third party. So a cap keyed on it would fire for a checkout that was opened and
+never paid: an honest user who changed their mind at the card form has locked their own
+product out of tonight's board, and anybody else can lock any product out of any night
+for free, from a form with no login on it.
+
+So `ListingSnapshot.lastPitchedAt` is sourced from the first artifact of a **paid**
+pitch — `products.created_at`, or the latest `verdicts.delivered_at` once a re-pitch has
+delivered — and is NULL for a seeded row, which nobody has pitched. `createPostgresListingStore`
+is the one query that answers this, and `submissions` is not in it.
+
+What it costs, stated: two payments for one product inside the seconds between the first
+settlement and the first placement both clear the lock. The window is a placement's
+latency, both are genuinely paid, and `jobs_idempotency_key_uk` still collapses them to
+one run when the description is unchanged. That is a better failure than a free lockout
+lever on the buying path.
+
 ### OPEN-1 RESOLVED — Seed removal: per-category threshold, drained gradually
 - A category sheds seeds only once it holds N paid products (N ~ 25-30, chosen to stay
   well clear of the n>=8 floor from `01` §4).
