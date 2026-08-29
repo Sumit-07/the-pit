@@ -40,6 +40,14 @@ import { ModelCallError, type ModelClient, type ModelRequest, type ModelResponse
  * each (see the prompt builders), and each extra breakpoint is another prefix
  * whose write premium has to earn itself back.
  *
+ * A second breakpoint covering only the standing method and the rubric — the
+ * parts that repeat across RUNS, not just across the jurors of one run — was
+ * considered and rejected. That prefix is a few hundred tokens and would very
+ * likely fall below Claude Haiku 4.5's minimum cacheable length, so it would not
+ * cache at all while still costing a write premium wherever it did. The note at
+ * the top of `src/panels/calibration.ts` records the same conclusion; the two
+ * files agree.
+ *
  * The minimum cacheable prefix is model-dependent (512-4096 tokens), so a short
  * prompt — a small category, or a one-product incremental chunk — silently will
  * not cache at all. Nothing here can detect that; Task 7 should watch

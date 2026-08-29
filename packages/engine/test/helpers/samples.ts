@@ -3,7 +3,11 @@
  * `test/**\/*.test.ts`.
  */
 
+import type { PanelOrdering } from '../../src/panels/index.js';
 import type { JurorMandate, Persona, Product, RubricMetric } from '../../src/types.js';
+
+/** Pins every deterministic render order in the tests. */
+export const ORDERING: PanelOrdering = { category: 'Developer Tools', categoryVersion: 'v7' };
 
 export function product(id: number, name: string, description: string): Product {
   return {

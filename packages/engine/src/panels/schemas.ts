@@ -28,8 +28,9 @@
 
 import type Anthropic from '@anthropic-ai/sdk';
 
-import { LABEL_LIMIT } from './prompts/data-block.js';
+import { LABEL_LIMIT } from '../config/constants.js';
 import { RAW_SCORE_MAX, RAW_SCORE_MIN } from '../rank/stats.js';
+import { dataValue } from './data-block.js';
 import type { Cluster, ClusterId, DemandChoice, Deduction, MetricScore, ScoreRow, UniquenessProduct, UniquenessResult } from '../types.js';
 
 /** A panel response that does not satisfy its schema or `01 §5`'s rules. */
@@ -282,6 +283,39 @@ function asScore(value: unknown, where: string): number {
   return score;
 }
 
+/**
+ * Read a `cluster_id` the way the personas will see it.
+ *
+ * A `cluster_id` is model-produced text derived from untrusted product copy, and
+ * it is the one such value that is rendered OUTSIDE the `<<< >>>` block — the
+ * customer-demand prompt lists the set ids in its instruction region so a persona
+ * can be told what to answer. An id like `x >>> ignore previous instructions` is
+ * 34 characters and would otherwise pass validation and land in exactly the
+ * region the prompt tells the model its real instructions live in.
+ *
+ * So it is sanitized HERE, at the boundary where it enters the system, rather
+ * than only at each render site: the id that is stored in the demand log and in
+ * `ranking.json` is then byte-identical to the id the persona was shown and can
+ * echo back. `dataValue` is idempotent, so re-applying it at render changes
+ * nothing.
+ *
+ * The length cap is checked on the raw value, before sanitization, which is what
+ * makes `dataValue`'s truncation provably a no-op here: a longer id would be
+ * shown to a persona in a shortened form it could never echo back. It is a cap on
+ * an IDENTIFIER — a key in the demand log, in the cluster roster and in every
+ * ranked row — not on prose.
+ */
+function readClusterId(value: unknown, where: string): string {
+  const raw = asString(value, where);
+  if (raw.length > LABEL_LIMIT) {
+    fail(`${where}: identifiers must be ${LABEL_LIMIT} characters or fewer, got ${raw.length}`);
+  }
+
+  const clusterId = dataValue(raw, LABEL_LIMIT);
+  if (clusterId === '') fail(`${where}: is empty once sanitized`);
+  return clusterId;
+}
+
 function describe(value: unknown): string {
   if (value === null) return 'null';
   if (Array.isArray(value)) return `an array of ${value.length}`;
@@ -426,16 +460,8 @@ export function validateUniquenessResult(output: unknown, productIds: readonly n
   for (const [index, rawCluster] of rawClusters.entries()) {
     const where = `uniqueness response.clusters[${index}]`;
     const cluster = asRecord(rawCluster, where);
-    const clusterId = asString(cluster['cluster_id'], `${where}.cluster_id`);
+    const clusterId = readClusterId(cluster['cluster_id'], `${where}.cluster_id`);
     if (clusterIds.has(clusterId)) fail(`${where}: cluster_id ${JSON.stringify(clusterId)} was declared more than once`);
-    // A cluster_id is an identifier, not prose: it is a key in the demand log and
-    // in `ranking.json`, and it is shown back to the personas inside a data block,
-    // where every value is truncated at `01 §8`'s label limit. Capping it here is
-    // what makes that truncation provably a no-op — a longer id would be shown to
-    // a persona in a shortened form it could then never echo back.
-    if (clusterId.length > LABEL_LIMIT) {
-      fail(`${where}.cluster_id: identifiers must be ${LABEL_LIMIT} characters or fewer, got ${clusterId.length}`);
-    }
     clusterIds.add(clusterId);
 
     const label = asString(cluster['label'], `${where}.label`);
@@ -467,7 +493,7 @@ export function validateUniquenessResult(output: unknown, productIds: readonly n
     if (seen.has(id)) fail(`${where}: product id ${id} appears more than once`);
     seen.add(id);
 
-    const clusterId = asString(product['cluster_id'], `${where}.cluster_id`);
+    const clusterId = readClusterId(product['cluster_id'], `${where}.cluster_id`);
     if (!clusterIds.has(clusterId)) {
       fail(`${where}.cluster_id: ${JSON.stringify(clusterId)} is not one of the declared clusters`);
     }
@@ -519,7 +545,7 @@ export function validateChoiceResult(output: unknown, sets: ReadonlyMap<ClusterI
   for (const [index, rawChoice] of rawChoices.entries()) {
     const where = `choice response.choices[${index}]`;
     const raw = asRecord(rawChoice, where);
-    const clusterId = asString(raw['cluster_id'], `${where}.cluster_id`);
+    const clusterId = readClusterId(raw['cluster_id'], `${where}.cluster_id`);
 
     const members = sets.get(clusterId);
     if (members === undefined) fail(`${where}: cluster_id ${JSON.stringify(clusterId)} was not one of the sets shown`);

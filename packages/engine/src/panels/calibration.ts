@@ -27,17 +27,25 @@
  *
  * ## Known cost consequence
  *
- * The calibration block is NOT a shared prompt-cache breakpoint across
- * submissions. `categoryVersion` is part of the seed, and per `brief` Part 3 the
- * category snapshot version bumps on every placement and every nightly rebuild —
- * so the anchor is redrawn for each customer and the block never repeats between
- * them. That is the correct behaviour: an anchor frozen against a stale
- * population would calibrate a new product against a board that no longer
- * exists. But it means the added input tokens are paid on every submission
- * rather than amortized across a category, and anything downstream that plans
- * cache breakpoints (Task 5) must place them on the parts that genuinely repeat
- * — the juror mandate, the rubric — and not on this block. This is the same
- * shape of trade-off `DECISIONS.md` S10 records for the preview cache key.
+ * The calibration block never repeats ACROSS SUBMISSIONS. `categoryVersion` is
+ * part of the seed, and per `brief` Part 3 the category snapshot version bumps on
+ * every placement and every nightly rebuild — so the anchor is redrawn for each
+ * customer. That is the correct behaviour: an anchor frozen against a stale
+ * population would calibrate a new product against a board that no longer exists.
+ * But it means the added input tokens are paid on every submission rather than
+ * amortized across a category. This is the same shape of trade-off
+ * `DECISIONS.md` S10 records for the preview cache key.
+ *
+ * What the prompt layer does with that (`src/panels/prompts/score.ts`): the block
+ * sits INSIDE the cached prefix, but it is not what the breakpoint is for. Each
+ * scoring request places exactly one breakpoint, at the end of the stable prefix
+ * — method, rubric, calibration, product chunk — because those bytes are shared
+ * by the SIX JURORS OF ONE RUN, which is the repetition that actually exists. The
+ * juror mandate is the volatile tail and is deliberately left uncached. A second
+ * breakpoint covering only the method and rubric was considered and rejected: that
+ * prefix would very likely fall below Claude Haiku 4.5's minimum cacheable length
+ * and so would not cache at all, while still costing a write premium wherever it
+ * did. Nothing downstream should plan cost around a cross-submission hit here.
  *
  * Two properties are the whole point of the fix, and both are enforced here:
  *
@@ -64,13 +72,20 @@
  * scores it carries are the raw 0-100 numbers already computed and published.
  */
 
-import { createHash } from 'node:crypto';
-
 import { CALIBRATION_SAMPLE, SANITIZE_LIMIT } from '../config/constants.js';
 import { sanitize } from '../ingest/sanitize.js';
 import { partitionSizes } from '../rank/chunk.js';
 import { mean } from '../rank/stats.js';
 import type { Product, RankedProduct } from '../types.js';
+import { digest, mulberry32, requireSlug, seedFrom } from './seeded.js';
+
+/**
+ * Namespace for this module's seed. Keeps the sample selection from moving in
+ * step with the render order (`src/panels/ordering.ts`), which is drawn from the
+ * same `(slug, categoryVersion)` pair. The string is load-bearing: changing it
+ * redraws every calibration sample in existence.
+ */
+const CALIBRATION_SEED_NAMESPACE = 'calibration-seed';
 
 /**
  * One already-scored peer, as it is handed to the prompt layer.
@@ -122,62 +137,6 @@ interface Candidate extends CalibrationProduct {
    * an axis the prompt never shows.
    */
   meanScore: number;
-}
-
-/**
- * The category's stable identity for seeding, derived from its name: lowercased,
- * every run of non-alphanumeric characters folded to a single `-`, trimmed.
- * "Health, Fitness & Wellness" -> "health-fitness-wellness".
- *
- * Seeding on a slug rather than on the display string means re-casing or
- * re-punctuating a category's name does not silently reshuffle its calibration
- * sample.
- *
- * A name with no alphanumeric characters at all slugs to `''`. That is refused
- * by the caller rather than tolerated: an empty slug would give two distinct
- * categories the same seed AND the same slug component of the version digest,
- * which is the same collide-two-different-states bug the empty-`categoryVersion`
- * guard exists to prevent.
- */
-function categorySlug(category: string): string {
-  return category
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, '-')
-    .replace(/^-+|-+$/gu, '');
-}
-
-/** SHA-256 of `text`, hex. Used for both the seed and `calibration_version`. */
-function digest(text: string): string {
-  return createHash('sha256').update(text, 'utf8').digest('hex');
-}
-
-/**
- * A 32-bit seed derived from the category slug and version. Deterministic across
- * processes, machines and Node versions: SHA-256 is specified byte for byte, and
- * the first four bytes of it are as good a seed as any other four.
- */
-function seedFrom(slug: string, categoryVersion: string): number {
-  return Number.parseInt(digest(JSON.stringify(['calibration-seed', slug, categoryVersion])).slice(0, 8), 16) >>> 0;
-}
-
-/**
- * mulberry32, returning raw uint32 values rather than the usual float in [0, 1).
- *
- * A named, published, fully specified integer PRNG: given the same seed it
- * produces the same stream everywhere, which is the entire requirement here.
- * Integer output keeps the draw free of any floating-point rounding question —
- * the only operation performed on a draw is `% strataSize`, over strata that are
- * a handful of products wide, so the modulo bias is far below the point where it
- * could distort a spread of fifteen.
- */
-function mulberry32(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let t = Math.imul(state ^ (state >>> 15), 1 | state);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return (t ^ (t >>> 14)) >>> 0;
-  };
 }
 
 /**
@@ -234,24 +193,20 @@ export function selectCalibrationSample(
   categoryVersion: string,
   sampleSize: number = CALIBRATION_SAMPLE,
 ): CalibrationSample {
-  if (typeof categoryVersion !== 'string' || categoryVersion === '') {
-    throw new RangeError('selectCalibrationSample: categoryVersion must be a non-empty string');
-  }
   if (!Number.isInteger(sampleSize) || sampleSize < 1) {
     throw new RangeError(`selectCalibrationSample: sampleSize must be a positive integer, got ${sampleSize}`);
   }
 
-  const slug = categorySlug(rankings.category);
-  if (slug === '') {
-    throw new RangeError(
-      `selectCalibrationSample: category must contain at least one alphanumeric character, got ${JSON.stringify(rankings.category)}`,
-    );
-  }
+  // Both degenerate inputs — an empty version, or a name that slugs to `''` —
+  // would collide two different states onto one seed and one version digest.
+  const slug = requireSlug('selectCalibrationSample', rankings.category, categoryVersion);
 
   const candidates = collectCandidates(products, rankings.ranking);
 
   const selected =
-    candidates.length <= sampleSize ? candidates : pickAcrossStrata(candidates, sampleSize, seedFrom(slug, categoryVersion));
+    candidates.length <= sampleSize
+      ? candidates
+      : pickAcrossStrata(candidates, sampleSize, seedFrom(CALIBRATION_SEED_NAMESPACE, slug, categoryVersion));
 
   const sample: CalibrationProduct[] = selected.map(({ id, name, description, scores }) => ({
     id,

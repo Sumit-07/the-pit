@@ -50,18 +50,34 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { MAX_TOKENS_SCORE, MODEL_JUROR } from '../../config/constants.js';
 import type { ModelRequest } from '../../model/types.js';
 import type { JurorMandate, Product, RubricMetric } from '../../types.js';
-import type { CalibrationSample } from '../calibration.js';
+import type { CalibrationProduct, CalibrationSample } from '../calibration.js';
 import { SCORE_SCHEMA, SCORE_TOOL_NAME } from '../schemas.js';
-import { dataBlock, dataField, dataValue, UNTRUSTED_DATA_RULE } from './data-block.js';
+import { dataBlock, dataField, dataValue, UNTRUSTED_DATA_RULE } from '../data-block.js';
+import type { PanelOrdering } from '../ordering.js';
+import { panelOrder } from '../ordering.js';
 
 /** What one scoring call needs. */
 export interface ScoreRequestInput {
   /** The rubric, in order, with all four anchors per metric (`01 §4` Step 2). */
   metrics: readonly RubricMetric[];
-  /** The products this call scores — one chunk (`01 §5.1`, `brief §1.4`). */
+  /**
+   * The products this call scores — one chunk (`01 §5.1`, `brief §1.4`).
+   *
+   * Task 7 must produce this chunk with `orderedChunks`, not `chunkItems`: in id
+   * order a chunk is a rank-contiguous band of the incoming leaderboard, and the
+   * comparative scoring in `01 §5.1` then calibrates each band against a
+   * different field. See `src/panels/ordering.ts`.
+   */
   products: readonly Product[];
   /** The juror whose mandate this call runs under. */
   juror: JurorMandate;
+  /**
+   * Pins the render order. Required, not optional: `Product.id` is the incoming
+   * leaderboard position (`src/panels/ordering.ts`), so a builder with no
+   * ordering context could only render the leaderboard, which Global Constraint 1
+   * forbids a model from seeing.
+   */
+  ordering: PanelOrdering;
   /**
    * Already-scored peers shown as reference on the incremental path
    * (`brief §1.1`). Omit on a full-category run, where the chunk itself is the
@@ -152,8 +168,8 @@ function renderRubric(metrics: readonly RubricMetric[]): string {
  * that re-scores an anchor injects fabricated scores into the very population the
  * paying customer is placed against.
  */
-function renderCalibration(sample: CalibrationSample): string {
-  const lines = sample.sample.flatMap((peer) => [
+function renderCalibration(peers: readonly CalibrationProduct[], calibrationVersion: string): string {
+  const lines = peers.flatMap((peer) => [
     `[id ${peer.id}] ALREADY SCORED — REFERENCE ONLY`,
     `  ${dataField('name', peer.name)}`,
     `  ${dataField('description', peer.description)}`,
@@ -173,7 +189,7 @@ function renderCalibration(sample: CalibrationSample): string {
     '  not out-score it on that metric, and a clearly better one should out-score it.',
     '- Your answer must contain exactly the ids listed under PRODUCTS TO SCORE, and no others.',
     '',
-    `Calibration set version: ${sample.calibration_version}`,
+    `Calibration set version: ${calibrationVersion}`,
     '',
     dataBlock(lines),
   ].join('\n');
@@ -254,10 +270,20 @@ export function buildScoreRequest(input: ScoreRequestInput): ModelRequest {
   // the block entirely rather than emitting an empty one: an empty "calibration"
   // heading tells a juror it has peers when it has none.
   if (input.calibration !== undefined && input.calibration.sample.length > 0) {
-    system.push({ type: 'text', text: renderCalibration(input.calibration) });
+    // The peers are the one list here that is deliberately NOT reordered. They
+    // arrive from `selectCalibrationSample` by mean published score, descending,
+    // which `test/panels/calibration.test.ts` pins on purpose "so the prompt reads
+    // as a scale" — and unlike the product list, their scores are printed beside
+    // them, so the ordering discloses nothing a juror is not already being shown.
+    // The ordering signal that had to go is the one over UNSCORED products, where
+    // position is the only merit information in the block.
+    system.push({
+      type: 'text',
+      text: renderCalibration(input.calibration.sample, input.calibration.calibration_version),
+    });
   }
 
-  system.push({ type: 'text', text: renderProducts(input.products) });
+  system.push({ type: 'text', text: renderProducts(panelOrder(input.products, input.ordering)) });
 
   return {
     model: MODEL_JUROR,

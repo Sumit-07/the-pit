@@ -35,7 +35,9 @@ import { MAX_TOKENS_UNIQUENESS, MODEL_CLUSTER } from '../../config/constants.js'
 import type { Effort, ModelRequest } from '../../model/types.js';
 import type { Product } from '../../types.js';
 import { UNIQ_SCHEMA, UNIQ_TOOL_NAME } from '../schemas.js';
-import { dataBlock, dataField, UNTRUSTED_DATA_RULE } from './data-block.js';
+import { dataBlock, dataField, UNTRUSTED_DATA_RULE } from '../data-block.js';
+import type { PanelOrdering } from '../ordering.js';
+import { panelOrder } from '../ordering.js';
 
 /** `01 §5.2`: **Effort: `medium`**. Honoured — this pass runs on `claude-sonnet-5`, which supports it. */
 const UNIQUENESS_EFFORT: Effort = 'medium';
@@ -119,14 +121,19 @@ function renderProducts(products: readonly Product[]): string {
 /**
  * Build the single clustering / scarcity call.
  *
+ * Products are rendered in `panelOrder`, not id order: id order is the incoming
+ * leaderboard (`src/panels/ordering.ts`), and a clustering pass shown that order
+ * would be handed a merit signal it is explicitly told not to use — `01 §5.2`
+ * asks for scarcity, "not quality".
+ *
  * @throws RangeError when there is nothing to cluster.
  */
-export function buildUniquenessRequest(products: readonly Product[]): ModelRequest {
+export function buildUniquenessRequest(products: readonly Product[], ordering: PanelOrdering): ModelRequest {
   if (products.length === 0) throw new RangeError('buildUniquenessRequest: no products to cluster');
 
   const system: Anthropic.TextBlockParam[] = [
     { type: 'text', text: UNIQUENESS_TASK },
-    { type: 'text', text: renderProducts(products) },
+    { type: 'text', text: renderProducts(panelOrder(products, ordering)) },
   ];
 
   return {

@@ -65,6 +65,16 @@ export const SANITIZE_LIMIT = 300;
 /** Taglines sampled for a jury/persona generation prompt. Source: `01 §7.1` (generate_*.py, k=15). */
 export const TAGLINE_SAMPLE = 15;
 
+/**
+ * Label truncation length, in characters. Source: `01 §8`, which gives it in the
+ * same sentence as `SANITIZE_LIMIT`: "truncates (product text 300; labels 60;
+ * anchors 160; etc.)".
+ *
+ * Applied to cluster labels and cluster ids — model-produced text derived from
+ * untrusted product copy, which is fed back into the customer-demand prompt.
+ */
+export const LABEL_LIMIT = 60;
+
 // --- Panels -------------------------------------------------------------------
 
 /** Max products per scoring call; a juror makes `ceil(n / CHUNK_SIZE)` calls. Source: `01 §7.2` (cfg.chunkSize). */

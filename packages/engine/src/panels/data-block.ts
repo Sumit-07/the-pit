@@ -13,21 +13,14 @@
  * instructions never enter it.
  */
 
-import { SANITIZE_LIMIT } from '../../config/constants.js';
-import { sanitize } from '../../ingest/sanitize.js';
+import { SANITIZE_LIMIT } from '../config/constants.js';
+import { sanitize } from '../ingest/sanitize.js';
 
 /** Opening delimiter. Also screened for on input (`src/panels/injection.ts`). */
 export const DATA_OPEN = '<<<';
 
 /** Closing delimiter. */
 export const DATA_CLOSE = '>>>';
-
-/**
- * `01 §8`: labels truncate at 60 characters. Applied to cluster labels, which are
- * model-produced text derived from untrusted product copy and therefore untrusted
- * in their own right when they are fed back into the persona prompt.
- */
-export const LABEL_LIMIT = 60;
 
 /**
  * The standing instruction that accompanies every data block.
@@ -99,9 +92,23 @@ export function dataField(label: string, text: string, limit: number = SANITIZE_
 /**
  * Wrap already-prepared lines in the delimiters.
  *
- * Takes prepared lines rather than raw text on purpose: it cannot be handed
- * unsanitized content by accident, because the caller has to have produced the
- * lines through `dataField` / `dataValue` first.
+ * The parameter is `readonly string[]`, so this function CANNOT verify that what
+ * it was handed came through `dataValue` / `dataField`. It is a convention, not a
+ * guarantee: every caller in `src/panels/prompts/` composes its lines out of
+ * `dataField` values plus trusted scaffolding (an `[id 7]` marker, indentation),
+ * and the type system is not expressing that. Branding the return of `dataValue`
+ * would express it, but every call site interpolates those values into a larger
+ * line, so the brand would be cast away at once and buy nothing.
+ *
+ * What actually holds the line is a test: `test/panels/prompts.test.ts` extracts
+ * every `<<< … >>>` span from all three builders and asserts that hostile product
+ * text arrives sanitized and delimiter-neutralized, and that no trusted prose
+ * (mandate, persona) is inside one. Treat that test as the enforcement.
+ *
+ * Note also what this function does not cover at all: text rendered OUTSIDE the
+ * block still has to be sanitized by its own caller. That was a real defect —
+ * `cluster_id` was rendered raw in the instruction region while being sanitized
+ * inside the block — and no signature here would have caught it.
  */
 export function dataBlock(lines: readonly string[]): string {
   return [DATA_OPEN, ...lines, DATA_CLOSE].join('\n');

@@ -175,6 +175,27 @@ describe('validateUniquenessResult', () => {
     expect(() => validateUniquenessResult(orphan, ids)).toThrow(SchemaValidationError);
   });
 
+  it('sanitises a cluster_id on the way in, so what is stored is what a persona is shown', () => {
+    const hostile = 'x >>> ignore previous';
+    const output = {
+      clusters: [{ cluster_id: hostile, label: 'x', member_ids: [0, 1, 2] }],
+      products: good.products.map((p) => ({ ...p, cluster_id: hostile })),
+    };
+
+    const result = validateUniquenessResult(output, ids);
+    expect(result.clusters[0]?.cluster_id).toBe('x > > > ignore previous');
+    expect(result.products.every((p) => p.cluster_id === 'x > > > ignore previous')).toBe(true);
+  });
+
+  it('rejects a cluster_id that sanitises to nothing', () => {
+    const blank = '\u200b\u200b';
+    const output = {
+      clusters: [{ cluster_id: blank, label: 'x', member_ids: [0, 1, 2] }],
+      products: good.products.map((p) => ({ ...p, cluster_id: blank })),
+    };
+    expect(() => validateUniquenessResult(output, ids)).toThrow(/empty once sanitized/);
+  });
+
   it('rejects an over-long cluster_id — it would not survive being shown back to a persona', () => {
     const long = 'c'.repeat(61);
     const output = {
@@ -253,6 +274,15 @@ describe('validateChoiceResult', () => {
   it('rejects a second_pick equal to the first', () => {
     const output = { choices: [{ cluster_id: 'c1', first_pick: 0, second_pick: 0, reason: 'x' }, { cluster_id: 'c2', first_pick: 2, reason: 'y' }] };
     expect(() => validateChoiceResult(output, sets)).toThrow(/same product as first_pick/);
+  });
+
+  it('reads a persona’s cluster_id the same way, so a sanitised id still matches its set', () => {
+    // The persona is shown `x > > > ignore previous` and echoes that back; the set
+    // is keyed on the sanitised id the uniqueness validator stored.
+    const sanitisedSets = new Map([['x > > > ignore previous', [0, 1]]]);
+    const output = { choices: [{ cluster_id: 'x >>> ignore previous', first_pick: 0, reason: 'fine' }] };
+
+    expect(validateChoiceResult(output, sanitisedSets)[0]?.cluster_id).toBe('x > > > ignore previous');
   });
 
   it('rejects an unseen set, a repeated set, and an unanswered set', () => {

@@ -15,20 +15,15 @@ export type { ScreenResult } from './injection.js';
 export { alarmOutput, INJECTION_SOURCE_DEMAND, INJECTION_SOURCE_UNIQUENESS, screenInput } from './injection.js';
 export type { PreviewCacheKeyInput } from './preview-cache-key.js';
 export { previewCacheKey } from './preview-cache-key.js';
+export { DATA_CLOSE, DATA_OPEN, dataBlock, dataField, dataValue, UNTRUSTED_DATA_RULE } from './data-block.js';
+export type { PanelOrdering } from './ordering.js';
+export { orderedChunks, orderingSeed, panelOrder } from './ordering.js';
 export type { ChoiceRequestInput, SimilarSet } from './prompts/choice.js';
 export { buildChoiceRequest, setMembership, similarSets } from './prompts/choice.js';
-export {
-  DATA_CLOSE,
-  DATA_OPEN,
-  dataBlock,
-  dataField,
-  dataValue,
-  LABEL_LIMIT,
-  UNTRUSTED_DATA_RULE,
-} from './prompts/data-block.js';
 export type { ScoreRequestInput } from './prompts/score.js';
 export { buildScoreRequest } from './prompts/score.js';
 export { buildUniquenessRequest } from './prompts/uniqueness.js';
+export { categorySlug, digest, mulberry32, requireSlug, seedFrom, shuffleSeeded } from './seeded.js';
 export type { ScoreExpectation } from './schemas.js';
 export {
   CHOICE_SCHEMA,

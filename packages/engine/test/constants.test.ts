@@ -27,6 +27,11 @@ const FROZEN = {
   MIN_PRODUCTS: 8,
   SANITIZE_LIMIT: 300,
   TAGLINE_SAMPLE: 15,
+  // Added by Task 5 review round 1. `01 §8` lists it in the same sentence as
+  // SANITIZE_LIMIT ("product text 300; labels 60"); it was briefly in the prompt
+  // layer, which forced the schema layer to import from the prompt layer to reach
+  // it. It is a sanitization limit and belongs beside its sibling.
+  LABEL_LIMIT: 60,
   CHUNK_SIZE: 40,
   JUROR_COUNT: 6,
   CALIBRATION_SAMPLE: 15,

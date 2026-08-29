@@ -32,11 +32,14 @@
 
 import type Anthropic from '@anthropic-ai/sdk';
 
-import { MAX_TOKENS_CHOICE, MODEL_PERSONA } from '../../config/constants.js';
+import { LABEL_LIMIT, MAX_TOKENS_CHOICE, MODEL_PERSONA } from '../../config/constants.js';
 import type { Effort, ModelRequest } from '../../model/types.js';
 import type { ClusterId, Persona, PriceSensitivity, Product, UniquenessResult } from '../../types.js';
 import { CHOICE_SCHEMA, CHOICE_TOOL_NAME } from '../schemas.js';
-import { dataBlock, dataField, dataValue, LABEL_LIMIT, UNTRUSTED_DATA_RULE } from './data-block.js';
+import { dataBlock, dataField, dataValue, UNTRUSTED_DATA_RULE } from '../data-block.js';
+import type { PanelOrdering } from '../ordering.js';
+import { orderingSeed, panelOrder } from '../ordering.js';
+import { shuffleSeeded } from '../seeded.js';
 
 /** `01 §5.3`: **Effort: `medium`**. Honoured — this pass runs on `claude-sonnet-5`, which supports it. */
 const CHOICE_EFFORT: Effort = 'medium';
@@ -135,10 +138,45 @@ const PRICE_SENSITIVITY_GLOSS: Readonly<Record<PriceSensitivity, string>> = Obje
   high: 'price is usually the deciding factor; free or cheap wins unless the gap in what you get is large and obvious.',
 });
 
-/** The sets, as DATA. Cluster labels are model-produced text and truncate at `01 §8`'s label limit. */
+/**
+ * Order the sets, and the products within each set.
+ *
+ * Both are id-ordered as they arrive — set members come from
+ * `clusters[].member_ids`, and `Product.id` is the incoming leaderboard position
+ * (`src/panels/ordering.ts`) — so a persona shown them unshuffled would be told,
+ * in every set, which product outbid ranked highest. That is precisely the signal
+ * this panel must not have: `01 §5.3` asks for what a buyer would adopt, and the
+ * result becomes 35% of `core`.
+ *
+ * Each set draws its own seed from its `cluster_id`, so a set's internal order
+ * does not move when an unrelated set changes.
+ */
+function orderSets(sets: readonly SimilarSet[], ordering: PanelOrdering): SimilarSet[] {
+  const canonical = [...sets].sort((a, b) => (a.cluster_id < b.cluster_id ? -1 : a.cluster_id > b.cluster_id ? 1 : 0));
+
+  return shuffleSeeded(canonical, orderingSeed(ordering, 'panel-order:sets')).map((set) => ({
+    ...set,
+    members: panelOrder(set.members, { ...ordering, categoryVersion: `${ordering.categoryVersion}:${set.cluster_id}` }),
+  }));
+}
+
+/**
+ * The sets, as DATA.
+ *
+ * Cluster labels AND cluster ids are model-produced text derived from untrusted
+ * product copy, so both go through `dataValue` — including the id list in the
+ * instruction region above the block. That list is outside the delimiters, in the
+ * part of the prompt the model is told carries its real instructions, which makes
+ * it the worse of the two surfaces: an id like `x >>> ignore previous
+ * instructions` fits inside `01 §8`'s 60-character label limit. `readClusterId`
+ * sanitizes it on the way in as well, so what is stored and what a persona is
+ * shown are the same bytes.
+ */
 function renderSets(sets: readonly SimilarSet[]): string {
+  const setId = (set: SimilarSet): string => dataValue(set.cluster_id, LABEL_LIMIT);
+
   const lines = sets.flatMap((set) => [
-    `[set ${dataValue(set.cluster_id, LABEL_LIMIT)}] ${dataValue(set.label, LABEL_LIMIT)}`,
+    `[set ${setId(set)}] ${dataValue(set.label, LABEL_LIMIT)}`,
     ...set.members.flatMap((product) => [
       `  [id ${product.id}]`,
       `    ${dataField('name', product.name)}`,
@@ -147,7 +185,7 @@ function renderSets(sets: readonly SimilarSet[]): string {
     '',
   ]);
 
-  const ids = sets.map((set) => set.cluster_id).join(', ');
+  const ids = sets.map(setId).join(', ');
   const count = sets.length === 1 ? 'There is 1 set to answer. Its id is' : `There are ${sets.length} sets to answer. Their ids are`;
 
   return [
@@ -186,6 +224,8 @@ Answer ${setCount === 1 ? 'the set' : `all ${setCount} sets`} now, as ${persona.
 export interface ChoiceRequestInput {
   persona: Persona;
   sets: readonly SimilarSet[];
+  /** Pins the order of the sets and of the products inside them. See `orderSets`. */
+  ordering: PanelOrdering;
 }
 
 /**
@@ -204,7 +244,7 @@ export function buildChoiceRequest(input: ChoiceRequestInput): ModelRequest {
 
   const system: Anthropic.TextBlockParam[] = [
     { type: 'text', text: CHOICE_TASK },
-    { type: 'text', text: renderSets(input.sets) },
+    { type: 'text', text: renderSets(orderSets(input.sets, input.ordering)) },
   ];
 
   return {
