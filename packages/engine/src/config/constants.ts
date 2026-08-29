@@ -92,8 +92,8 @@ export const PERSONAS_MAX = 8;
 export const PERSONAS_TARGET = 6;
 
 // --- Model tiers --------------------------------------------------------------
-// Logical tier names, not API model ids. Task 5 resolves these through a map so
-// the ids stay configurable (`docs/plans/phase-1-engine.md` Task 5).
+// Logical tier names, not API model ids. `src/model/model-ids.ts` resolves these
+// through a map so the ids stay configurable (`docs/plans/phase-1-engine.md` Task 5).
 
 /** Model tier for the merit jurors. Source: `01 §7.2` (cfg.model). */
 export const MODEL_JUROR = 'haiku';
@@ -103,3 +103,51 @@ export const MODEL_CLUSTER = 'sonnet';
 
 /** Model tier for the customer-demand personas. Source: `01 §7.2` (cfg.personaModel). */
 export const MODEL_PERSONA = 'sonnet';
+
+// --- Model ids ----------------------------------------------------------------
+// The Messages API ids the tier aliases above resolve to. Added by Task 5.
+//
+// These are values the API validates, not numbers that shape a rank, but they
+// live here for the same reason every other constant does (Global Constraint 4):
+// a wrong id at a use site is a silent 404 on a paid run, and the audit test
+// below is the only place the ids are read by a human.
+//
+// NEVER append a date suffix: the ids below are complete as written. Source:
+// `docs/plans/phase-1-engine.md` Task 5 brief, checked against the current
+// Anthropic model table (Claude Haiku 4.5, Claude Sonnet 5).
+
+/** API id for the `MODEL_JUROR` tier. */
+export const MODEL_ID_HAIKU = 'claude-haiku-4-5';
+
+/** API id for the `MODEL_CLUSTER` / `MODEL_PERSONA` tier. */
+export const MODEL_ID_SONNET = 'claude-sonnet-5';
+
+// --- Output budgets -----------------------------------------------------------
+// `max_tokens` is required on every Messages API call and truncates the response
+// mid-JSON when it is hit, which surfaces as a malformed panel result rather than
+// as an error. Each budget below is derived from the worst case that panel can
+// legitimately produce, then rounded up. They are ceilings, not targets: a call
+// that returns less is billed for less.
+
+/**
+ * One juror, one chunk. Worst case is `CHUNK_SIZE` products x `METRICS_MAX`
+ * metrics, each metric carrying a handful of deductions whose reasons run to the
+ * `01 §5.1` limit of 20 words (~30 tokens plus ~15 of JSON framing). At ~110
+ * tokens per scored metric that is ~700 tokens per product and ~28k for a full
+ * 40-product chunk; 32000 leaves headroom for a wordier juror.
+ */
+export const MAX_TOKENS_SCORE = 32000;
+
+/**
+ * The single clustering call. It emits one row per product (score, cluster id and
+ * a <=20-word reason, ~60 tokens) plus one row per cluster (label and member ids),
+ * over a whole category rather than a chunk.
+ */
+export const MAX_TOKENS_UNIQUENESS = 8000;
+
+/**
+ * One persona over every similar-app set. There are at most `n / 2` sets with
+ * >= 2 members (`01 §5.3`), each answered with two ids, a strength and a
+ * <=20-word reason.
+ */
+export const MAX_TOKENS_CHOICE = 4000;

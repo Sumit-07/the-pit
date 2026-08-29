@@ -38,6 +38,18 @@ const FROZEN = {
   MODEL_JUROR: 'haiku',
   MODEL_CLUSTER: 'sonnet',
   MODEL_PERSONA: 'sonnet',
+  // Added by Task 5. The plan's frozen table names the tier aliases but not the
+  // API ids they resolve to, and Task 5's brief pins the ids: `"haiku"` ->
+  // `claude-haiku-4-5`, `"sonnet"` -> `claude-sonnet-5`, never date-suffixed.
+  // Asserted here because a wrong id is a silent failure on a paid run.
+  MODEL_ID_HAIKU: 'claude-haiku-4-5',
+  MODEL_ID_SONNET: 'claude-sonnet-5',
+  // Added by Task 5. `max_tokens` is required on every Messages API call and a
+  // lowballed value truncates a panel response mid-JSON, which arrives as a
+  // malformed result rather than an error. Derivations are in `constants.ts`.
+  MAX_TOKENS_SCORE: 32000,
+  MAX_TOKENS_UNIQUENESS: 8000,
+  MAX_TOKENS_CHOICE: 4000,
 } as const;
 
 describe('frozen constants', () => {
