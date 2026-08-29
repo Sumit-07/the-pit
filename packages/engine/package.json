@@ -17,7 +17,11 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@types/node": "^22",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0"
   }
 }

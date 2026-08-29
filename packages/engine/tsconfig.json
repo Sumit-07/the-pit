@@ -9,6 +9,9 @@
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
     "isolatedModules": true,
+    // `exceljs` is CommonJS with no named ESM exports, so Node resolves it
+    // through the default import. This lets the type checker agree.
+    "esModuleInterop": true,
     "verbatimModuleSyntax": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,

@@ -32,8 +32,25 @@ export interface Product {
   id: number;
   name: string;
   description: string;
+  /** The sheet's `Website URL`, trimmed but otherwise verbatim. */
   url: string;
+  /**
+   * `url` reduced to its identity by `normalizeUrl` (`brief §2.5`): the key the
+   * per-product submission cap is meant to hang off. Shortener resolution, the
+   * one §2.5 rule not applied here, is out of scope for Phase 1
+   * (`docs/plans/phase-1-engine.md` Task 2) and deferred to Phase 3.
+   */
+  normalized_url: string;
   orig_rank: number;
+}
+
+/**
+ * Every usable product in one category — the `products.json` artifact of
+ * `01 §4` Step 1, and the input Task 7's pipeline is handed.
+ */
+export interface ProductSet {
+  category: string;
+  products: Product[];
 }
 
 // --- Merit jury output (`SCORE_SCHEMA`, `01 §5.1`) -----------------------------
