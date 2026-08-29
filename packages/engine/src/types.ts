@@ -81,6 +81,39 @@ export interface ScoreRow {
   metrics: MetricScore[];
 }
 
+/**
+ * One juror's whole contribution to the score log — the attribution `ScoreRow`
+ * deliberately does not carry. Source: `01 §4` Step 5 (`results.json.scoreLog`).
+ *
+ * This shape is load-bearing for `01 §6.1`: the merit composite z-normalizes
+ * **per juror per metric across products**, so a flat unattributed list of
+ * `ScoreRow`s cannot express the input. A juror chunked over `CHUNK_SIZE`
+ * products makes several calls (`01 §5.1`); the ranking math merges every entry
+ * sharing a `juror_role` back into one juror before normalizing, because a
+ * z-score taken within a chunk would not be a z-score across products.
+ */
+export interface ScoreLogEntry {
+  /** Matches `JurorWeights.role` on the installed jury. */
+  juror_role: string;
+  prompt_version: string;
+  scores: ScoreRow[];
+}
+
+/**
+ * The slice of an installed juror mandate the ranking math reads: its role and
+ * its per-metric weight vector. Source: `01 §4` Step 2 (`validate_jury`) — the
+ * weights object is keyed by exactly the rubric's metric names, every value a
+ * number >= 0, sum > 0.
+ *
+ * The full mandate (`who`, `cares_most`, `biased_against`, `voice`) belongs to
+ * jury generation and is structurally assignable to this. Nothing in `src/rank/`
+ * reads a mandate's prose, so nothing here depends on that shape.
+ */
+export interface JurorWeights {
+  role: string;
+  weights: Record<string, number>;
+}
+
 // --- Uniqueness / clustering output (`UNIQ_SCHEMA`, `01 §5.2`) -----------------
 
 /** A group of products whose core idea is essentially the same. Source: `01 §5.2`. */
@@ -122,6 +155,19 @@ export interface DemandChoice {
   strength?: number;
   reason: string;
   none?: boolean;
+}
+
+/**
+ * One persona's whole contribution to the demand log — every set it was asked
+ * about, in one entry. Source: `01 §4` Step 5 (`results.json.demand.demandLog`).
+ *
+ * `P` in `01 §6.2` is the length of this list: the number of personas that
+ * returned choices, which is the denominator of `capture`.
+ */
+export interface DemandLogEntry {
+  /** Matches `Persona.name`. */
+  persona: string;
+  choices: DemandChoice[];
 }
 
 // --- Panels -------------------------------------------------------------------
@@ -181,7 +227,15 @@ export interface ScorecardEntry {
   deductions: ScorecardDeduction[];
 }
 
-/** The cluster a ranked product sits in, as embedded in its row. Source: `01 §6.6`. */
+/**
+ * The cluster a ranked product sits in, as embedded in its row. Source: `01 §6.6`.
+ *
+ * NOTE: this is a DIFFERENT object from `ClusterSummary`, not a duplicate of it.
+ * `ClusterSummary` is the category-level roster in `ranking.clusters`; this is
+ * the per-row view, which additionally carries that product's own `uniqueness`
+ * and `reason`. `01 §6.6` names the identifier `id` here and `cluster_id` there;
+ * the asymmetry is verbatim from the schema and is deliberate, not an oversight.
+ */
 export interface RankedProductCluster {
   id: ClusterId;
   label: string;
@@ -189,6 +243,18 @@ export interface RankedProductCluster {
   uniqueness: number;
   reason: string;
 }
+
+/**
+ * Whether a product's `core` carries a demand signal.
+ *
+ * - `scored` — the product has an entry in `demand_raw`, so
+ *   `core = MERIT_W * z_merit + DEMAND_W * z_demand`.
+ * - `solo_cluster` — the product has no entry (a cluster of one, or a cluster the
+ *   customer panel skipped), so `core = z_merit` at full weight per
+ *   `DECISIONS.md S3`. Per `DECISIONS.md S11` this is a successful delivery, not
+ *   a partial failure, and the pipeline and verdict page must be able to say so.
+ */
+export type DemandStatus = 'scored' | 'solo_cluster';
 
 /**
  * One row of `ranking.ranking`. Source: `01 §6.6`.
@@ -204,6 +270,13 @@ export interface RankedProduct {
   composite: number;
   /** Reduced `demand_raw`. */
   demand?: number;
+  /**
+   * Whether `core` carries a demand term. Set on every row, and the only field
+   * that distinguishes "the Floor found nobody wanted this" (`scored`, with a
+   * low `demand`) from "the Floor never convened" (`solo_cluster`, no `demand`).
+   * Source: `DECISIONS.md` S3 and S11.
+   */
+  demand_status: DemandStatus;
   /** The blended score the row is ranked by. */
   core: number;
   /** True when demand + uniqueness moved the row off its pure-merit position. */
