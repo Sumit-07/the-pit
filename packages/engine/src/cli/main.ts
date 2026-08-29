@@ -2,9 +2,9 @@
 /**
  * `pnpm engine <command>` — the engine's command line.
  *
- * One command so far (`seed`). Tasks 8 and 9 add `report`, `rank`, and `seed`'s
- * `--emit` / `--ingest` rounds, which is why the dispatch is a table rather than
- * an `if`: a new command is a row here and a module beside `seed.ts`.
+ * Five commands: `panel` (the two approval gates), `seed` (with an API key, or
+ * through Task 9's file handoff with none), `rank`, `ab` and `report`. The dispatch is a table rather than an `if`
+ * so a new command is a row here and a module beside `seed.ts`.
  *
  * `main` takes an argv and returns an exit code, and does no process I/O of its
  * own beyond the injected `log`. The bottom of the file is the only place that
@@ -15,17 +15,25 @@ import { pathToFileURL } from 'node:url';
 
 import { abCommand, AB_USAGE } from './ab.js';
 import { parseArgs, UsageError } from './args.js';
+import { panelCommand, PANEL_USAGE } from './panel.js';
+import { rankCommand, RANK_USAGE } from './rank.js';
 import { reportCommand, REPORT_USAGE } from './report.js';
 import { makeAnthropicClient, SEED_USAGE, seedCommand } from './seed.js';
 
 const USAGE = `the-pit engine
 
 Commands:
-  seed     score a category (01 §4 Steps 4-6)
+  panel    print / install the jury and customer panel (01 §4 Steps 2-3, the approval gates)
+  seed     score a category (01 §4 Steps 4-6), with or without an API key
+  rank     recompute ranking.json from results.json (01 §6; spends nothing)
   ab       produce the fix-1.1 A/B and test-retest evidence (SPENDS)
   report   render the Phase 1 report (spends nothing, needs no API key)
 
+${PANEL_USAGE}
+
 ${SEED_USAGE}
+
+${RANK_USAGE}
 
 ${AB_USAGE}
 
@@ -41,8 +49,12 @@ export async function main(argv: readonly string[], log: (line: string) => void 
   try {
     const args = parseArgs(argv);
     switch (args.command) {
+      case 'panel':
+        return await panelCommand(args, { log });
       case 'seed':
         return await seedCommand(args, { log, makeClient: makeAnthropicClient });
+      case 'rank':
+        return await rankCommand(args, { log });
       case 'ab':
         return await abCommand(args, { log, makeClient: makeAnthropicClient });
       case 'report':

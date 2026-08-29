@@ -63,6 +63,7 @@ import type {
   RunMeta,
   RunOutcome,
   RunResults,
+  RunSeeding,
   ScoreCoverage,
   ScorePhaseValue,
   UniquenessPhaseValue,
@@ -89,6 +90,15 @@ export interface RunConfig {
   resume?: boolean;
   /** Peers embedded as pre-scored reference. Only the incremental path sets this. */
   calibration?: CalibrationSample;
+  /**
+   * How this run's votes are being produced. Set by the locally-seeded path
+   * (Task 9's `HandoffClient`); omitted on the Messages API path, where a run
+   * with no stamp is the priced path by construction.
+   *
+   * Stamped into `meta.seeding` AND repeated at the head of `meta.warnings`, so
+   * the caveat reaches the report, which carries warnings through verbatim.
+   */
+  seeding?: RunSeeding;
 }
 
 export interface RunCategoryInput {
@@ -412,6 +422,9 @@ function assembleResults(input: AssembleInput): RunResults {
       (input.score.status === 'failed' ? input.score.failure.coverage : undefined) ??
       emptyCoverage(input.jury.jurors.length),
     warnings: [
+      // First, deliberately. A reader who stops after one line should have read
+      // the one that says these numbers did not come from the priced path.
+      ...(input.config.seeding === undefined ? [] : [input.config.seeding.caveat]),
       ...input.extraWarnings,
       ...input.score.warnings,
       ...input.uniqueness.warnings,
@@ -419,6 +432,7 @@ function assembleResults(input: AssembleInput): RunResults {
       ...unpricedWarning(buildLedger(costs).total.unpriced_models),
     ],
     engine_version: ENGINE_VERSION,
+    ...(input.config.seeding === undefined ? {} : { seeding: input.config.seeding }),
   };
 
   return {

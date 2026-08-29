@@ -49,6 +49,10 @@ const FROZEN = {
   // Asserted here because a wrong id is a silent failure on a paid run.
   MODEL_ID_HAIKU: 'claude-haiku-4-5',
   MODEL_ID_SONNET: 'claude-sonnet-5',
+  // Added by Task 9. Not an API id: a locally-seeded run's answers come from
+  // Claude Code subagents, and this id is deliberately absent from MODEL_PRICES
+  // so `costBasis` reads `unmeasured` rather than booking $0.00 as a fact.
+  MODEL_ID_LOCAL_SUBAGENT: 'local-claude-code-subagent',
   // Added by Task 5. `max_tokens` is required on every Messages API call and a
   // lowballed value truncates a panel response mid-JSON, which arrives as a
   // malformed result rather than an error. Derivations are in `constants.ts`.

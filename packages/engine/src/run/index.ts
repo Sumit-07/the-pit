@@ -57,6 +57,7 @@ export type {
   RunMeta,
   RunOutcome,
   RunResults,
+  RunSeeding,
   ScoreCoverage,
   ScorePhaseValue,
   SkipReason,

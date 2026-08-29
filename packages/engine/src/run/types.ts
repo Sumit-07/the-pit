@@ -288,6 +288,24 @@ export interface RunDemand {
   demand_version: string;
 }
 
+/**
+ * How a run's raw votes were actually produced.
+ *
+ * A stored run is an integrity record (`brief` Part 7), and the record is
+ * incomplete if it cannot say what answered the panels. Two paths exist and they
+ * are not interchangeable: `messages_api` is the priced, `effort`-controlled
+ * production path, and `local_subagent` is `01 §1`'s keyless path, where Claude
+ * Code subagents answer through `HandoffClient`. The pipeline, the clusters, the
+ * discrimination and correlation figures and the fix-1.1 A/B are all valid on
+ * either; absolute score levels and per-run cost are not comparable across them.
+ * `caveat` is the sentence that says so, carried with the run rather than left in
+ * a document beside it.
+ */
+export interface RunSeeding {
+  path: 'messages_api' | 'local_subagent';
+  caveat: string;
+}
+
 /** Everything about the run that is not a vote. */
 export interface RunMeta {
   category: string;
@@ -304,6 +322,11 @@ export interface RunMeta {
   warnings: string[];
   /** The engine's own build identity, so a stored run says what produced it. */
   engine_version: string;
+  /**
+   * How the votes were produced. Absent on runs written before Task 9, which
+   * were all `messages_api` by construction — there was no other path.
+   */
+  seeding?: RunSeeding;
 }
 
 /** A phase's outcome as recorded in `meta`, with the payload stripped. */

@@ -132,6 +132,19 @@ export const MODEL_ID_HAIKU = 'claude-haiku-4-5';
 /** API id for the `MODEL_CLUSTER` / `MODEL_PERSONA` tier. */
 export const MODEL_ID_SONNET = 'claude-sonnet-5';
 
+/**
+ * The model id a locally-seeded run reports. Added by Task 9.
+ *
+ * NOT an API id and deliberately not one: `01 §1` and `§9` rule 1 run this skill
+ * with no Anthropic API key, jurors as local Claude Code subagents, and
+ * `HandoffClient` cannot know which model actually answered a request a person
+ * dispatched by hand. It is chosen to be absent from `MODEL_PRICES` on purpose,
+ * so every locally-seeded call lands in `PhaseCost.unpriced_models` and the
+ * report's `costBasis` reads `unmeasured` — "UNMEASURED, not $0.00" — instead of
+ * booking a confident zero (`src/report/cost.ts`).
+ */
+export const MODEL_ID_LOCAL_SUBAGENT = 'local-claude-code-subagent';
+
 // --- Output budgets -----------------------------------------------------------
 // `max_tokens` is required on every Messages API call and truncates the response
 // mid-JSON when it is hit, which surfaces as a malformed panel result rather than

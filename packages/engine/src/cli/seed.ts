@@ -28,6 +28,7 @@
 import { join } from 'node:path';
 
 import { AnthropicClient } from '../model/anthropic-client.js';
+import type { HandoffRound } from '../model/handoff-client.js';
 import type { ModelClient } from '../model/types.js';
 import { categorySlug } from '../panels/seeded.js';
 import { formatProjection, projectRun } from '../run/dry-run.js';
@@ -37,6 +38,7 @@ import type { RunOutcome } from '../run/types.js';
 import { loadCategory } from '../ingest/load-category.js';
 import type { ProductSet } from '../types.js';
 import { boolFlag, intFlag, optionalFlag, requireFlag, rejectUnknownFlags, UsageError, type ParsedArgs } from './args.js';
+import { handoffCommand } from './handoff.js';
 import { loadJury, loadPersonas, loadStoredProducts, runDir } from './load.js';
 
 /** Everything the command touches that a test wants to replace. */
@@ -46,16 +48,24 @@ export interface SeedDeps {
   makeClient: () => ModelClient;
 }
 
-const SEED_FLAGS = ['category', 'dry-run', 'run', 'workdir', 'xlsx', 'version', 'chunk-size', 'resume'];
+const SEED_FLAGS = ['category', 'dry-run', 'run', 'emit', 'ingest', 'round', 'workdir', 'xlsx', 'version', 'chunk-size', 'resume'];
 
 export const SEED_USAGE = `Usage:
   engine seed --category "Developer Tools" --dry-run [--workdir cjr] [--xlsx PATH]
   engine seed --category "Developer Tools" --run     [--workdir cjr] [--xlsx PATH]
                                                      [--version v1] [--chunk-size 40] [--resume]
+  engine seed --category "Developer Tools" --emit   --round 1|2   [--workdir cjr] [--xlsx PATH]
+  engine seed --category "Developer Tools" --ingest --round 1|2   [--workdir cjr]
 
   --dry-run     print the projected call count, token estimate and cost. Spends nothing.
   --run         execute the run. Requires an API key in the environment.
   --resume      reuse phase results already on disk instead of re-buying them (brief §2.3).
+  --emit        write one request file per call of that round, for local Claude Code
+                subagents to answer. Needs no API key (01 §1, §9 rule 1).
+  --ingest      read <name>.response.json back, validate each against its panel schema,
+                and persist the round's phases. Idempotent.
+  --round       1 = Score || Uniqueness, 2 = Customer. 01 §2's phase graph; round 2
+                cannot be planned until round 1 is ingested.
 
 Reads the INSTALLED jury and persona panel from <workdir>/references/{jurors,personas}/<slug>.json.
 Neither is generated here: 01 §4 Steps 2 and 3 are human approval gates.`;
@@ -67,12 +77,18 @@ export async function seedCommand(args: ParsedArgs, deps: SeedDeps): Promise<num
   const category = requireFlag(args, 'category');
   const dryRun = boolFlag(args, 'dry-run');
   const execute = boolFlag(args, 'run');
+  const emit = boolFlag(args, 'emit');
+  const ingest = boolFlag(args, 'ingest');
 
-  // Neither defaults. See the header: the gate is the point.
-  if (dryRun === execute) {
-    throw new UsageError('pass exactly one of --dry-run or --run');
+  // None defaults, and exactly one is allowed. See the header: the gate is the
+  // point, and `--emit`/`--ingest` join it rather than relaxing it — a command
+  // line that meant two modes at once would have to guess which one spends.
+  const modes = [dryRun, execute, emit, ingest].filter(Boolean).length;
+  if (modes !== 1) {
+    throw new UsageError('pass exactly one of --dry-run, --run, --emit or --ingest');
   }
 
+  const round = readRound(args, emit || ingest);
   const workdir = optionalFlag(args, 'workdir') ?? DEFAULT_WORKDIR;
   const slug = categorySlug(category);
   if (slug === '') throw new UsageError(`--category ${JSON.stringify(category)} has no slug`);
@@ -100,6 +116,31 @@ export async function seedCommand(args: ParsedArgs, deps: SeedDeps): Promise<num
   }
 
   const store = new FileRunStore(category, workdir);
+
+  if (round !== undefined) {
+    // The keyless path (`01 §1`, `§9` rule 1). Ids are pinned here for the same
+    // reason `--run` pins them: a request file names product ids, and a workbook
+    // that gains a row afterwards would renumber every one of them.
+    if (!fromDisk) {
+      await store.writeProducts(productSet);
+      deps.log(`Prepared ${productSet.products.length} products -> ${join(store.path, 'products.json')}`);
+    }
+
+    return await handoffCommand({
+      category,
+      slug,
+      workdir,
+      products: productSet.products,
+      jury,
+      personas,
+      categoryVersion,
+      mode: emit ? 'emit' : 'ingest',
+      round,
+      log: deps.log,
+      store,
+      ...(chunkSize === undefined ? {} : { chunkSize }),
+    });
+  }
 
   // Pin the ids BEFORE any call is made. `Product.id` is a 0-based index into the
   // usable rows of the workbook (`01 §4` Step 1), so a sheet that gains or loses
@@ -130,6 +171,24 @@ export async function seedCommand(args: ParsedArgs, deps: SeedDeps): Promise<num
   // A failed run is a non-zero exit so a wrapper (a shell loop, an Inngest step)
   // does not treat "retry this, do not deliver" as success.
   return outcome.status === 'delivered' ? 0 : 1;
+}
+
+/**
+ * `--round`, validated. Required by `--emit` / `--ingest` and refused by the
+ * others: a round means nothing to a dry run, and silently ignoring it would let
+ * `seed --run --round 1` look like it scored only half the pipeline.
+ */
+function readRound(args: ParsedArgs, required: boolean): HandoffRound | undefined {
+  const raw = optionalFlag(args, 'round');
+  if (!required) {
+    if (raw !== undefined) throw new UsageError('--round applies only to --emit and --ingest');
+    return undefined;
+  }
+  if (raw === '1') return 1;
+  if (raw === '2') return 2;
+  throw new UsageError(
+    '--round must be 1 (Score || Uniqueness) or 2 (Customer). 01 §2: Customer needs Round 1’s clusters.',
+  );
 }
 
 /** Render a finished run for a terminal. */

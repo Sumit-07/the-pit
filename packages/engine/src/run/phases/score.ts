@@ -36,7 +36,7 @@
  */
 
 import { JUROR_COUNT } from '../../config/constants.js';
-import type { ModelClient } from '../../model/types.js';
+import type { ModelClient, TokenUsage } from '../../model/types.js';
 import type { CalibrationSample } from '../../panels/calibration.js';
 import { alarmOutput } from '../../panels/injection.js';
 import type { PanelOrdering } from '../../panels/ordering.js';
@@ -197,7 +197,7 @@ export async function runScorePhase(input: ScorePhaseInput): Promise<PhaseResult
     };
   }
 
-  warnings.push(...cacheWarnings(cost.usage.cache_read_input_tokens, input.jury.jurors.length, chunks.length));
+  warnings.push(...cacheWarnings(cost.usage, input.jury.jurors.length, chunks.length));
 
   return {
     phase: 'score',
@@ -224,10 +224,18 @@ export async function runScorePhase(input: ScorePhaseInput): Promise<PhaseResult
  * the input cost of five calls is being paid needlessly. It is surfaced rather
  * than swallowed: nothing else in the pipeline would ever mention it, because a
  * cold cache produces perfectly correct scores.
+ *
+ * A phase that reported NO input tokens at all is silent instead. There is no
+ * cache to be cold on Task 9's handoff path — a local Claude Code subagent
+ * reports no token counts, so `cache_read_input_tokens` is zero for the same
+ * reason every other count is — and a warning that fires on every locally-seeded
+ * run would be noise standing exactly where a real cost regression needs to be
+ * noticed.
  */
-function cacheWarnings(cacheReadTokens: number, jurors: number, chunks: number): string[] {
+function cacheWarnings(usage: TokenUsage, jurors: number, chunks: number): string[] {
   if (jurors < 2 || chunks < 1) return [];
-  if (cacheReadTokens > 0) return [];
+  if (usage.input_tokens === 0 && usage.cache_creation_input_tokens === 0) return [];
+  if (usage.cache_read_input_tokens > 0) return [];
   return [
     `prompt cache never hit: ${jurors} jurors x ${chunks} chunk(s) shared one prefix and ` +
       'cache_read_input_tokens summed to 0. Either the cached prefix is below the model’s minimum ' +

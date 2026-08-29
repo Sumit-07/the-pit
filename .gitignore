@@ -8,3 +8,7 @@ dist/
 cjr/runs/*/results.json
 cjr/runs/*/report.md
 cjr/runs/*/ab.json
+# Task 9's request/response transport. Large, regenerable from products.json +
+# the installed panels, and superseded by phases/ and results.json once ingested.
+cjr/runs/*/handoff/
+cjr/runs/*/phases/

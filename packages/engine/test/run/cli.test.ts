@@ -164,7 +164,7 @@ describe('seed — the gate', () => {
         log: capture().log,
         makeClient: refuseToSpend,
       }),
-    ).rejects.toThrow(/exactly one of --dry-run or --run/);
+    ).rejects.toThrow(/exactly one of --dry-run, --run, --emit or --ingest/);
   });
 
   it('refuses both at once', async () => {
