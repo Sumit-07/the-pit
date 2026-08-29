@@ -202,6 +202,18 @@ export const CACHE_WRITE_MULTIPLIER = 1.25;
 /** Cache READ discount as a multiple of the input rate. Source: Anthropic prompt-caching pricing. */
 export const CACHE_READ_MULTIPLIER = 0.1;
 
+/**
+ * The date the price table below was last checked against the published
+ * Anthropic rates, in ISO form.
+ *
+ * Prices are the one input to this engine that is not derivable from a document
+ * in this repository, and nothing in the codebase notices when they go stale: a
+ * repriced model silently turns every dollar figure into fiction while every test
+ * still passes. Task 8's report prints this date beside every dollar figure, so
+ * staleness is visible on the face of the report rather than buried here.
+ */
+export const PRICE_TABLE_DATE = '2026-08-29';
+
 /** USD per million input tokens, `claude-haiku-4-5`. */
 export const PRICE_HAIKU_INPUT = 1.0;
 
@@ -252,3 +264,83 @@ export const EST_OUTPUT_TOKENS_PER_UNIQUENESS_ROW = 60;
  * uniqueness row; see the `MAX_TOKENS_CHOICE` derivation above.
  */
 export const EST_OUTPUT_TOKENS_PER_CHOICE = 60;
+
+// --- The Phase 1 report -------------------------------------------------------
+// Task 8's thresholds and schedule inputs. None of these touches a rank: they
+// decide what the report FLAGS and what it compares a projection against. They
+// live here rather than at their use sites for the same reason every other
+// constant does — a threshold nobody can find is a threshold nobody can audit —
+// and each cites the document that fixed it.
+
+/**
+ * `discrimination` below this reads "merit alone is fragile" on the report.
+ * Source: `01 §6.5` — "low ⇒ products score alike ⇒ merit alone is fragile; the
+ * board flags `< 0.5`".
+ */
+export const DISCRIMINATION_FLOOR = 0.5;
+
+/**
+ * A cross-juror composite correlation above this flags a pair as
+ * indistinguishable. Source: `docs/plans/phase-1-engine.md` Task 8 — "Flag any
+ * pair above 0.9 — that is the 'panel too correlated, redesign mandates' signal."
+ */
+export const JUROR_CORRELATION_CEILING = 0.9;
+
+/**
+ * A juror deducting fewer than this fraction of the panel's MEDIAN total points
+ * is flagged dead weight. Source: `docs/plans/phase-1-engine.md` Task 8 — "Flag
+ * any juror whose rate is under half the panel median as dead weight."
+ */
+export const DEAD_WEIGHT_MEDIAN_FRACTION = 0.5;
+
+/**
+ * Products re-scored in a nightly recalibration pass. Source: `brief` Part 3 —
+ * "**Top 20 per category nightly**, full board weekly."
+ */
+export const RECAL_NIGHTLY_TOP_N = 20;
+
+/**
+ * Categories in the source workbook. Measured, not assumed: Task 2 swept
+ * `loadCategory` over the whole export and found 28 categories, 0 refused
+ * (`.superpowers/sdd/phase-1-engine/task-2-report.md`). `PHASE-0.md` records the
+ * same figure as a data-level conflict with the brief.
+ */
+export const CATEGORY_COUNT = 28;
+
+/**
+ * Categories the brief's recalibration budget was stated over. Source: `brief`
+ * Part 3 — "it's ~$17-25/month total across 15 categories."
+ *
+ * Kept separate from `CATEGORY_COUNT` on purpose. The budget line and the data
+ * disagree, and a report that silently used one number for both would hide
+ * exactly the discrepancy `DECISIONS.md`'s open "Cost re-baseline" item exists to
+ * settle.
+ */
+export const RECAL_BUDGET_CATEGORIES = 15;
+
+/** Low end of the monthly recalibration inference budget, USD. Source: `brief` Part 7. */
+export const RECAL_BUDGET_MIN_USD = 17;
+
+/** High end of the monthly recalibration inference budget, USD. Source: `brief` Part 7. */
+export const RECAL_BUDGET_MAX_USD = 25;
+
+// The calendar, so the monthly schedule is arithmetic over named quantities
+// rather than a rounded "30 nights and 4 weeks". A month is 365/12 = 30.4167
+// days, i.e. 4.3452 weeks; rounding those down understates a monthly cost by
+// ~1.4% and ~8% respectively, in the direction that flatters the budget.
+
+/** Days in a common year. */
+export const DAYS_PER_YEAR = 365;
+
+/** Months in a year. */
+export const MONTHS_PER_YEAR = 12;
+
+/** Days in a week. */
+export const DAYS_PER_WEEK = 7;
+
+/**
+ * Products scored both ways in the fix-1.1 A/B check, and re-scored for the
+ * test-retest baseline. Source: `the-pit-agent-prompts.md` Phase 1 — "A/B check:
+ * score 5 products BOTH ways" — and `docs/plans/phase-1-engine.md` Task 8.
+ */
+export const AB_SAMPLE = 5;

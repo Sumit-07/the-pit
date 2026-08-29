@@ -95,12 +95,21 @@ export function idsShown(request: ModelRequest): number[] {
  * `discrimination` is non-zero; deductions sum to exactly `100 - score`, which
  * `01 §5.1` requires and `validateScoreResult` enforces.
  */
-export function scoreAnswer(ids: readonly number[], metricNames: readonly string[] = METRIC_NAMES): unknown {
+export function scoreAnswer(
+  ids: readonly number[],
+  metricNames: readonly string[] = METRIC_NAMES,
+  shift = 0,
+): unknown {
   return {
     scores: ids.map((id) => ({
       id,
       metrics: metricNames.map((name, metricIndex) => {
-        const score = 100 - ((id * 7 + metricIndex * 11) % 60);
+        const base = 100 - ((id * 7 + metricIndex * 11) % 60);
+        // Clamped so a shifted answer still satisfies `01 §5.1`: a score outside
+        // 0-100, or deductions that do not sum to exactly `100 - score`, would be
+        // rejected by `validateScoreResult` and the test would be exercising the
+        // failure path instead of the one it means to.
+        const score = Math.min(100, Math.max(0, base + shift));
         return {
           name,
           score,
@@ -109,6 +118,14 @@ export function scoreAnswer(ids: readonly number[], metricNames: readonly string
       }),
     })),
   };
+}
+
+/** The heading `buildScoreRequest` emits only when a calibration sample is present. */
+const CALIBRATION_HEADING = '## Calibration';
+
+/** Whether this scoring request carries the `brief §1.1` calibration block. */
+export function hasCalibrationBlock(request: ModelRequest): boolean {
+  return request.system.some((block) => block.text.includes(CALIBRATION_HEADING));
 }
 
 /** How the fixture clustering pass should group the category. */
@@ -190,6 +207,17 @@ export interface ScriptOptions {
   modelId?: string;
   /** Answer for the incremental placement call. */
   assignAnswer?: unknown;
+  /**
+   * Points added to every score when — and only when — the request carries the
+   * `brief §1.1` calibration block.
+   *
+   * This is how a DETERMINISTIC client produces a non-zero A/B delta. Without it
+   * the fixture returns the identical number on both paths, the A/B and
+   * test-retest deltas are both exactly 0, and Task 8's comparison arithmetic is
+   * never exercised. It is a lever for a test, not a claim about how a real juror
+   * responds to calibration.
+   */
+  calibrationShift?: number;
 }
 
 /**
@@ -212,7 +240,8 @@ export function makeScript(options: ScriptOptions = {}): (request: ModelRequest)
         if (options.silentJurors?.includes(role) === true) {
           return { output: { scores: [] }, usage, model: haiku };
         }
-        return { output: scoreAnswer(idsShown(request)), usage, model: haiku };
+        const shift = hasCalibrationBlock(request) ? (options.calibrationShift ?? 0) : 0;
+        return { output: scoreAnswer(idsShown(request), METRIC_NAMES, shift), usage, model: haiku };
       }
       case UNIQ_TOOL_NAME: {
         if (options.uniquenessError !== undefined) throw options.uniquenessError();

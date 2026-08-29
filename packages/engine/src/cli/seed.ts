@@ -25,21 +25,19 @@
  * in a `HandoffClient` is a change to this file alone.
  */
 
-import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { AnthropicClient } from '../model/anthropic-client.js';
 import type { ModelClient } from '../model/types.js';
-import { validateJury } from '../panels/generate/validate-jury.js';
-import { validatePersonas } from '../panels/generate/validate-personas.js';
 import { categorySlug } from '../panels/seeded.js';
 import { formatProjection, projectRun } from '../run/dry-run.js';
 import { runCategory } from '../run/run-category.js';
 import { DEFAULT_WORKDIR, FileRunStore } from '../run/store.js';
 import type { RunOutcome } from '../run/types.js';
 import { loadCategory } from '../ingest/load-category.js';
-import type { Jury, PersonaPanel, Product, ProductSet } from '../types.js';
+import type { ProductSet } from '../types.js';
 import { boolFlag, intFlag, optionalFlag, requireFlag, rejectUnknownFlags, UsageError, type ParsedArgs } from './args.js';
+import { loadJury, loadPersonas, loadStoredProducts, runDir } from './load.js';
 
 /** Everything the command touches that a test wants to replace. */
 export interface SeedDeps {
@@ -201,63 +199,18 @@ async function loadProducts(
   workdir: string,
   xlsx: string | undefined,
 ): Promise<{ productSet: ProductSet; fromDisk: boolean }> {
-  const stored = await readJson(join(workdir, 'runs', slug, 'products.json'));
-  if (stored !== undefined) {
-    const set = stored as Partial<ProductSet>;
-    if (Array.isArray(set.products) && set.products.length > 0) {
-      return { productSet: { category: set.category ?? category, products: set.products as Product[] }, fromDisk: true };
-    }
-  }
+  const stored = await loadStoredProducts(workdir, slug, category);
+  if (stored !== undefined) return { productSet: stored, fromDisk: true };
 
   if (xlsx === undefined) {
     throw new UsageError(
-      `no ${join(workdir, 'runs', slug, 'products.json')} and no --xlsx given. ` +
+      `no ${join(runDir(workdir, slug), 'products.json')} and no --xlsx given. ` +
         'Pass --xlsx PATH to prepare the category from the source workbook (01 §4 Step 1).',
     );
   }
   // `--run` writes this back to `products.json` before spending anything, so the
   // ids are derived from the workbook exactly once per category.
   return { productSet: await loadCategory(xlsx, category), fromDisk: false };
-}
-
-/** The installed jury, re-validated. `01 §4` Step 2 (APPROVAL GATE 1). */
-async function loadJury(workdir: string, slug: string): Promise<Jury> {
-  const path = join(workdir, 'references', 'jurors', `${slug}.json`);
-  const raw = await readJson(path);
-  if (raw === undefined) {
-    throw new UsageError(`no installed jury at ${path}. Generate and approve one first (01 §4 Step 2).`);
-  }
-
-  const result = validateJury(raw);
-  if (!result.valid) {
-    throw new UsageError(`${path} is not a valid jury:\n${result.errors.map((error) => `  - ${error}`).join('\n')}`);
-  }
-  return result.value;
-}
-
-/** The installed customer panel, re-validated. `01 §4` Step 3 (APPROVAL GATE 2). */
-async function loadPersonas(workdir: string, slug: string): Promise<PersonaPanel> {
-  const path = join(workdir, 'references', 'personas', `${slug}.json`);
-  const raw = await readJson(path);
-  if (raw === undefined) {
-    throw new UsageError(`no installed persona panel at ${path}. Generate and approve one first (01 §4 Step 3).`);
-  }
-
-  const result = validatePersonas(raw);
-  if (!result.valid) {
-    throw new UsageError(`${path} is not a valid persona panel:\n${result.errors.map((error) => `  - ${error}`).join('\n')}`);
-  }
-  return result.value;
-}
-
-/** Read a JSON file, or `undefined` if it is not there. Anything else re-throws. */
-async function readJson(path: string): Promise<unknown> {
-  try {
-    return JSON.parse(await readFile(path, 'utf8')) as unknown;
-  } catch (error) {
-    if (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'ENOENT') return undefined;
-    throw error;
-  }
 }
 
 /** The real client. Separated so `seedCommand` never imports it on the dry-run path. */

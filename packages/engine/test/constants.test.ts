@@ -64,6 +64,10 @@ const FROZEN = {
   // each model's own input rate and `test/run/ledger.test.ts` re-derives them.
   CACHE_WRITE_MULTIPLIER: 1.25,
   CACHE_READ_MULTIPLIER: 0.1,
+  // Added by Task 8. Prices are the one engine input not derivable from a repo
+  // document and nothing notices when they go stale, so the report prints this
+  // date beside every dollar figure. Required by the Task 7 review's mitigation.
+  PRICE_TABLE_DATE: '2026-08-29',
   PRICE_HAIKU_INPUT: 1.0,
   PRICE_HAIKU_OUTPUT: 5.0,
   PRICE_SONNET_INPUT: 2.0,
@@ -82,6 +86,32 @@ const FROZEN = {
   // Added by Task 7. Stamped into `results.json.meta` so a stored run says which
   // build produced it (`brief` Part 7: the score log is the integrity record).
   ENGINE_VERSION: '0.1.0',
+  // Added by Task 8. Report thresholds and recalibration-schedule inputs. None
+  // of these touches a rank — they decide what the Phase 1 report FLAGS and what
+  // it compares a projection against — but each is a number a reader of the
+  // report will want to trace, so each is audited here with its source.
+  //   DISCRIMINATION_FLOOR       `01 §6.5`, "the board flags < 0.5"
+  //   JUROR_CORRELATION_CEILING  plan Task 8, "flag any pair above 0.9"
+  //   DEAD_WEIGHT_MEDIAN_FRACTION plan Task 8, "under half the panel median"
+  //   RECAL_NIGHTLY_TOP_N        `brief` Part 3, "top 20 per category nightly"
+  //   CATEGORY_COUNT             measured by Task 2 over the real workbook
+  //   RECAL_BUDGET_CATEGORIES    `brief` Part 3, "across 15 categories"
+  //   RECAL_BUDGET_{MIN,MAX}_USD `brief` Part 7, "$17 / $25"
+  //   DAYS_PER_YEAR / MONTHS_PER_YEAR / DAYS_PER_WEEK — the calendar, so the
+  //     monthly schedule is not a rounded "30 nights and 4 weeks"
+  //   AB_SAMPLE                  Phase 1 gate, "score 5 products BOTH ways"
+  DISCRIMINATION_FLOOR: 0.5,
+  JUROR_CORRELATION_CEILING: 0.9,
+  DEAD_WEIGHT_MEDIAN_FRACTION: 0.5,
+  RECAL_NIGHTLY_TOP_N: 20,
+  CATEGORY_COUNT: 28,
+  RECAL_BUDGET_CATEGORIES: 15,
+  RECAL_BUDGET_MIN_USD: 17,
+  RECAL_BUDGET_MAX_USD: 25,
+  DAYS_PER_YEAR: 365,
+  MONTHS_PER_YEAR: 12,
+  DAYS_PER_WEEK: 7,
+  AB_SAMPLE: 5,
 } as const;
 
 describe('frozen constants', () => {
@@ -119,5 +149,24 @@ describe('frozen constants', () => {
   it('prices sonnet above haiku on both input and output', () => {
     expect(constants.PRICE_SONNET_INPUT).toBeGreaterThan(constants.PRICE_HAIKU_INPUT);
     expect(constants.PRICE_SONNET_OUTPUT).toBeGreaterThan(constants.PRICE_HAIKU_OUTPUT);
+  });
+
+  it('carries a parseable price-table date', () => {
+    // A malformed date renders as itself on the report and would be read as a
+    // real one. Hand-checked: 2026-08-29 is the day Task 7 checked the table.
+    expect(constants.PRICE_TABLE_DATE).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(Number.isNaN(Date.parse(constants.PRICE_TABLE_DATE))).toBe(false);
+  });
+
+  it('records that the data has more categories than the budget was written for', () => {
+    // Not a preference — `PHASE-0.md` and `DECISIONS.md`'s open "Cost
+    // re-baseline" item both turn on this inequality, and the Phase 1 report
+    // exists partly to settle it. If these ever became equal the report's
+    // headline finding would silently disappear.
+    expect(constants.CATEGORY_COUNT).toBeGreaterThan(constants.RECAL_BUDGET_CATEGORIES);
+  });
+
+  it('keeps the recalibration budget band ordered', () => {
+    expect(constants.RECAL_BUDGET_MIN_USD).toBeLessThan(constants.RECAL_BUDGET_MAX_USD);
   });
 });

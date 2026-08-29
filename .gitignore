@@ -7,3 +7,4 @@ dist/
 .superpowers/
 cjr/runs/*/results.json
 cjr/runs/*/report.md
+cjr/runs/*/ab.json

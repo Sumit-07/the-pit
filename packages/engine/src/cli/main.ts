@@ -13,15 +13,23 @@
 
 import { pathToFileURL } from 'node:url';
 
+import { abCommand, AB_USAGE } from './ab.js';
 import { parseArgs, UsageError } from './args.js';
+import { reportCommand, REPORT_USAGE } from './report.js';
 import { makeAnthropicClient, SEED_USAGE, seedCommand } from './seed.js';
 
 const USAGE = `the-pit engine
 
 Commands:
   seed     score a category (01 §4 Steps 4-6)
+  ab       produce the fix-1.1 A/B and test-retest evidence (SPENDS)
+  report   render the Phase 1 report (spends nothing, needs no API key)
 
-${SEED_USAGE}`;
+${SEED_USAGE}
+
+${AB_USAGE}
+
+${REPORT_USAGE}`;
 
 /** Dispatch one command line. Returns the exit code; never calls `process.exit`. */
 export async function main(argv: readonly string[], log: (line: string) => void = console.log): Promise<number> {
@@ -35,6 +43,10 @@ export async function main(argv: readonly string[], log: (line: string) => void 
     switch (args.command) {
       case 'seed':
         return await seedCommand(args, { log, makeClient: makeAnthropicClient });
+      case 'ab':
+        return await abCommand(args, { log, makeClient: makeAnthropicClient });
+      case 'report':
+        return await reportCommand(args, { log });
       default:
         log(`unknown command ${JSON.stringify(args.command)}\n\n${USAGE}`);
         return 1;
