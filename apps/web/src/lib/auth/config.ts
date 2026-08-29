@@ -1,20 +1,23 @@
 /**
  * Where the auth handlers get their dependencies at runtime.
  *
- * ## The store is not here, and that is the point
+ * ## The store is registered, and there is now something to register
  *
  * `@the-pit/auth` needs three methods — `findAccountByEmail`, `createToken`,
- * `consumeToken`. Two of them are against `tokens`, which `packages/db` already
- * defines; the third is against `accounts`, which another agent is adding right
- * now. Writing a Drizzle implementation here would mean writing against a table
- * whose shape is being decided in a different session, and would have to be
- * unpicked.
+ * `consumeToken`. The Postgres implementation lives in `@the-pit/db`
+ * (`src/auth-store.ts`), because every one of the three is a claim about a
+ * table's shape and belongs where the schema tests can execute it against a real
+ * Postgres. `@/lib/auth/store` memoizes one handle over it.
  *
- * So the store is REGISTERED rather than constructed: whoever owns the identity
- * schema calls `registerAuthStore()` once, at startup, with an implementation of
- * `AuthStore`. Until then `authDeps()` throws `AuthNotWiredError`, which names
- * the three methods in its message — a loud, specific failure rather than a
- * silent fallback that would let a broken deployment look healthy.
+ * The seam is unchanged: `registerAuthStore()` still takes precedence, which is
+ * what lets a test install a `MemoryAuthStore` without an environment variable.
+ * `resolveStore()` falls back to the Postgres store only when `DATABASE_URL` is
+ * configured and nothing was registered — the deployment case, where requiring a
+ * startup hook to name the single implementation that exists would fail at
+ * runtime, in production, on the first sign-in. With no `DATABASE_URL` and no
+ * registration it still throws `AuthNotWiredError`, which names the three
+ * methods — a loud, specific failure rather than a silent fallback that would
+ * let a broken deployment look healthy.
  *
  * `AUTH_DEV_MEMORY_STORE=1` swaps in `MemoryAuthStore` so the whole flow is
  * clickable locally with no database. It is refused in production, because a
@@ -30,6 +33,12 @@
  * `select count(*) from tokens where email = $1 and created_at > now() -
  * interval '15 minutes'`, which is what `tokens_email_idx` was indexed for. See
  * the Phase 4 report.
+ *
+ * That query now exists and is tested: `tokenRequestsInWindow` in `@the-pit/db`,
+ * with a plan assertion that it is answered from `tokens_email_idx`. The
+ * limiter itself is still `MemoryRateLimiter` — choosing between the shared
+ * `tokens` count and Upstash is this file's decision, not the schema's, and
+ * swapping it no longer also requires designing an index.
  */
 
 import {
@@ -44,7 +53,10 @@ import {
   type SessionKeyring,
 } from '@the-pit/auth';
 
+import { hasDatabaseUrl } from '@the-pit/db';
+
 import type { AuthHandlerDeps } from '@/lib/auth/handlers';
+import { postgresAuthStore } from '@/lib/auth/store';
 
 export class AuthNotWiredError extends Error {
   constructor() {
@@ -85,6 +97,14 @@ function resolveStore(): AuthStore {
   if (process.env['AUTH_DEV_MEMORY_STORE'] === '1' && process.env['NODE_ENV'] !== 'production') {
     registeredStore = new MemoryAuthStore();
     return registeredStore;
+  }
+  if (hasDatabaseUrl()) {
+    // The deployment path. Registered through the same slot an explicit
+    // `registerAuthStore()` writes to, so the seam and its precedence are
+    // unchanged and `resetAuthWiring()` still clears it.
+    const store: AuthStore = postgresAuthStore();
+    registeredStore = store;
+    return store;
   }
   throw new AuthNotWiredError();
 }

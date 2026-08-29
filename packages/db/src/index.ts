@@ -16,6 +16,19 @@ export { createDatabase } from './client.js';
 export { DATABASE_URL_ENV, hasDatabaseUrl, MissingDatabaseUrlError, requireDatabaseUrl } from './config.js';
 
 export type {
+  AuthAccountRow,
+  ConsumeTokenOutcome,
+  NewMagicTokenRow,
+  PostgresAuthStore,
+} from './auth-store.js';
+export {
+  createPostgresAuthStore,
+  sweepExpiredTokens,
+  TOKEN_RETENTION_MS,
+  tokenRequestsInWindow,
+} from './auth-store.js';
+
+export type {
   AttemptRowContext,
   DeliveredVerdict,
   LedgerEntry,
