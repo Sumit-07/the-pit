@@ -13,3 +13,6 @@ cjr/runs/*/ab.json
 cjr/runs/*/handoff/
 cjr/runs/*/phases/
 cjr/runs/*/handoff/
+
+# TypeScript incremental build state (apps/web sets `incremental`).
+*.tsbuildinfo
