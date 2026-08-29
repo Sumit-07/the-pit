@@ -45,9 +45,9 @@ export async function candidateCategories(): Promise<readonly string[]> {
     return await defaultBoardSource().list();
   } catch (error) {
     // A form with an empty `<select>` is a broken page; an empty roster with a
-    // logged reason is a diagnosable one. The guards still run — `checkSubmission`
-    // asks the classifier to name a better category, and `acceptAllClassifier`
-    // never does.
+    // logged reason is a diagnosable one. The guards still run, and the classifier
+    // degrades the safe way: with nothing on offer to suggest, it can only compare
+    // the chosen category against itself, which is a `match` and never a block.
     console.error(`[checkout] could not list categories: ${error instanceof Error ? error.message : String(error)}`);
     return [];
   }

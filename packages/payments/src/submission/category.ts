@@ -18,14 +18,18 @@
  * is unappealable. The classifier's job is narrow: catch the developer-tool
  * being filed under Health & Fitness because that is where the peers are soft.
  *
- * ## What is built here and what is not
+ * ## What is built here, and where the real classifier lives
  *
- * The interface, the blocking policy, and the pre-payment ordering are built and
- * tested. The classifier itself is a STUB — `acceptAllClassifier` — because the
- * real one is a model call, and a model call that has not been prompt-tuned
- * against the seeded categories would produce exactly the confident false
- * rejections this design is trying to avoid. Swapping it is one argument at the
- * call site.
+ * This file is the interface, the blocking policy, and nothing else. The
+ * implementation behind the seam is `category-classifier.ts` —
+ * `seededCategoryClassifier`, a nearest-centroid model over the 1028 labelled
+ * products in `test/fixtures/labelled-products.json`. It is NOT a model call:
+ * this check runs pre-payment on an unauthenticated route, where a model call
+ * would be a way for any stranger to spend an inference budget, so it is
+ * arithmetic over a table that ships with the build.
+ *
+ * `acceptAllClassifier` remains, as the null object a test installs when it wants
+ * to exercise a rule that is not the category rule.
  *
  * ## The blocking policy errs toward letting people in
  *
@@ -68,13 +72,16 @@ export interface CategoryClassifier {
 }
 
 /**
- * The placeholder: everything matches, at zero confidence.
+ * The null object: everything matches, at zero confidence.
  *
- * Zero rather than one on purpose. `confidence` is only ever compared against a
- * blocking threshold, so a stub that reported certainty would be indistinguishable
- * in the logs from a real classifier that had actually looked, and the day the
- * real one is installed nobody would be able to tell from the data whether it
- * had been.
+ * Zero rather than one on purpose, and it still matters now that a real
+ * classifier exists. `confidence` is only ever compared against a blocking
+ * threshold, so a stub that reported certainty would be indistinguishable in the
+ * logs from a classifier that had actually looked; at zero, a `match` with no
+ * confidence is visibly a classifier that was never installed.
+ *
+ * Kept for tests that need the category rule out of the way while they exercise
+ * another one. Nothing in the app wires it.
  */
 export const acceptAllClassifier: CategoryClassifier = {
   classify(): Promise<CategoryVerdict> {

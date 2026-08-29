@@ -36,6 +36,7 @@ import { newSessionPayload, signSessionCookie, SESSION_COOKIE_NAME, type Session
 import {
   AttemptsLedger,
   FixtureDodoTransport,
+  seededCategoryClassifier,
   signWebhook,
   type AppendResult,
   type AttemptEntry,
@@ -578,6 +579,64 @@ describe('the category check, DECISIONS.md S12', () => {
     expectNothingBought();
     expect(page).toContain('developer-tools');
     expect(page).toContain('Nothing was charged');
+  });
+
+  it('blocks with the REAL classifier, over the two boards this branch actually has', async () => {
+    // The tests above hand the route a hand-written verdict, which proves the
+    // policy and proves nothing about the classifier. This one wires the shipped
+    // `seededCategoryClassifier` — the same object `lib/checkout/config.ts`
+    // resolves in production — and posts a consumer gym app to Developer Tools.
+    deps = {
+      ...deps,
+      guards: {
+        ...deps.guards,
+        classifier: seededCategoryClassifier,
+        candidateCategories: () => Promise.resolve(['developer-tools', 'health-fitness-wellness']),
+      },
+    };
+
+    const response = await handleCheckoutCreate(
+      post({
+        category: 'developer-tools',
+        name: 'LiftLog — strength training workout tracker',
+        description:
+          'Log every workout, track your lifts and follow a strength training programme. Rest ' +
+          'timers, personal records, calorie and protein targets, and recovery tips for the gym.',
+      }),
+      deps,
+    );
+    const page = await response.text();
+
+    expect(response.status).toBe(422);
+    expectNothingBought();
+    expect(page).toContain('health-fitness-wellness');
+    expect(page).toContain('Nothing was charged');
+  });
+
+  it('lets a real developer tool through the real classifier', async () => {
+    // The other half, and the one that matters more: the guard is only worth
+    // having if it does not cost a sale. Same wiring, a genuine developer tool.
+    deps = {
+      ...deps,
+      guards: {
+        ...deps.guards,
+        classifier: seededCategoryClassifier,
+        candidateCategories: () => Promise.resolve(['developer-tools', 'health-fitness-wellness']),
+      },
+    };
+
+    const response = await handleCheckoutCreate(
+      post({
+        category: 'developer-tools',
+        name: 'Prelint — automated code review on every pull request',
+        description:
+          'Static analysis and linting for your CI pipeline. Prelint reviews every pull request on ' +
+          'GitHub, runs your test suite and reports coverage.',
+      }),
+      deps,
+    );
+
+    expect(response.status).toBe(303);
   });
 
   it('lets an uncertain classifier through rather than refusing on a guess', async () => {

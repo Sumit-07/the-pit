@@ -48,12 +48,12 @@
  */
 
 import {
-  acceptAllClassifier,
   checkSubmission,
   countdownTo,
   cycleAt,
   normalizeSubmissionUrl,
   NIGHTLY_REBUILD,
+  seededCategoryClassifier,
   type CategoryClassifier,
   type ListingSnapshot,
   type RecalibrationSchedule,
@@ -78,10 +78,11 @@ export interface SubmissionGuardDeps {
   /**
    * `DECISIONS.md` S12's classifier.
    *
-   * `acceptAllClassifier` is the documented stub and the default here: the real
-   * one is a model call, and a model call that has not been prompt-tuned against
-   * the seeded categories produces exactly the confident false rejections S12's
-   * blocking policy is built to avoid. Swapping it is this one field.
+   * `seededCategoryClassifier` is the default, and the default matters: an
+   * omitted classifier used to mean "no category rule at all", which is the
+   * unpoliced free rank lever S12 exists to close. A caller that wants the
+   * category rule out of the way now has to say so — `acceptAllClassifier`, in a
+   * test, in writing.
    */
   readonly classifier?: CategoryClassifier;
   /** Every category on offer, so a mismatch can name a better one. */
@@ -130,7 +131,7 @@ export async function runSubmissionGuards(
     existing,
     now: input.now,
     accountId: input.accountId,
-    classifier: deps.classifier ?? acceptAllClassifier,
+    classifier: deps.classifier ?? seededCategoryClassifier,
     candidateCategories: await deps.candidateCategories(),
     ...(deps.schedule === undefined ? {} : { schedule: deps.schedule }),
   });

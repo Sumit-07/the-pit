@@ -37,7 +37,7 @@ import {
   hasDatabaseUrl,
   type Database,
 } from '@the-pit/db';
-import { acceptAllClassifier, FixtureDodoTransport, type DodoTransport } from '@the-pit/payments';
+import { FixtureDodoTransport, seededCategoryClassifier, type DodoTransport } from '@the-pit/payments';
 
 import { capabilityDeps } from '@/lib/auth/config';
 import { candidateCategories, listingLookup } from '@/lib/checkout/bindings';
@@ -110,10 +110,10 @@ export function checkoutDeps(): CheckoutHandlerDeps {
     },
     guards: {
       listings: listingLookup(db),
-      // `DECISIONS.md` S12's documented stub. The interface and the blocking
-      // policy are built and tested; the model call is not, because an untuned
-      // classifier produces exactly the confident false rejections S12 avoids.
-      classifier: acceptAllClassifier,
+      // `DECISIONS.md` S12's classifier. Nearest centroid over the 1028 labelled
+      // products, not a model call: this runs pre-payment on an unauthenticated
+      // route, so it must cost nothing to invoke and must not need a key.
+      classifier: seededCategoryClassifier,
       candidateCategories,
     },
     // Read only to upgrade an ownership conflict from a post-payment hold to a
