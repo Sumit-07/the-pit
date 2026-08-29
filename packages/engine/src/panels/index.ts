@@ -9,6 +9,7 @@
  * `ModelRequest`; running it, retrying it and paying for it are Task 7's.
  */
 
+export { ANCHOR_LEVELS } from './anchors.js';
 export type { CalibrationProduct, CalibrationRanking, CalibrationSample } from './calibration.js';
 export { selectCalibrationSample } from './calibration.js';
 export type { ScreenResult } from './injection.js';
@@ -16,6 +17,17 @@ export { alarmOutput, INJECTION_SOURCE_DEMAND, INJECTION_SOURCE_UNIQUENESS, scre
 export type { PreviewCacheKeyInput } from './preview-cache-key.js';
 export { previewCacheKey } from './preview-cache-key.js';
 export { DATA_CLOSE, DATA_OPEN, dataBlock, dataField, dataValue, UNTRUSTED_DATA_RULE } from './data-block.js';
+export type { TypeHint, ValidationResult } from './generate/index.js';
+export {
+  B2B_WORDS,
+  buildJuryPrompt,
+  buildPersonaPrompt,
+  CONSUMER_WORDS,
+  inferTypeHint,
+  sampleTaglines,
+  validateJury,
+  validatePersonas,
+} from './generate/index.js';
 export type { PanelOrdering } from './ordering.js';
 export { orderedChunks, orderingSeed, panelOrder } from './ordering.js';
 export type { ChoiceRequestInput, SimilarSet } from './prompts/choice.js';

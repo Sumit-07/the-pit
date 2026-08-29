@@ -232,6 +232,37 @@ export interface Persona {
   price_sensitivity: PriceSensitivity;
 }
 
+/**
+ * An installed jury: the whole artifact `01 §4` Step 2 writes to
+ * `cjr/references/jurors/<slug>.json` once APPROVAL GATE 1 has fired.
+ *
+ * The shape a model returns for jury generation, and the shape Task 7's
+ * orchestrator loads. It is only ever constructed by `validateJury`
+ * (`src/panels/generate/validate-jury.ts`) — the file is written by hand, so a
+ * value of this type must have been through the validator rather than merely
+ * cast to it. `jurors` has exactly `JUROR_COUNT` entries (`DECISIONS.md S1`
+ * supersedes `01`'s 5), and every juror's `weights` is keyed by exactly the
+ * names in `metrics`.
+ */
+export interface Jury {
+  type: CategoryType;
+  /** Bumped by hand on any edit; invalidates cached results (`01 §4` Step 2). */
+  prompt_version: string;
+  metrics: RubricMetric[];
+  jurors: JurorMandate[];
+}
+
+/**
+ * An installed customer panel — the artifact of `01 §4` Step 3, past APPROVAL
+ * GATE 2. Only ever constructed by `validatePersonas`
+ * (`src/panels/generate/validate-personas.ts`).
+ */
+export interface PersonaPanel {
+  /** Bumped by hand on any edit; invalidates cached demand results (`01 §4` Step 3). */
+  persona_version: string;
+  personas: Persona[];
+}
+
 // --- Ranking output (`01 §6.2`, §6.5, §6.6) ------------------------------------
 
 /** One persona's contribution to a product's demand. Source: `01 §6.2` (`detail.picks`). */

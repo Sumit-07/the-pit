@@ -50,6 +50,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { MAX_TOKENS_SCORE, MODEL_JUROR } from '../../config/constants.js';
 import type { ModelRequest } from '../../model/types.js';
 import type { JurorMandate, Product, RubricMetric } from '../../types.js';
+import { ANCHOR_LEVELS } from '../anchors.js';
 import type { CalibrationProduct, CalibrationSample } from '../calibration.js';
 import { SCORE_SCHEMA, SCORE_TOOL_NAME } from '../schemas.js';
 import { dataBlock, dataField, dataValue, UNTRUSTED_DATA_RULE } from '../data-block.js';
@@ -85,9 +86,6 @@ export interface ScoreRequestInput {
    */
   calibration?: CalibrationSample;
 }
-
-/** The four anchor levels, highest first, exactly as `01 §4` Step 2 keys them. */
-const ANCHOR_LEVELS = ['100', '80', '50', '20'] as const;
 
 /**
  * The standing scoring instructions: what a juror is, what it must never do, how
