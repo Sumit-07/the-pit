@@ -18,6 +18,14 @@ export interface FakeResponseSpec {
   readonly status?: number;
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string;
+  /**
+   * A binary body, for the asset path. Takes precedence over `body`.
+   *
+   * `body` is encoded as UTF-8, which mangles every byte over 0x7f — so a PNG
+   * signature written as a string is not a PNG signature. An image fake has to
+   * be able to hand over the bytes it means.
+   */
+  readonly bytes?: Uint8Array;
   /** Bytes handed over per chunk, so a test can watch the byte cap stop the stream mid-body. */
   readonly chunkSize?: number;
   /** Reject instead of answering, to exercise the transport-error and abort paths. */
@@ -113,7 +121,7 @@ export class FakeTransport implements Transport {
     };
     this.responses.push(record);
 
-    const bytes = encoder.encode(spec.body ?? '');
+    const bytes = spec.bytes ?? encoder.encode(spec.body ?? '');
     const chunkSize = spec.chunkSize ?? Math.max(bytes.byteLength, 1);
 
     return Promise.resolve({
@@ -150,6 +158,16 @@ function lowercase(headers: Readonly<Record<string, string>>): Record<string, st
 /** A 3xx to `location`. */
 export function redirectTo(location: string, status = 302): FakeResponseSpec {
   return { status, headers: { location } };
+}
+
+/** A 200 of `contentType` carrying raw `bytes`. The asset path's counterpart to `htmlPage`. */
+export function binaryBody(contentType: string, bytes: Uint8Array, chunkSize?: number): FakeResponseSpec {
+  return {
+    status: 200,
+    headers: { 'content-type': contentType },
+    ...(chunkSize === undefined ? {} : { chunkSize }),
+    bytes,
+  };
 }
 
 /** A 200 `text/html` carrying `body`. */

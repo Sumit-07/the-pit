@@ -607,32 +607,90 @@ div.brow {
 }
 
 /*
- * The identity slot: the robot an anonymous listing wears.
+ * The mark beside the product name: its favicon, or its initial.
  *
- * `align-self: center` rather than the baseline the rest of `.nm > b` sits on —
- * a square block aligned on a text baseline hangs below the line and reads as a
- * broken image, which is the one thing this element must never look like.
+ * Three rules, and each one is load-bearing.
  *
- * It carries a hairline and the recess behind it so that it reads as a SLOT that
- * is filled rather than as a picture that floated in. That is what makes an 18px
- * robot look deliberate at row scale: the frame says "something belongs here and
- * this is it", where a bare glyph on the row background says "something is
- * missing".
+ * **The box is always 16x16, and it is always painted.** `.fav` has a fixed
+ * width and height and `flex: none`, so a row whose icon could not be resolved
+ * occupies exactly the same space as a row whose icon could. That is the same
+ * decision the submit page's URL field made about its own icon gutter — an icon
+ * that arrives and widens its container moves everything to its right, and a
+ * board is forty-eight rows of "everything to its right". Roughly a third of any
+ * real board has no favicon, so this is the common case and not the edge one.
  *
- * No hue. `--cut` means taken and `--held` means survived (`lib/theme.ts`), and
- * an avatar in either would make an identity read as a score before a reader had
- * looked at a number.
+ * **`align-self: center` because the parent aligns on the baseline.** `.nm > b`
+ * is a baseline-aligned flex row so the name and its tags sit on one line; a
+ * 16px square has no baseline worth aligning, and letting it find one drops it
+ * three pixels below the cap height of the name it belongs to.
+ *
+ * **The fallback is neutral, and it is an object.** `--cut` is what was taken
+ * and `--held` is what survived; a product whose website we could not read has
+ * neither taken nor survived anything, so it borrows neither — the hairline and
+ * the muted mono are the same treatment `.tag.solo` gets, which is this system's
+ * existing word for "a state, not a verdict". It is a bordered box rather than a
+ * bare letter so that it reads as the same OBJECT as the icons above and below
+ * it in the column, which is what makes the column look designed rather than
+ * half-loaded.
  */
-.avatar {
-  display: inline-flex;
+.fav {
+  flex: none;
   align-self: center;
-  flex: 0 0 auto;
-  background: var(--sunk);
-  border: 1px solid var(--hair);
-  box-shadow: inset 0 1px 2px rgb(var(--shade-c) / 0.5);
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--r1);
 }
-.avatar svg {
-  display: block;
+/*
+ * The favicon itself, painted as a background from the board's own `iconCss`
+ * block rather than as an `<img src>`. `lib/boards/favicon.ts` carries the
+ * measurement — a `data:` URL passed as a React prop lands in the document
+ * twice — and the shape has one visual consequence worth stating:
+ *
+ * `contain`, never `cover`. Favicons arrive at every aspect ratio, and cropping
+ * a wide wordmark to a square turns a logo into an unreadable smear. The
+ * `--sunk` ground behind it is the same recess the meter track sits in, so an
+ * icon with a transparent background lands in a well rather than floating.
+ */
+.favimg {
+  background-color: var(--sunk);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+/*
+ * The robot an anonymous product wears. Neutral, like the fallback, because
+ * withholding a name is a choice and not a verdict — `--cut` and `--held` are
+ * spent on the hundred points and on nothing else. `currentColor` in the SVG
+ * resolves to this, so `components/robot-avatar.tsx` names no colour of its own
+ * and the generator that replaces it will not have to either.
+ */
+.favbot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dimmer);
+  background: var(--sunk);
+  border-radius: var(--r1);
+}
+.favmark {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+  color: var(--dimmer);
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
 }
 
 /*

@@ -24,6 +24,13 @@
  * real name is replaced by its pseudonym — including in OTHER products' reasons,
  * which is where the one real instance was found.
  *
+ * And it matches more than the exact name, because **prose names the brand, not
+ * the listing**. Directory-scraped names look like `Sequo — stop re-explaining
+ * your project to your coding agent`, and no reason on the board contains that
+ * string; three contain "Sequo". Four patterns are therefore built per anonymous
+ * row: the full name, the brand at the front of it, the URL, and the bare host.
+ * `brandHead` and `hostOf` below carry the reasoning and the matching rules.
+ *
  * ## Two defences, and only one of them is this file
  *
  * This is the second line. The first is that an anonymous product never shows the
@@ -61,7 +68,7 @@
 
 import type { Ranking } from '@the-pit/engine';
 
-import { assignPseudonyms } from './pseudonym';
+import { assignPseudonyms } from './pseudonym.js';
 
 /**
  * The shortest real name that is scrubbed from free text.
@@ -88,6 +95,48 @@ export interface AnonIdentity {
 /** Escape a literal for use in a `RegExp`. */
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * The brand at the front of a product name.
+ *
+ * Directory-scraped names are overwhelmingly `Brand — tagline`, `Brand | what it
+ * does` or `Brand: descriptor`, and **prose refers to the brand, not to the whole
+ * string.** On the `developer-tools` board the full name "Sequo — stop
+ * re-explaining your project to your coding agent" never appears in a reason, and
+ * the bare token "Sequo" appears three times: twice in another product's persona
+ * picks and once in a third product's cluster reason. A redactor that matched
+ * only the full name would rewrite none of them and publish the brand of a
+ * listing that paid to withhold it.
+ *
+ * So the head is scrubbed as well, and it is matched more strictly than the full
+ * name is — case-sensitively and on word boundaries — because a head is short
+ * enough to collide with ordinary English where a whole product name is not.
+ *
+ * Returns `''` when there is no head worth scrubbing, which is the same answer as
+ * "the head is the whole name" (already covered) or "the head is too short to
+ * match safely".
+ */
+function brandHead(name: string): string {
+  const head = name.split(/\s[—–|:·]\s|[|:]/u)[0]?.trim() ?? '';
+  if (head === '' || head === name.trim()) return '';
+  return head.length >= MIN_SCRUBBABLE ? head : '';
+}
+
+/**
+ * A URL reduced to the host it names.
+ *
+ * `https://www.modulate.ai/` and `modulate.ai` identify the same company, and a
+ * reason that mentions the second is not covered by a pattern built from the
+ * first. Scheme, `www.` and any path are dropped, which is the same reduction
+ * `normalizeUrl` performs for a different purpose.
+ */
+function hostOf(url: string): string {
+  const host = url
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
+    .replace(/^www\./i, '')
+    .split(/[/?#]/u)[0];
+  return host !== undefined && host.length >= MIN_SCRUBBABLE ? host : '';
 }
 
 /**
@@ -159,6 +208,17 @@ export function redactRanking(
         pattern: new RegExp(escapeRegExp(row.name), 'gi'),
         replacement: identity.pseudonym,
       });
+
+      // The brand at the front of the name, which is what prose actually says.
+      // Case-sensitive and bounded, because a head is short enough to collide
+      // with ordinary English. See `brandHead`.
+      const head = brandHead(row.name);
+      if (head !== '') {
+        substitutions.push({
+          pattern: new RegExp(`\\b${escapeRegExp(head)}\\b`, 'g'),
+          replacement: identity.pseudonym,
+        });
+      }
     }
     // A URL is scrubbed at any length: it is never a word that occurs by
     // accident, and it is the other half of what a listing is withholding.
@@ -167,6 +227,15 @@ export function redactRanking(
         pattern: new RegExp(escapeRegExp(row.url), 'gi'),
         replacement: identity.pseudonym,
       });
+
+      // And the bare host, which names the same company without the scheme.
+      const host = hostOf(row.url);
+      if (host !== '') {
+        substitutions.push({
+          pattern: new RegExp(escapeRegExp(host), 'gi'),
+          replacement: identity.pseudonym,
+        });
+      }
     }
   }
 

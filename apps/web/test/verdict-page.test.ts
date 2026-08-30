@@ -65,8 +65,12 @@ describe('the connective word', () => {
   it('says what came off, in the brief’s own sentence', async () => {
     const html = await renderSeeded('developer-tools', 'Sequo');
 
-    // `brief` Part 5: "Runlet took 97 in cuts."
-    expect(html).toContain('Sequo — stop re-explaining your project to your coding agent took 30 in cuts.');
+    // `brief` Part 5: "Runlet took 97 in cuts." The subject is the designation,
+    // because a seeded listing is anonymous — the SENTENCE is what this test is
+    // about, and it survives the redaction unchanged, which is the point:
+    // anonymity withholds the identity and touches nothing else.
+    expect(html).toMatch(/Unit [A-Za-z]+-\d{3} took 30 in cuts\./);
+    expect(html).not.toContain('Sequo');
     expect(html).toContain('Everyone walks in at 100.');
     // And it explains why cuts is not the sum of the ledger's points.
     expect(html).toContain('not the sum of the points below');

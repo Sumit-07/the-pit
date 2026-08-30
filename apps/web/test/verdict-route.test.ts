@@ -39,11 +39,16 @@ beforeAll(async () => {
   // produced rather than hard-coding a digest.
   const store = await verdictStore();
   const { buildSeedRows, loadSeedInput } = await import('@the-pit/db');
-  const seed = buildSeedRows(await loadSeedInput('developer-tools', process.env['PIT_WORKDIR'] as string));
-  const row = seed.verdicts.find((candidate) => {
-    const payload = candidate.payload as { verdict?: { name?: unknown } };
-    return typeof payload.verdict?.name === 'string' && payload.verdict.name.startsWith('Sequo');
-  });
+  const input = await loadSeedInput('developer-tools', process.env['PIT_WORKDIR'] as string);
+  const seed = buildSeedRows(input);
+  // Found by ENGINE ID, not by the name on the page: every seeded listing is
+  // anonymous (`DECISIONS.md`, S4-source), so the frozen payload carries a
+  // designation and the submitted name is not in it to search for.
+  const target = input.ranking.ranking.find((candidate) => candidate.name.startsWith('Sequo'));
+  if (target === undefined) throw new Error('no product in developer-tools named Sequo…');
+  const row = seed.verdicts.find(
+    (candidate) => (candidate.payload as { verdict?: { id?: unknown } }).verdict?.id === target.id,
+  );
   if (row === undefined) throw new Error('no seeded verdict for Sequo');
   sequoSlug = row.publicSlug;
   expect(await store.bySlug(sequoSlug)).toBeDefined();
@@ -60,7 +65,10 @@ describe('the public verdict URL', () => {
     expect(response.headers.get('Set-Cookie')).toBeNull();
 
     const html = await response.text();
-    expect(html).toContain('Sequo');
+    // The designation, and NOT the submitted name — this listing is seeded, and a
+    // seeded listing is published anonymously.
+    expect(html).toMatch(/Unit [A-Za-z]+-\d{3}/);
+    expect(html).not.toContain('Sequo');
     expect(html).toContain('of 48 products');
     expect(html).toContain('Verdict &middot; Developer Tools');
   });

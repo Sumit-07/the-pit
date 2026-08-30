@@ -178,6 +178,20 @@ export function CategoryBoard({ board }: { board: BoardView }): ReactNode {
         <b>Moved</b> means demand and scarcity pulled the row off its pure-merit position.
       </p>
 
+      {/*
+        The board's icons, all of them, once.
+        `lib/boards/favicon.ts` carries the measurement: a `data:` URL passed as
+        a prop is written into the document twice — once in the HTML and once in
+        React's hydration payload — so 33 icons on 33 rows cost 264 KB rather
+        than 132 KB. Hoisted here they cost their own bytes once each, and the
+        six products that share a template's favicon share one rule.
+        Rendered as element TEXT and not through `dangerouslySetInnerHTML`, which
+        no board surface has: the string is a fixed template, a MIME from a closed
+        map and a base64 payload, and none of those alphabets contains a
+        character React would have to escape.
+      */}
+      {board.iconCss === '' ? null : <style>{board.iconCss}</style>}
+
       <div className="board">
         <BoardHead set="board" />
         <div>

@@ -10,6 +10,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@the-pit/anon':
+        specifier: workspace:*
+        version: link:../../packages/anon
       '@the-pit/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -60,6 +63,21 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)
 
+  packages/anon:
+    devDependencies:
+      '@the-pit/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@types/node':
+        specifier: ^22
+        version: 22.20.1
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)
+
   packages/auth:
     devDependencies:
       '@types/node':
@@ -74,6 +92,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@the-pit/anon':
+        specifier: workspace:*
+        version: link:../anon
       '@the-pit/engine':
         specifier: workspace:*
         version: link:../engine

@@ -131,7 +131,10 @@ describe('the population it hands the engine', () => {
   });
 
   it('carries the stored url and its normalized form, not a re-derived one', async () => {
-    await installProducts(database.pg, categoryId, makeProducts(1));
+    // A NAMED row, because that is what this test is about. A seeded row is
+    // anonymous (`products_seeded_is_anonymous`) and reaches the engine with its
+    // address blanked, which is the next test.
+    await installProducts(database.pg, categoryId, makeProducts(1), 'placed', { anonymous: false });
     const product = (await source().load(CATEGORY_SLUG))?.products[0];
     expect(product).toMatchObject({
       id: 0,
@@ -139,6 +142,31 @@ describe('the population it hands the engine', () => {
       url: 'https://example.com/0',
       normalized_url: 'example.com/0',
     });
+  });
+
+  it('hands the panel a designation and no address for an anonymous listing', async () => {
+    // The FIRST of the two defences behind an anonymous listing, and the one that
+    // matters: three prompts render a product's `name` into their data block, and
+    // every one of those passes produces free text that is published in full. A
+    // juror shown the real name could write it into a deduction reason and the
+    // board would print it. So the panel never sees it.
+    //
+    // This is why the choice has to be made at SUBMISSION: not because a later
+    // choice would be untidy, but because a later choice could not be honoured.
+    await installProducts(database.pg, categoryId, makeProducts(2));
+    const population = (await source().load(CATEGORY_SLUG))?.products ?? [];
+
+    expect(population).toHaveLength(2);
+    for (const product of population) {
+      expect(product.name).toMatch(/^Unit [A-Za-z]+-\d{3}$/);
+      expect(product.url).toBe('');
+      expect(product.normalized_url).toBe('');
+    }
+    // Two listings, two designations. A board on which two rows answered to the
+    // same name is a board a reader cannot tell apart.
+    expect(new Set(population.map((product) => product.name)).size).toBe(2);
+    // And the description — the thing actually being judged — is untouched.
+    expect(population[0]?.description).toBe(makeProducts(2)[0]?.description);
   });
 
   it('excludes held and rejected rows, and includes pending ones', async () => {

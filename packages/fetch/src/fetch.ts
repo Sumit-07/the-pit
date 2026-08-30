@@ -4,11 +4,13 @@
  *
  * ## The threat
  *
- * Two features need it — resolving a link shortener so the per-product cap
- * cannot be evaded by pasting `bit.ly/x` (`brief §2.5`), and reading a product's
- * own `<title>`/`<meta>` so the board judges first-party copy. Both take a URL
- * chosen by the person the guard is protecting the system from, which makes both
- * of them server-side request forgery. That is why the fetch lives in its own
+ * Three features need it — resolving a link shortener so the per-product cap
+ * cannot be evaded by pasting `bit.ly/x` (`brief §2.5`), reading a product's own
+ * `<title>`/`<meta>` so the board judges first-party copy, and pulling the bytes
+ * of a product's favicon so the boards can show a mark beside a name without
+ * hotlinking forty-eight strangers' servers on every page view. All three take a
+ * URL chosen by the person the guard is protecting the system from, which makes
+ * all three of them server-side request forgery. That is why the fetch lives in its own
  * module with its own tests, and why nothing else in the repo is allowed to call
  * `fetch()` on a submitted URL.
  *
@@ -37,6 +39,12 @@
  *    reading a byte.** A 12 GB `application/octet-stream` should cost one set of
  *    response headers, not 12 GB of memory.
  *
+ * `resolveFinal`, `fetchDocument` and `fetchAsset` are three entry points into
+ * ONE walk. They differ only in what they do with the final response — nothing,
+ * read it as HTML, read it as image bytes — and adding the third did not add a
+ * second set of guards to keep in step, which is the only reason it was allowed
+ * to live here rather than anywhere else.
+ *
  * Around all of it: a redirect cap, a wall-clock budget checked at every hop,
  * and a byte cap handed to the transport rather than applied to a buffer that
  * has already been filled.
@@ -51,6 +59,8 @@
 import {
   ALLOWED_PORTS,
   HTML_CONTENT_TYPES,
+  IMAGE_CONTENT_TYPES,
+  MAX_ASSET_BYTES,
   MAX_REDIRECTS,
   MAX_RESPONSE_BYTES,
   MAX_URL_LENGTH,
@@ -65,6 +75,14 @@ import type { HostResolver, Transport, TransportResponse } from './transport.js'
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 const DEFAULT_PORT: Readonly<Record<string, number>> = { 'http:': 80, 'https:': 443 };
+
+/**
+ * What the walk asks for. Only ever a hint — every guard is applied to what came
+ * back, never to what was requested — but asking for images when an image is
+ * wanted stops a content-negotiating server handing back its 404 page.
+ */
+const HTML_ACCEPT = 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1';
+const IMAGE_ACCEPT = 'image/png,image/webp,image/*;q=0.8,*/*;q=0.1';
 
 export interface GuardedFetcherOptions {
   readonly resolver: HostResolver;
@@ -95,6 +113,27 @@ export interface FetchedDocument extends ResolvedTarget {
   readonly truncated: boolean;
 }
 
+/** A whole, untruncated binary body, with the content type the server claimed for it. */
+export interface FetchedAsset extends ResolvedTarget {
+  /** The essence of the `Content-Type`, lowercased. What the SERVER said; not proof. */
+  readonly contentType: string;
+  readonly bytes: Uint8Array;
+}
+
+/** Per-call overrides for `fetchAsset`. The address rules are not among them. */
+export interface AssetOptions {
+  /**
+   * Content types whose body may be read. Defaults to `IMAGE_CONTENT_TYPES`.
+   *
+   * A caller may narrow this. Widening it to include `image/svg+xml` is the one
+   * thing this seam exists to make deliberate rather than accidental — read that
+   * constant's comment before you do.
+   */
+  readonly contentTypes?: readonly string[];
+  /** Byte cap for this asset. Defaults to `MAX_ASSET_BYTES`. */
+  readonly maxBytes?: number;
+}
+
 export interface GuardedFetcher {
   /**
    * Follow the redirect chain and report where it ends, WITHOUT reading a body.
@@ -106,6 +145,35 @@ export interface GuardedFetcher {
   resolveFinal(url: string): Promise<FetchOutcome<ResolvedTarget>>;
   /** Follow the chain and read the (capped) body, provided it is HTML. */
   fetchDocument(url: string): Promise<FetchOutcome<FetchedDocument>>;
+  /**
+   * Follow the chain and read the body as BYTES, provided it is one of a small
+   * allowlist of raster image types and provided the whole of it fits the cap.
+   *
+   * This is the same `walk` as the other two — the same scheme check, the same
+   * credential and port refusal, the same resolve-once-judge-every-answer-dial-
+   * the-judged-address, the same re-check on every redirect hop, the same
+   * redirect cap and the same wall clock. It is a third ENTRY POINT into one
+   * guarded walk, not a second fetch path, and it exists because a favicon is a
+   * URL a stranger chose exactly as much as their homepage is: the guards are
+   * the reason fetching it at all is safe.
+   *
+   * Two things differ from `fetchDocument`, and both are about what an image is:
+   *
+   * 1. The content-type allowlist is images, and it excludes SVG (see
+   *    `IMAGE_CONTENT_TYPES`). Still decided from the headers before a byte is
+   *    read, so a 4 GB `video/mp4` behind a `<link rel="icon">` costs one set of
+   *    response headers.
+   * 2. A body that hits the cap is REFUSED rather than returned truncated. A
+   *    prefix of an HTML document still has a usable `<head>`; a prefix of a PNG
+   *    is a broken image, and storing one would put a broken image on the board
+   *    rather than a considered fallback.
+   *
+   * The content type here is what the server CLAIMED. It is a necessary check
+   * and not a sufficient one — an HTML error page served as `image/png` passes
+   * it — so a caller that is going to store these bytes must also decide the
+   * format from the bytes themselves.
+   */
+  fetchAsset(url: string, options?: AssetOptions): Promise<FetchOutcome<FetchedAsset>>;
 }
 
 interface Hop {
@@ -201,6 +269,7 @@ export function createGuardedFetcher(options: GuardedFetcherOptions): GuardedFet
    */
   async function walk(
     requestedUrl: string,
+    accept: string = HTML_ACCEPT,
   ): Promise<FetchOutcome<{ readonly hop: Hop; readonly response: TransportResponse; readonly chain: string[] }>> {
     const deadline = now() + timeoutMs;
     const controller = new AbortController();
@@ -249,7 +318,7 @@ export function createGuardedFetcher(options: GuardedFetcherOptions): GuardedFet
             family: hop.family,
             headers: {
               'user-agent': userAgent,
-              accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1',
+              accept,
               'accept-encoding': 'identity',
             },
             signal: controller.signal,
@@ -351,6 +420,67 @@ export function createGuardedFetcher(options: GuardedFetcherOptions): GuardedFet
           html: decode(body.bytes, rawType),
           bytesRead: body.bytes.byteLength,
           truncated: body.truncated,
+        },
+      };
+    },
+
+    async fetchAsset(requestedUrl: string, assetOptions: AssetOptions = {}): Promise<FetchOutcome<FetchedAsset>> {
+      const allowed = assetOptions.contentTypes ?? IMAGE_CONTENT_TYPES;
+      const cap = assetOptions.maxBytes ?? MAX_ASSET_BYTES;
+
+      const walked = await walk(requestedUrl, IMAGE_ACCEPT);
+      if (!walked.ok) return walked;
+      const { hop, response, chain } = walked.value;
+
+      if (response.status < 200 || response.status >= 300) {
+        response.discard();
+        return refuse('bad_status', hop.url.href, `${hop.url.href} answered ${response.status}`);
+      }
+
+      // From the headers, before `read`. An asset the caller will not accept
+      // costs one set of response headers and no bytes at all.
+      const rawType = response.headers['content-type'] ?? '';
+      const essence = rawType.split(';')[0]?.trim().toLowerCase() ?? '';
+      if (!allowed.includes(essence)) {
+        response.discard();
+        return refuse(
+          'unsupported_content_type',
+          hop.url.href,
+          rawType === ''
+            ? `${hop.url.href} sent no content type; this fetch accepts only ${allowed.join(', ')}`
+            : `${hop.url.href} is ${essence}, which is not one of ${allowed.join(', ')}`,
+        );
+      }
+
+      let body: { readonly bytes: Uint8Array; readonly truncated: boolean };
+      try {
+        body = await response.read(cap);
+      } catch (error) {
+        if (isAbort(error)) {
+          return refuse('timeout', hop.url.href, `the ${timeoutMs}ms budget ran out reading ${hop.url.href}`);
+        }
+        return refuse('transport_error', hop.url.href, `could not read ${hop.url.href}: ${messageOf(error)}`);
+      }
+
+      // A truncated document is still readable; a truncated image is rubble.
+      // The cap has already stopped the socket, so this costs nothing extra —
+      // it only refuses to pretend the prefix is a picture.
+      if (body.truncated) {
+        return refuse('asset_too_large', hop.url.href, `${hop.url.href} is larger than the ${cap}-byte cap for an asset`);
+      }
+      if (body.bytes.byteLength === 0) {
+        return refuse('asset_too_large', hop.url.href, `${hop.url.href} answered ${response.status} with an empty body`);
+      }
+
+      return {
+        ok: true,
+        value: {
+          requestedUrl,
+          finalUrl: hop.url.href,
+          chain,
+          status: response.status,
+          contentType: essence,
+          bytes: body.bytes,
         },
       };
     },

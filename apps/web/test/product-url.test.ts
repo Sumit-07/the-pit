@@ -9,7 +9,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { FetchOutcome, FetchRefusalCode, FetchedDocument, GuardedFetcher, ResolvedTarget } from '@the-pit/fetch';
+import type { FetchOutcome, FetchRefusalCode, FetchedAsset, FetchedDocument, GuardedFetcher, ResolvedTarget } from '@the-pit/fetch';
 
 import {
   productUrlFetcher,
@@ -52,6 +52,17 @@ function fakeFetcher(routes: Readonly<Record<string, { final?: string; html?: st
           bytesRead: (route.html ?? '').length,
           truncated: false,
         },
+      });
+    },
+    /**
+     * These suites are about resolving a URL, never about pulling bytes. A fake
+     * that could return an image would be a fake with a capability the code
+     * under test does not use.
+     */
+    fetchAsset(url: string): Promise<FetchOutcome<FetchedAsset>> {
+      return Promise.resolve({
+        ok: false,
+        refusal: { code: 'unsupported_content_type', reason: 'this fake fetches no assets', url },
       });
     },
   };

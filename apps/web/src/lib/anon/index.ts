@@ -1,34 +1,34 @@
 /**
- * Anonymous listings: the one place a pseudonym or a robot is produced.
+ * The app's door onto `@the-pit/anon`.
  *
- * ## The seam
+ * The generator lives in a package rather than here because `packages/db`'s seed
+ * builder needs it too, and a package may not import from the app
+ * (`PHASE-0.md §3`) while this app's board read path may not import
+ * `@the-pit/db` (`test/boards-read-path.test.ts`). That package's own header
+ * carries the argument in full.
  *
- * Two other surfaces need this and neither should reimplement any of it:
+ * This file is one line of re-export and exists so that every call site inside
+ * `apps/web` — the board projection, the verdict model, the robot component, the
+ * pipeline's catalogue and its deliver step — names one import path. When the
+ * package moves or gains an entry point, this is the file that changes.
  *
- * - **A board row's identity slot.** `RowView.anonymous` says whether a row is
- *   anonymous and `RowView.robot` carries the finished inline SVG. A favicon is
- *   rendered for a row if and only if `anonymous` is false — an anonymous
- *   listing has no URL on the read path to fetch one from, which is the property
- *   that makes the privacy rule structural rather than a rule to remember.
- * - **A verdict page's header.** `Verdict.anonymous` and `Verdict.robot`, from
- *   the frozen payload, never from a live lookup.
- *
- * Everything here is PURE: no I/O, no database, no network, no environment. That
- * is what lets it sit on the board read path, which
- * `test/boards-read-path.test.ts` keeps free of `@the-pit/db` and of any runtime
- * import of `@the-pit/engine` — the engine appears below only as `import type`,
- * which is erased.
- *
- * ## The three files
- *
- * - `pseudonym.ts` — the hash, the designation vocabulary, and the
- *   collision-free per-category assignment.
- * - `robot.ts` — the deterministic inline-SVG avatar, drawn for 16px first and
- *   painted only in the neutral surface and ink tokens.
- * - `redact.ts` — removing a listing's name and URL from a ranking document,
- *   including from other products' free text.
+ * Nothing here has runtime dependencies, so importing it does not put a driver or
+ * a model client on the board read path. That is the property the read-path test
+ * is protecting, and it is why the generator was allowed to become a package
+ * rather than being duplicated.
  */
 
-export { anonSeed, assignPseudonyms, DESIGNATIONS, hash32, pseudonymFor } from './pseudonym';
-export { robotSpec, robotSvg, type RobotOptions, type RobotSpec } from './robot';
-export { anonIdentities, redactRanking, type AnonIdentity } from './redact';
+export {
+  anonIdentities,
+  anonSeed,
+  assignPseudonyms,
+  DESIGNATIONS,
+  hash32,
+  pseudonymFor,
+  redactRanking,
+  robotSpec,
+  robotSvg,
+  type AnonIdentity,
+  type RobotOptions,
+  type RobotSpec,
+} from '@the-pit/anon';

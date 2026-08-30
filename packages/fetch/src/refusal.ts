@@ -31,6 +31,16 @@ export type FetchRefusalCode =
   | 'bad_status'
   /** A final response that is not HTML. Decided from the headers, before any body is read. */
   | 'unsupported_content_type'
+  /**
+   * An asset body did not fit its cap, or was empty.
+   *
+   * Its own code rather than a `bad_status`, because it means something a caller
+   * can act on that the others do not: the server answered correctly and the
+   * thing it answered with is simply too big to be the small image we asked for.
+   * A caller may reasonably try a different candidate URL on this and not on a
+   * `blocked_address`.
+   */
+  | 'asset_too_large'
   /** The wall-clock budget ran out. */
   | 'timeout'
   /** The connection failed, or the transport threw. */

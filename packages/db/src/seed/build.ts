@@ -66,6 +66,8 @@ import type {
 import { categorySlug, digest } from '@the-pit/engine';
 
 import { verdictSlug } from '../identity.js';
+import { redactRanking } from '@the-pit/anon';
+
 import { verdictPayload } from '../verdict-payload.js';
 import { normalizeUrl } from '../normalized-url.js';
 import type {
@@ -360,7 +362,42 @@ export function buildSeedRows(input: SeedInput): SeedRows {
 
   // --- the frozen verdict pages ----------------------------------------------
 
-  const verdictRows: (typeof verdicts.$inferInsert)[] = ranking.ranking.map((row) => {
+  /**
+   * The board with every listing's identity taken out of it.
+   *
+   * EVERY seeded listing is anonymous — `DECISIONS.md`'s resolution of S4-source:
+   * 913 of the 1028 seeded descriptions were scraped from a third-party directory
+   * rather than written by the companies they describe, so a NAMED seeded row is
+   * AI criticism of copy that company never wrote. `products_seeded_is_anonymous`
+   * refuses to store one; this is the same rule applied to the frozen page.
+   *
+   * It is applied HERE and not to `ranking` as a whole, deliberately. The two
+   * kinds of row this builder writes want different documents:
+   *
+   * - `verdicts.payload` is the PUBLIC, PERMANENT artifact. `brief` Part 6 makes
+   *   it a shareable URL that works logged out, and `verdicts` is append-only, so
+   *   a name frozen into it is a name published forever — and one that a later
+   *   claim could not retract, because the whole point of freezing is that the
+   *   page keeps showing what it showed. This is the one place where getting it
+   *   wrong is unfixable, so this is where the redaction goes.
+   * - `score_rows`, `cluster_members` and `demand_votes` are the INTEGRITY
+   *   RECORD (`brief` Part 7: "the score log is the integrity record if anyone
+   *   disputes a ranking"). They are internal, no route serves them, and a
+   *   dispute is argued from what the panel actually saw. Redacting them would
+   *   destroy evidence to protect an identity that is not in them anyway — they
+   *   key on `product_id`, not on a name.
+   *
+   * `products.name` and `products.url` keep the real values for the same reason:
+   * they are what a founder claims, and claiming is what turns anonymity back
+   * into a name.
+   */
+  const publicRanking = redactRanking(
+    ranking,
+    ranking.ranking.map((row) => row.id),
+    slug,
+  );
+
+  const verdictRows: (typeof verdicts.$inferInsert)[] = publicRanking.ranking.map((row) => {
     const id = verdictId(row.id);
     const email = submitterByEngineId.get(row.id) ?? null;
     const accountId = email === null ? null : (accountIdByEmail.get(email) ?? null);
@@ -374,8 +411,8 @@ export function buildSeedRows(input: SeedInput): SeedRows {
       jobId: null,
       accountId,
       attemptNumber: null,
-      payload: verdictPayload(ranking, row, input.categorySnapshotVersion, seededAt),
-      productCount: ranking.ranking.length,
+      payload: verdictPayload(publicRanking, row, input.categorySnapshotVersion, seededAt),
+      productCount: publicRanking.ranking.length,
       deliveredAt: seededAt,
     };
   });

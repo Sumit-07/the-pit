@@ -55,6 +55,24 @@
  * full in the ledger below, because a `title` is not an accessible name and a
  * hover is not available to a keyboard.
  *
+ * ## The mark beside the name
+ *
+ * Every row opens with a sixteen-pixel box holding one of three things: a robot
+ * if the product is anonymous, its favicon if it is named and we could read one,
+ * and its initial if it is named and we could not. `<RowMark>` carries the
+ * reasoning — the short version is that the box is painted on every row in all
+ * three states, because a gutter that appears late shifts the name under the
+ * reader's eye, and that a blank one reads as broken where a considered fallback
+ * reads as designed.
+ *
+ * The icon reaches the row as a CLASS, from the board's single `iconCss` block,
+ * never as a `data:` URL on the row itself — `lib/boards/favicon.ts` has the
+ * measurement that made that the shape. The bytes behind it were fetched
+ * offline by `lib/boards/favicon-backfill.ts` under `@the-pit/fetch`'s guards
+ * and stored beside the board data. No board surface ever hotlinks a product's
+ * own server: 48 rows would be 48 third-party requests on every page view, each
+ * one telling a stranger who is reading their row.
+ *
  * ## Escaping
  *
  * Product names, descriptions and URLs are user-submitted, and juror reasons
@@ -68,6 +86,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 
 import { SOLO_NOTE } from '@/lib/boards/copy';
+import { RobotAvatar } from '@/components/robot-avatar';
 import { metricLabel, n1, n2, rank2, type MetricView, type RowView } from '@/lib/boards/view';
 
 /** How much of a row's numbers a surface shows. The homepage shows fewer. */
@@ -125,36 +144,92 @@ function RowTags({ row }: { row: RowView }): ReactNode {
 }
 
 /**
- * Rank, name, marks, and the cut that hurt most — in that order.
+ * The product's own mark: one box, three things that can be in it.
+ *
+ * ## The three states, and why they are three and not two
+ *
+ * 1. **Anonymous** — a robot, drawn deterministically from the product id. The
+ *    product withheld its name, its URL and its face at submission, before it
+ *    was scored, and that choice is immutable. It never shows a favicon: a
+ *    favicon is a trademark at sixteen pixels, and putting one beside a
+ *    pseudonym identifies the product completely rather than partially.
+ *    `lib/boards/identity.ts` holds the decision; `view.ts` enforces it by never
+ *    putting an icon on such a row, so this branch cannot leak one even if it
+ *    were written wrongly.
+ * 2. **Named, with an icon** — its favicon, painted by a class from the board's
+ *    one `iconCss` block.
+ * 3. **Named, with nothing usable at its site** — its initial. This is roughly a
+ *    third of every board, so it is a common state, not an edge.
+ *
+ * Anonymity and "we could not read your site" are different facts and get
+ * different marks. Showing the fallback initial for an anonymous product would
+ * be worse than useless — it would leak the first letter of a name that is being
+ * withheld.
+ *
+ * ## The space is always there
+ *
+ * `.fav` is a fixed sixteen-pixel box, painted on every row, in all three
+ * states. That is why `RowView.mark` is a required field rather than something a
+ * surface derives when an icon is missing: a gutter that appeared only for rows
+ * that resolved would shift every name on the board sideways depending on
+ * whether a stranger's server answered. The submit page's URL field learned this
+ * first — `lib/checkout/page.ts` reserves the same gutter, for the same reason,
+ * because padding that arrives with the favicon moves the caret mid-sentence.
+ *
+ * ## Missing has to look deliberate
+ *
+ * A blank sixteen-pixel hole reads as a page that failed to load; the product's
+ * initial in the row's own mono, inside a hairline box the same size as the
+ * icons above and below it, reads as a mark that was chosen. It borrows neither
+ * hue — `--cut` means *this was taken* and `--held` means *this survived*, and
+ * neither anonymity nor an unreadable website is either of those. Both get the
+ * neutral outline `.tag.solo` gets, for the same reason.
+ *
+ * ## `aria-hidden`, all three
+ *
+ * A favicon is decoration: the product's name is right beside it, in text. An
+ * initial taken FROM that name is decoration twice over, and announcing "C,
+ * Capgo" on forty-eight rows would be noise. So the wrapper is hidden and a row
+ * reads as its name whichever of the three is drawn.
+ *
+ * ## No network at render
+ *
+ * The icon is a `data:` URL that is already in this document, reached through a
+ * class. There is no request here — which is also why there is no
+ * `loading="lazy"` anywhere: a lazily-loaded `data:` URL is a hint about a fetch
+ * that will never happen.
+ */
+function RowMark({ row }: { row: RowView }): ReactNode {
+  if (row.anonymous) {
+    return (
+      <span className="fav" aria-hidden="true">
+        <RobotAvatar seed={row.robotSeed ?? String(row.rank)} size={16} />
+      </span>
+    );
+  }
+  if (row.iconClass === undefined) {
+    return (
+      <span className="fav" aria-hidden="true">
+        <span className="favmark">{row.mark}</span>
+      </span>
+    );
+  }
+  return <span className={`fav favimg ${row.iconClass}`} aria-hidden="true" />;
+}
+
+/**
+ * The mark, the name, the row's tags, and the cut that hurt most — in that
+ * order.
  *
  * The heaviest deduction rides on the collapsed row with the juror attached. When
  * a card lost nothing at all the row says so in words rather than showing an
  * empty space, because a blank there reads as missing data.
  */
-/**
- * The identity slot: a robot for an anonymous listing, nothing for anybody else.
- *
- * The SVG is injected as markup because it is generated end to end by
- * `lib/anon/robot.ts` from a closed vocabulary of rects and theme tokens — no
- * product name, URL or juror reason is ever interpolated into it, and the two
- * attributes that can carry a string are escaped there. That is what makes this
- * the safe kind of `dangerouslySetInnerHTML`: the alternative is a second JSX
- * renderer for the same shapes, which is a second thing to keep in step with the
- * HTML surfaces that cannot use JSX at all.
- *
- * A named row renders nothing here. The favicon that belongs in this slot is
- * another agent's, and it hangs off `row.anonymous === false`.
- */
-export function RowAvatar({ row }: { row: RowView }): ReactNode {
-  if (!row.anonymous || row.robot === undefined) return null;
-  return <span className="avatar" dangerouslySetInnerHTML={{ __html: row.robot }} />;
-}
-
 export function RowLead({ row }: { row: RowView }): ReactNode {
   return (
     <span className="nm">
       <b>
-        <RowAvatar row={row} />
+        <RowMark row={row} />
         <span className="pname">{row.name}</span>
         <RowTags row={row} />
       </b>

@@ -154,6 +154,104 @@ latency, both are genuinely paid, and `jobs_idempotency_key_uk` still collapses 
 one run when the description is unchanged. That is a better failure than a free lockout
 lever on the buying path.
 
+### S17 — Anonymous listings: chosen at submission, frozen before scoring
+
+A product can be published without its **name** and its **URL**. It appears as a
+deterministic robot and a stable designation — `Unit Kilo-427`. It withholds those
+two things and **nothing else**: every cut, every deduction with its reason and the
+juror who took it, the per-metric scores and spreads, the cluster it was judged
+inside and the whole demand picture stay public.
+
+That split is the product. The Pit sells verdicts that are checkable; hiding the
+reasons would leave an opaque leaderboard, which is the thing it exists to replace.
+Only the identity is private.
+
+**The choice is made at submission, before the panel scores anything, and it is
+immutable.** The timing is the whole design and it is defended in two places:
+
+1. **Against adverse selection.** If a founder could go anonymous *after* reading
+   their verdict, the good scores would stay named and the bad ones would hide.
+   Each row would still be accurate and the board as a whole would become
+   systematically flattering, so a reader could no longer treat a name as evidence
+   of anything. That is exactly what `§2.4`'s never-keep-the-best rule refuses, in
+   a different currency: you may buy an evaluation, and you may not buy the right
+   to un-buy the ones that went badly. Buying an anonymous evaluation up front has
+   no selection effect at all, because the choice is made in ignorance of the
+   result.
+2. **Because a later choice could not be honoured.** Three prompts render a
+   product's name into their data block (`score`, `uniqueness`, `choice`), and all
+   three produce free text that is published in full. A juror shown the real name
+   can write it into a deduction reason, and the page prints it. So an anonymous
+   listing is marshalled into the engine already wearing its designation
+   (`apps/web/src/lib/pipeline/pg-catalog.ts`) and the panel never sees the name at
+   all. The decision has to exist before the prompt is built.
+
+**Enforced at the database, not in a handler.** `products_anonymity_immutable` in
+`migrations/0009_anonymous_listings.sql` — a trigger, because it compares NEW
+against OLD, which a CHECK cannot see. The same posture `0002_append_only_guards.sql`
+already takes for a delivered job, a published snapshot and the text that was
+scored. A handler is one code path among several, and the damage from any bypass is
+silent: a board that has been quietly flattered does not look broken.
+
+**The one legal transition is anonymous → named on a CLAIMED listing.** A founder
+who proves the listing is theirs through the existing GitHub path (verified-email
+matching only, S15) and then chooses to be named is performing an act of consent
+about their own product, which is a different act from reacting to a score — and
+the difference is legible in the data rather than in intent. The reveal is
+**prospective only**, and that falls out of the schema rather than needing a rule:
+`verdicts` is append-only and `payload` carries the name the listing was delivered
+under, so a link somebody shared keeps showing the designation it showed on the
+day. Claiming names a product on future boards; it cannot reach back.
+
+Named → anonymous is refused always. A product that wanted anonymity had its
+chance before it knew anything.
+
+**What is withheld is withheld everywhere.** The redaction is document-wide, not
+field-wide, because free text about a product sometimes contains its name — on the
+`developer-tools` cold-start board exactly one cluster reason names another
+product, one sentence in 2,892, which is precisely the rate at which a bug survives
+review and ships. It runs at publish (so the name never reaches the bucket, the CDN
+or `/api/boards/<slug>`, which serves the snapshot verbatim) and again at the
+projection (so no board surface is ever handed an identity it could leak). The
+favicon is withheld by the same rule and for the same reason: a site's favicon is
+its trademark at sixteen pixels, and rendering one beside a pseudonym identifies
+the product completely.
+
+**The robot is generated in-process, offline, as inline SVG** (`apps/web/src/lib/anon/`).
+Not robohash.org or anything like it: a third-party request on every board view
+hands that host the IP, User-Agent and Referer of every visitor to a public page,
+and leaves a broken-image glyph in every identity slot on the site the day it
+moves. It is painted only in the neutral surface and ink tokens — never `--cut` or
+`--held`, which carry meaning, because an avatar in either would make an identity
+read as a score.
+
+### S4-source RESOLVED — Seeded listings are anonymous
+
+**This supersedes the S4-source entry the Open section carried, and closes it.**
+
+The open question was whether to re-scrape the 913 seeded descriptions or to label
+their source. Neither was ever sufficient, because the exposure was not really
+about attribution: publishing AI criticism of copy a **named** company never wrote
+is the largest legal and reputational risk in the project, and `brief` Part 7's
+"mark clearly as unclaimed, offer one-click opt-out" only ever helped the companies
+that happened to find out.
+
+Seeding anonymously removes it at the root. The board still demonstrates the method
+on real market data, every cut and every reason is still public and still
+checkable, and **nobody is named without consent**. A founder who wants their name
+on their row claims the listing and reveals it, which is the S17 transition and is
+the same act `brief` Part 7's opt-out is the other end of.
+
+It is a constraint rather than a default: `products_seeded_is_anonymous` refuses to
+store a named unclaimed seeded row, so there is no fixture, script or admin path
+that can quietly produce one. The cold-start boards in `cjr/` are flat files that
+never pass through that constraint, so `lib/boards/source.ts` applies the same rule
+on read — every row of a seeded run is anonymous.
+
+Note the interaction with OPEN-1: as a category sheds seeds and fills with paid
+listings, the anonymous share of a board falls on its own. Nothing about the drain
+changes.
+
 ### OPEN-1 RESOLVED — Seed removal: per-category threshold, drained gradually
 - A category sheds seeds only once it holds N paid products (N ~ 25-30, chosen to stay
   well clear of the n>=8 floor from `01` §4).
@@ -180,7 +278,9 @@ Not blocking Phase 1. Needed before the phase named in brackets.
   population drift on `(description_hash, prompt_version)` alone.
 - **S14** [Ph.5] The "Landing now" feed is cross-category, and `01` §9 rule 2 forbids a
   cross-category leaderboard. Does the feed show ranks, or only names and cut totals?
-- **S4-source** [Ph.1] 913 of 1028 seeded descriptions were written by outbid.lol, not
-  by the founders. Opt-out is decided; re-scraping vs labelling the source is not.
+- ~~**S4-source** [Ph.1] 913 of 1028 seeded descriptions were written by outbid.lol,
+  not by the founders.~~ **RESOLVED** above: seeded listings are published
+  anonymously, so the question of re-scraping versus labelling no longer decides
+  anything — nobody is named without consent either way.
 - **Cost re-baseline** [Ph.1] Brief Part 3 budgets $17-25/mo across 15 categories; the
   data has 28. Six jurors instead of five adds ~20% on top.

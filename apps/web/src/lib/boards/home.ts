@@ -25,6 +25,7 @@
  * stored ranking, which the engine computed.
  */
 
+import { pickFaviconCss } from './favicon';
 import type { BoardView, MetricView, RowView } from './view';
 
 /** How many rows the homepage board shows. `the-pit-home.html` shows eight. */
@@ -35,6 +36,14 @@ export type HomeRow = Pick<
   RowView,
   | 'rank'
   | 'name'
+  | 'iconClass'
+  // The identity slot. `RowLead` draws the mark from these, and the homepage
+  // shows the same eight rows the category board does — an anonymous listing
+  // that arrived named on the front page would be the leak in its most public
+  // place.
+  | 'anonymous'
+  | 'robotSeed'
+  | 'mark'
   | 'cuts'
   | 'health'
   | 'composite'
@@ -44,11 +53,6 @@ export type HomeRow = Pick<
   | 'tiebroken'
   | 'headline'
   | 'soloNote'
-  // The identity slot. `RowLead` draws the robot from these, and the homepage
-  // shows the same eight rows the category board does — an anonymous listing that
-  // arrived named on the front page would be the leak in its most public place.
-  | 'anonymous'
-  | 'robot'
 > & {
   /** `RowView` fields the homepage never renders, present so the shared row components typecheck. */
   url: string;
@@ -91,6 +95,11 @@ export interface HomeBoard {
   tiebrokenCount: number;
   generatedAt: string;
   rows: HomeRow[];
+  /**
+   * The icons these eight rows wear, as CSS. Sliced with the rows, so the
+   * homepage carries at most sixteen icons and not ninety-two.
+   */
+  iconCss: string;
 }
 
 /**
@@ -185,6 +194,16 @@ function toHomeRow(row: RowView): HomeRow {
   return {
     rank: row.rank,
     name: row.name,
+    // A class name, not the icon's bytes. The homepage board is a CLIENT
+    // component, so everything on this row is serialized into the page's
+    // hydration payload as well as rendered into its HTML — which would put
+    // every icon in the document twice over. The bytes stay in the board's one
+    // `iconCss` block, emitted by the server page, and the row carries six
+    // characters.
+    ...(row.iconClass === undefined ? {} : { iconClass: row.iconClass }),
+    anonymous: row.anonymous,
+    ...(row.robotSeed === undefined ? {} : { robotSeed: row.robotSeed }),
+    mark: row.mark,
     cuts: row.cuts,
     health: row.health,
     composite: row.composite,
@@ -194,8 +213,6 @@ function toHomeRow(row: RowView): HomeRow {
     tiebroken: row.tiebroken,
     headline: row.headline,
     ...(row.soloNote === undefined ? {} : { soloNote: row.soloNote }),
-    anonymous: row.anonymous,
-    ...(row.robot === undefined ? {} : { robot: row.robot }),
     url: row.url,
     deductionCount: row.deductionCount,
     metrics: row.metrics.map(toMeterMetric),
@@ -206,6 +223,11 @@ function toHomeRow(row: RowView): HomeRow {
 
 /** Slice one board down to the homepage's eight rows. */
 export function toHomeBoard(board: BoardView, limit: number = HOME_ROWS): HomeBoard {
+  const rows = board.rows.slice(0, limit).map(toHomeRow);
+  // The icons the KEPT rows wear, and no others. The whole board's icon bytes
+  // are the single heaviest thing on a `BoardView`, and shipping forty of them
+  // to draw eight would undo this module's reason to exist.
+  const worn = new Set(rows.map((row) => row.iconClass).filter((name): name is string => name !== undefined));
   return {
     slug: board.slug,
     category: board.category,
@@ -214,7 +236,8 @@ export function toHomeBoard(board: BoardView, limit: number = HOME_ROWS): HomeBo
     soloCount: board.soloCount,
     tiebrokenCount: board.tiebrokenCount,
     generatedAt: board.generatedAt,
-    rows: board.rows.slice(0, limit).map(toHomeRow),
+    rows,
+    iconCss: pickFaviconCss(board.iconCss, worn),
   };
 }
 
