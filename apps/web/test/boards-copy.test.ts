@@ -81,12 +81,16 @@ describe('the homepage says them', () => {
     expect(text).toContain('nothing here is a rank');
   });
 
-  it('offers no checkout, no submission form and no auth on this phase’s surface', async () => {
+  it('points the CTA at /submit, live, with no form embedded on this surface', async () => {
+    // The paid path is complete end to end, so the CTA is a real link and not a
+    // disabled button — but the homepage itself still renders no form and no
+    // input; the form lives on `/submit`, one click away.
     const html = await renderHome();
     expect(html).not.toContain('<form');
     expect(html).not.toContain('<input');
-    expect(html).toContain('disabled=""');
-    expect(textOf(html)).toContain('the door isn’t open yet');
+    expect(html).not.toContain('disabled=""');
+    expect(html).toMatch(/<a class="cta" href="\/submit"[^>]*>/);
+    expect(textOf(html)).toContain('the door’s open');
   });
 
   it('shows the board itself, above the three panels', async () => {

@@ -29,12 +29,14 @@
  * `test/boards-read-path.test.ts` walks the import graph from here and fails if
  * that ever stops being true.
  *
- * ## What is deliberately absent
+ * ## The CTA
  *
- * No submission flow, no checkout, no auth. Those are other phases and other
- * agents. The CTA carries `brief` Part 5's exact words and says plainly that the
- * door is not open yet, because a button that took a visitor nowhere would be the
- * one dishonest thing on a page whose entire argument is that it cannot be bought.
+ * The paid path is complete end to end — guards, checkout, webhook, grant,
+ * enqueue, pipeline, delivery, attempt consumption, verdict — so the CTA is a
+ * real link to `/submit` and not a disabled button. It still carries `brief`
+ * Part 5's exact words; only the element changed. A button that took a visitor
+ * nowhere was the dishonest choice while the door was shut, and a button that
+ * refuses to move now that it opens would be the same lie pointed the other way.
  */
 
 import type { ReactNode } from 'react';
@@ -91,17 +93,17 @@ export default async function Home(): Promise<ReactNode> {
         </p>
         <div className="herorow">
           {/*
-            `brief` Part 5's CTA, word for word. Disabled rather than pointed at a
-            route that does not exist: checkout is Phase 3 and another agent's, and
-            a dead link is a worse lie than a closed door.
+            `brief` Part 5's CTA, word for word, and now a real link. The paid path
+            is complete end to end, so `/submit` is where this goes — guest
+            checkout, no login, `brief §2.1`.
           */}
-          <button className="cta" type="button" disabled aria-describedby="terms">
+          <a className="cta" href="/submit" aria-describedby="terms">
             Throw it in <small>&middot; $5</small>
-          </button>
+          </a>
           <span className="terms" id="terms">
             {COPY.terms}
             <br />
-            <i>the door isn&rsquo;t open yet</i>
+            <i>the door&rsquo;s open</i>
           </span>
         </div>
       </div>
