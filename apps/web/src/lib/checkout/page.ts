@@ -53,7 +53,7 @@ header.page h1{margin-top:9px}
 
 .tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-top:10px}
 .tier{display:block;background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
-  box-shadow:var(--e1);padding:15px 16px;cursor:pointer;
+  box-shadow:var(--lip),var(--e1);padding:15px 16px;cursor:pointer;
   transition:box-shadow .15s ease,border-color .15s ease}
 .tier:hover{box-shadow:var(--e2);border-color:rgb(var(--ink-c) / .2)}
 .tier:has(input:checked){border-color:var(--ink);box-shadow:var(--e2)}
@@ -63,16 +63,19 @@ header.page h1{margin-top:9px}
   margin-top:7px;padding-left:24px}
 .tier input{margin:0;flex:0 0 auto;accent-color:var(--ink);width:15px;height:15px}
 
-/* The one button that takes money is the filled one, wherever it appears. */
+/* The one button that takes money is the filled one, wherever it appears — and on
+   dark "filled" means the lightest surface in the system, with the ground as its
+   text. Colouring it would spend the one hue that means "taken". */
 button.act{margin-top:22px;font-size:15px;padding:13px 20px;
-  background:var(--ink);border-color:var(--ink);color:var(--paper)}
-button.act:hover{background:#000}
+  background:var(--ink);border-color:var(--ink);color:var(--pit);box-shadow:var(--e2)}
+button.act:hover{background:#FFFBF6;border-color:#FFFBF6}
 a.act{margin-top:16px}
 
 .warn{border-left:3px solid var(--cut)}
 .warn h2{color:var(--cut)}
 .when{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;color:var(--ink);
-  background:var(--sunk);border-radius:var(--r1);padding:10px 12px;margin-top:12px;display:block}
+  background:var(--sunk);border-radius:var(--r1);padding:10px 12px;margin-top:12px;display:block;
+  box-shadow:inset 0 1px 3px rgb(var(--shade-c) / .45)}
 .linked{font-family:var(--mono);font-size:11px;color:var(--dim);
   border:1px solid var(--line);border-radius:999px;padding:3px 9px;display:inline-block}
 .terms{margin-top:14px;font-size:14px;line-height:1.65;color:var(--dim);padding-left:1.2rem}

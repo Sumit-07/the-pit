@@ -11,24 +11,39 @@
  *
  * ## The short version
  *
- * Five values. `--paper` / `--card` / `--sunk` are a real surface stack and
- * `--ink` is text; every rule, shadow and muted tone is `--ink` at an alpha, so
- * there is no muted hex to drift. `--cut` is the only hue anywhere on the site,
- * and it means exactly one thing: **this was taken.** Points, deductions, and the
- * consumed part of a meter are `--cut`. Nothing else is.
+ * Six values. `--sunk` / `--pit` / `--card` / `--rise` are four steps of one warm
+ * umber, 4.5–7 CIE L* apart, and `--ink` is text; every rule and muted tone is
+ * `--ink` at an alpha and every shadow is `--shade-c` at an alpha, so there is no
+ * muted hex to drift. `--cut` is the only hue anywhere on the site, and it means
+ * exactly one thing: **this was taken.** Points, deductions, and the consumed part
+ * of a meter are `--cut`. Nothing else is.
  *
  * One sans (Archivo, 400–800 — the grotesque, not Archivo Black) and one mono
  * (IBM Plex Mono, on numbers only, always `tabular-nums`). Weight, scale and
  * tracking carry the personality; there is no display face.
  *
- * ## The pit is elevation, not darkness
+ * ## On dark, elevation is lightness
  *
- * `brief` Part 6: "Rows darken as they descend (the pit is literal)." On paper the
- * literal reading is depth in the surface stack rather than mud in the palette:
- * the first row sits highest — white, lifted, a real shadow — and each row below
- * loses elevation and sinks toward `--sunk`, until the last row is flush with the
- * floor. `--depth` is 0 at the top and 1 at the bottom (`boards/view.ts`) and it
- * drives background, shadow and border together, so descending is one gesture.
+ * A raised card is a *lighter surface* than the ground, not a same-coloured card
+ * with a shadow under it — which is why a light theme's drop shadows read as
+ * nothing on a dark ground and a dark theme's read as glow if you build them out
+ * of the text colour. So depth here is four cues that agree: surface lightness
+ * first, then a `--line` hairline where a shadow would have separated, then a
+ * `--lip` highlight on the top edge of anything lifted, then an occlusion shadow
+ * in `--shade-c` — black, deep, soft, low, and used sparingly.
+ *
+ * ## The pit is literal
+ *
+ * `brief` Part 6: "Rows darken as they descend (the pit is literal)." Now that the
+ * theme is dark it can be read literally AND structurally at once, which is the
+ * point: the first row is `--card` — lifted, lighter, with its lip and its shadow
+ * — and each row below both DARKENS toward `--pit` and FLATTENS, losing its lip
+ * and its shadow, until the last row is exactly the page ground with no lift at
+ * all. Two cues in agreement rather than one carrying it. Beneath even that, the
+ * meter track stays at `--sunk`, so the recess is a real recess in every row.
+ *
+ * `--depth` is 0 at the top and 1 at the bottom (`boards/view.ts`) and it drives
+ * background, lip and shadow together, so descending is one gesture.
  *
  * Nothing animates on a rank change. `brief` Part 6 again: motion comes from
  * rotating categories and arriving verdicts and never from rank churn, and
@@ -37,24 +52,37 @@
  */
 
 :root {
-  --paper: #edeff3;
-  --card: #ffffff;
-  --sunk: #dce0e7;
-  --ink: #101317;
-  --cut: #9c1b2f;
+  /* One committed scheme, declared so the UA paints its own chrome to match.
+     There is no `prefers-color-scheme` branch: the pit is dark, and that is the
+     identity rather than a setting. */
+  color-scheme: dark;
 
-  --ink-c: 16 19 23;
-  --cut-c: 156 27 47;
+  --sunk: #0f0a06;
+  --pit: #1a1610;
+  --card: #29241c;
+  --rise: #353129;
+  --ink: #ede6de;
+  --cut: #f45c33;
 
-  --dim: rgb(var(--ink-c) / 0.58);
-  --dimmer: rgb(var(--ink-c) / 0.4);
-  --line: rgb(var(--ink-c) / 0.11);
-  --hair: rgb(var(--ink-c) / 0.06);
-  --wash: rgb(var(--ink-c) / 0.035);
+  --ink-c: 237 230 222;
+  --cut-c: 244 92 51;
+  --pit-c: 26 22 16;
+  --shade-c: 0 0 0;
 
-  --e1: 0 1px 2px rgb(var(--ink-c) / 0.05), 0 1px 1px rgb(var(--ink-c) / 0.04);
-  --e2: 0 2px 4px rgb(var(--ink-c) / 0.05), 0 8px 20px rgb(var(--ink-c) / 0.07);
-  --e3: 0 2px 6px rgb(var(--ink-c) / 0.06), 0 14px 40px rgb(var(--ink-c) / 0.12);
+  --dim: rgb(var(--ink-c) / 0.78);
+  --dimmer: rgb(var(--ink-c) / 0.66);
+  --faint: rgb(var(--ink-c) / 0.6);
+  /* The muted stop for text sitting ON a lit fill — a light button, a filled
+     chip. `--dim` there would be near-white on near-white. */
+  --on-lit: rgb(var(--pit-c) / 0.7);
+  --line: rgb(var(--ink-c) / 0.17);
+  --hair: rgb(var(--ink-c) / 0.09);
+  --wash: rgb(var(--shade-c) / 0.32);
+
+  --lip: inset 0 1px 0 rgb(var(--ink-c) / 0.07);
+  --e1: 0 1px 2px rgb(var(--shade-c) / 0.45);
+  --e2: 0 2px 6px rgb(var(--shade-c) / 0.4), 0 10px 26px rgb(var(--shade-c) / 0.42);
+  --e3: 0 3px 10px rgb(var(--shade-c) / 0.45), 0 24px 64px rgb(var(--shade-c) / 0.55);
 
   --r1: 6px;
   --r2: 10px;
@@ -70,11 +98,11 @@
   padding: 0;
 }
 html {
-  background: var(--paper);
+  background: var(--pit);
   -webkit-text-size-adjust: 100%;
 }
 body {
-  background: var(--paper);
+  background: var(--pit);
   color: var(--ink);
   font-family: var(--sans);
   font-size: 15px;
@@ -83,10 +111,16 @@ body {
   font-synthesis-weight: none;
   overflow-x: hidden;
 }
+/*
+ * A ring made only of the text colour vanishes against a raised surface; one made
+ * only of the ground vanishes against the floor. Bright ring, dark halo — visible
+ * on all four surfaces in the stack.
+ */
 :focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
   border-radius: 3px;
+  box-shadow: 0 0 0 4px rgb(var(--shade-c) / 0.55);
 }
 
 .wrap {
@@ -169,15 +203,22 @@ a.navlink:hover {
 /* ---------- the hero slab ---------- */
 /*
  * The one aggressive surface on the site, and it is aggressive by being an
- * object: an ink card lifted off the paper, with the headline at 800 and −0.038em
- * doing the shouting. `brief` Part 5's voice — loud here, plain everywhere behind
- * it — is carried by weight and scale rather than by a display face or a colour.
+ * object: the highest surface in the stack — `--rise`, lifted clear of the ground
+ * on `--e3` — with the headline at 800 and −0.038em doing the shouting. `brief`
+ * Part 5's voice — loud here, plain everywhere behind it — is carried by weight
+ * and scale rather than by a display face or a colour.
+ *
+ * In the light theme this was an INK slab: the loud thing was the dark object on
+ * the light page. Inverted, the loud thing is the LIT object standing above a dark
+ * one, which is the same gesture read in the same direction — the top of the pit,
+ * the last thing still in daylight. It carries no accent type, which is what lets
+ * `--rise` be the one surface `--cut` is not required to clear AA against.
  */
 .hero {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--rise);
+  color: var(--ink);
   border-radius: var(--r3);
-  box-shadow: var(--e3);
+  box-shadow: var(--lip), var(--e3);
   padding: clamp(28px, 5vw, 52px) clamp(22px, 4.5vw, 46px) clamp(26px, 4.5vw, 44px);
   margin-top: 6px;
   position: relative;
@@ -203,7 +244,7 @@ a.navlink:hover {
 }
 .hero h1 em {
   font-style: normal;
-  color: rgb(255 255 255 / 0.52);
+  color: var(--dimmer);
 }
 .hero .sub {
   font-size: clamp(15px, 2.4vw, 20px);
@@ -211,10 +252,10 @@ a.navlink:hover {
   margin-top: 18px;
   max-width: 34ch;
   font-weight: 400;
-  color: rgb(255 255 255 / 0.62);
+  color: var(--dim);
 }
 .hero .sub b {
-  color: var(--paper);
+  color: var(--ink);
   font-weight: 600;
 }
 .herorow {
@@ -229,8 +270,8 @@ a.navlink:hover {
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.01em;
-  color: var(--ink);
-  background: var(--paper);
+  color: var(--pit);
+  background: var(--ink);
   border: 0;
   border-radius: var(--r1);
   padding: 13px 20px;
@@ -238,14 +279,14 @@ a.navlink:hover {
   display: inline-flex;
   align-items: baseline;
   gap: 8px;
-  box-shadow: 0 1px 0 rgb(255 255 255 / 0.4) inset, 0 6px 18px rgb(0 0 0 / 0.3);
+  box-shadow: 0 6px 18px rgb(var(--shade-c) / 0.5);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 .cta small {
   font-family: var(--mono);
   font-size: 12px;
   font-weight: 500;
-  color: var(--dim);
+  color: var(--on-lit);
 }
 .cta:hover:not(:disabled) {
   transform: translateY(-1px);
@@ -254,19 +295,21 @@ a.navlink:hover {
   cursor: not-allowed;
   opacity: 0.58;
 }
+/*
+ * These were white at .50 and .34 on the ink slab. On dark the same alphas land
+ * at 2.6:1 and 1.8:1 — the exact place a dark theme fails, small mono at a low
+ * alpha — so they are the system's own stops now and both clear AA.
+ */
 .hero .terms {
   font-family: var(--mono);
   font-size: 11.5px;
   line-height: 1.7;
-  color: rgb(255 255 255 / 0.5);
+  color: var(--dimmer);
   letter-spacing: 0.01em;
 }
 .hero .terms i {
   font-style: normal;
-  color: rgb(255 255 255 / 0.34);
-}
-.hero :focus-visible {
-  outline-color: var(--paper);
+  color: var(--faint);
 }
 
 /* ---------- the category rail ---------- */
@@ -303,11 +346,13 @@ a.navlink:hover {
   color: var(--ink);
   background: var(--card);
 }
+/* Selected inverts the stack rather than colouring itself: on dark, the loudest
+   a control can be without spending the one hue is to become the light surface. */
 .cat.on {
-  color: var(--paper);
+  color: var(--pit);
   background: var(--ink);
   border-color: var(--ink);
-  box-shadow: var(--e1);
+  box-shadow: var(--e2);
 }
 
 /*
@@ -320,7 +365,7 @@ a.navlink:hover {
  */
 .prog {
   height: 2px;
-  background: var(--line);
+  background: var(--sunk);
   border-radius: 2px 2px 0 0;
   overflow: hidden;
   margin-top: 14px;
@@ -351,6 +396,13 @@ a.navlink:hover {
   box-shadow: var(--e3);
   overflow: hidden;
 }
+/*
+ * The board reads as a hole cut in the page, and it needs a rim to be a hole. The
+ * column header is `--rise` — the highest surface in the stack, ground level —
+ * and everything below it descends: row 1 at `--card`, the last row at `--pit`,
+ * the footer strip below that in `--wash`. Five surfaces, top to bottom, in the
+ * order the eye travels.
+ */
 /* On the homepage the board hangs off the rotation bar, so its top corners are
    square and `.prog` is its top edge. On a category board it is a free-standing
    card. */
@@ -389,8 +441,10 @@ div.brow {
   gap: 14px;
   align-items: center;
   padding: 12px 18px;
-  background: var(--wash);
-  border-bottom: 1px solid var(--line);
+  background: var(--rise);
+  box-shadow: var(--lip), 0 2px 6px rgb(var(--shade-c) / 0.4);
+  position: relative;
+  z-index: 1;
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 600;
@@ -409,12 +463,23 @@ div.brow {
 /*
  * One row.
  *
- * `--depth` is 0 at the top of the board and 1 at the bottom. It is the pit: the
- * row loses its lift, its ground darkens toward `--sunk`, and by the last row it
- * is flush with the floor. Set on `.rowhead` by the surfaces, read here.
+ * `--depth` is 0 at the top of the board and 1 at the bottom. It is the pit, and
+ * it is drawn with TWO cues that agree rather than one carrying it alone:
+ *
+ *   1. the row DARKENS, `--card` down to `--pit`, so the last row is exactly the
+ *      page ground — literally flush with the floor;
+ *   2. the row FLATTENS, losing its `--lip` top edge and its shadow, so by the
+ *      bottom nothing is lifted off anything.
+ *
+ * The lip IS the separator, which is why there is no border here: a lit top edge
+ * that fades to nothing is both "this row is raised" and "this row is a different
+ * row", and one mark doing both is why the descent reads as a single gesture. At
+ * the top the rows are stacked objects with visible edges; at the bottom they are
+ * one continuous ground. `--depth` is set on `.rowhead` by the surfaces, so the
+ * fade lives there too.
  */
 .brow {
-  border-top: 1px solid var(--line);
+  border-top: 0;
 }
 .brow.first {
   border-top: 0;
@@ -457,11 +522,20 @@ div.brow {
   align-items: start;
   padding: 15px 18px 14px;
   position: relative;
-  background: color-mix(in srgb, var(--card) calc(100% - var(--depth) * 62%), var(--sunk));
-  transition: background 0.16s ease;
+  /* Cue 1: the row darkens, --card down to --pit, so the last row IS the floor. */
+  background: color-mix(in srgb, var(--card) calc(100% - var(--depth) * 100%), var(--pit));
+  /* Cue 2: the row flattens — the lit top edge fades to nothing as it descends. */
+  box-shadow: inset 0 1px 0 rgb(var(--ink-c) / calc(0.15 * (1 - var(--depth))));
+  transition: background 0.16s ease, box-shadow 0.16s ease;
 }
+/*
+ * Hover lifts the row back out of the pit — but only as far as `--card`, never
+ * past it. `--rise` is the one surface `--cut` does not clear 4.5:1 against, and
+ * a row carries 12px mono in `--cut`, so the ceiling here is a contrast floor.
+ */
 .brow > summary:hover .rowhead {
-  background: color-mix(in srgb, var(--card) calc(100% - var(--depth) * 40%), var(--sunk));
+  background: color-mix(in srgb, var(--card) calc(100% - var(--depth) * 45%), var(--pit));
+  box-shadow: inset 0 1px 0 rgb(var(--ink-c) / 0.15);
 }
 /* A solo cluster is 32 of 48 products. It is marked, quietly, and never as a warning. */
 .rowhead .flag {
@@ -471,7 +545,7 @@ div.brow {
   bottom: 10px;
   width: 2px;
   border-radius: 0 2px 2px 0;
-  background: rgb(var(--ink-c) / 0.22);
+  background: rgb(var(--ink-c) / 0.3);
 }
 .rk {
   grid-area: rank;
@@ -562,16 +636,33 @@ div.brow {
   min-width: 0;
   margin-top: 9px;
 }
+/*
+ * The track is `--sunk` — the one surface below everything else in the stack — so
+ * the hundred points are a groove cut into the row, and it stays a real recess
+ * even on the last row, which is itself down at `--pit`.
+ *
+ * The kept head is `--ink` at .40: a quiet neutral at L* 43, substantial (it is
+ * most of the bar) but plainly below the accent's L* 59, so what was TAKEN is
+ * still the brightest thing in the row.
+ *
+ * The segment ramp is floored at .58. In the light theme the faintest segment
+ * could fade to nearly the track and still read, because fading toward white
+ * keeps lightness. Fading an accent toward a near-black track by alpha runs it
+ * straight into mud, and the sixth metric's block would have read as empty
+ * track — the drawing would have been quietly wrong. So the ramp is 1 → .58, and
+ * the dividers between blocks are `--shade-c` rather than the card colour,
+ * because on dark the thing that separates two lit blocks is a dark line.
+ */
 .meter {
   display: flex;
   height: 10px;
   border-radius: 999px;
   background: var(--sunk);
   overflow: hidden;
-  box-shadow: inset 0 1px 1px rgb(var(--ink-c) / 0.07);
+  box-shadow: inset 0 1px 2px rgb(var(--shade-c) / 0.55);
 }
 .meter .kept {
-  background: rgb(var(--ink-c) / 0.24);
+  background: rgb(var(--ink-c) / 0.4);
   height: 100%;
   flex: 0 0 auto;
 }
@@ -579,22 +670,22 @@ div.brow {
   background: var(--cut);
   height: 100%;
   flex: 0 0 auto;
-  box-shadow: -1px 0 0 var(--card);
+  box-shadow: -1px 0 0 rgb(var(--shade-c) / 0.55);
 }
 .meter .seg.s2 {
-  background: rgb(var(--cut-c) / 0.82);
+  background: rgb(var(--cut-c) / 0.9);
 }
 .meter .seg.s3 {
-  background: rgb(var(--cut-c) / 0.66);
+  background: rgb(var(--cut-c) / 0.8);
 }
 .meter .seg.s4 {
-  background: rgb(var(--cut-c) / 0.52);
+  background: rgb(var(--cut-c) / 0.71);
 }
 .meter .seg.s5 {
-  background: rgb(var(--cut-c) / 0.4);
+  background: rgb(var(--cut-c) / 0.64);
 }
 .meter .seg.s6 {
-  background: rgb(var(--cut-c) / 0.3);
+  background: rgb(var(--cut-c) / 0.58);
 }
 .metercap {
   display: flex;
@@ -645,8 +736,10 @@ div.brow {
   align-self: start;
   padding-top: 4px;
 }
+/* Was ink/.30 — 1.9:1 on dark, and these are 11.5px labels that name the number
+   beside them. `--faint` is the system's floor stop and clears AA. */
 .nums .k {
-  color: rgb(var(--ink-c) / 0.3);
+  color: var(--faint);
   margin-right: 3px;
 }
 .nums .cell .v.none {
@@ -697,19 +790,29 @@ details[open] > summary .chev {
 /* Demand moved the row. A filled ink chip — a fact about arithmetic, not a loss. */
 .tag.tb {
   background: rgb(var(--ink-c) / 0.86);
-  color: var(--card);
+  color: var(--pit);
 }
+/* The accent means taken, so a flag borrows it at an alpha rather than filling
+   with it. .06 vanished on dark; .16 is a visible tint that is still not a block
+   of the hue. */
 .tag.fl {
-  border: 1px solid rgb(var(--cut-c) / 0.4);
+  border: 1px solid rgb(var(--cut-c) / 0.45);
   color: var(--cut);
-  background: rgb(var(--cut-c) / 0.06);
+  background: rgb(var(--cut-c) / 0.16);
 }
 
 /* ---------- the open ledger ---------- */
+/*
+ * The ledger drops BELOW the row it belongs to — `--wash` is black at an alpha,
+ * so it recesses whatever it covers. In the light theme the same token was ink at
+ * an alpha and did the same job in the same direction; only the channel changed.
+ * The `.ledger` cards then rise back out of it, which is the hierarchy the open
+ * row is trying to state.
+ */
 .detail {
   padding: 4px 18px 22px 56px;
   background: var(--wash);
-  border-top: 1px solid var(--hair);
+  box-shadow: inset 0 2px 6px rgb(var(--shade-c) / 0.35);
 }
 .took {
   font-size: 14px;
@@ -733,7 +836,7 @@ details[open] > summary .chev {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--r2);
-  box-shadow: var(--e1);
+  box-shadow: var(--lip), var(--e1);
   padding: 14px 16px 12px;
   margin-top: 12px;
 }
@@ -763,19 +866,21 @@ details[open] > summary .chev {
   background: var(--sunk);
   overflow: hidden;
   margin-top: 10px;
-  box-shadow: inset 0 1px 1px rgb(var(--ink-c) / 0.07);
+  box-shadow: inset 0 1px 2px rgb(var(--shade-c) / 0.55);
 }
 .bar i {
   display: block;
   height: 100%;
 }
 .bar i.kept {
-  background: rgb(var(--ink-c) / 0.24);
+  background: rgb(var(--ink-c) / 0.4);
 }
 .bar i.lost {
   background: var(--cut);
 }
-/* The juror split: the same figure, one level down, and exact for the same reason. */
+/* The juror split: the same figure, one level down, and exact for the same reason.
+   Same track, same kept head, same floored ramp as `.meter` — it has to be the
+   same drawing or the claim that it is the same decomposition is only a caption. */
 .jurorbar {
   display: flex;
   height: 9px;
@@ -783,10 +888,10 @@ details[open] > summary .chev {
   background: var(--sunk);
   overflow: hidden;
   margin-top: 10px;
-  box-shadow: inset 0 1px 1px rgb(var(--ink-c) / 0.07);
+  box-shadow: inset 0 1px 2px rgb(var(--shade-c) / 0.55);
 }
 .jurorbar .kept {
-  background: rgb(var(--ink-c) / 0.24);
+  background: rgb(var(--ink-c) / 0.4);
   height: 100%;
   flex: 0 0 auto;
 }
@@ -794,22 +899,22 @@ details[open] > summary .chev {
   background: var(--cut);
   height: 100%;
   flex: 0 0 auto;
-  box-shadow: -1px 0 0 var(--card);
+  box-shadow: -1px 0 0 rgb(var(--shade-c) / 0.55);
 }
 .jurorbar .seg.s2 {
-  background: rgb(var(--cut-c) / 0.82);
+  background: rgb(var(--cut-c) / 0.9);
 }
 .jurorbar .seg.s3 {
-  background: rgb(var(--cut-c) / 0.66);
+  background: rgb(var(--cut-c) / 0.8);
 }
 .jurorbar .seg.s4 {
-  background: rgb(var(--cut-c) / 0.52);
+  background: rgb(var(--cut-c) / 0.71);
 }
 .jurorbar .seg.s5 {
-  background: rgb(var(--cut-c) / 0.4);
+  background: rgb(var(--cut-c) / 0.64);
 }
 .jurorbar .seg.s6 {
-  background: rgb(var(--cut-c) / 0.3);
+  background: rgb(var(--cut-c) / 0.58);
 }
 .jurorcap {
   display: block;
@@ -860,13 +965,14 @@ details[open] > summary .chev {
   padding: 8px 10px;
   background: var(--sunk);
   border-radius: var(--r1);
+  box-shadow: inset 0 1px 3px rgb(var(--shade-c) / 0.45);
 }
 
 .blk {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--r2);
-  box-shadow: var(--e1);
+  box-shadow: var(--lip), var(--e1);
   padding: 15px 16px;
   margin-top: 12px;
 }
@@ -906,7 +1012,7 @@ details[open] > summary .chev {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--card);
+  color: var(--pit);
   background: rgb(var(--ink-c) / 0.86);
   border-radius: 999px;
   padding: 3px 8px;
@@ -970,10 +1076,10 @@ details[open] > summary .chev {
   color: var(--dim);
   margin-top: 16px;
   background: var(--sunk);
-  border: 1px solid var(--line);
+  border: 1px solid var(--hair);
   border-radius: var(--r2);
   padding: 14px 16px;
-  box-shadow: inset 0 1px 2px rgb(var(--ink-c) / 0.05);
+  box-shadow: inset 0 2px 5px rgb(var(--shade-c) / 0.5);
 }
 .legend b {
   color: var(--ink);
@@ -1002,9 +1108,9 @@ details[open] > summary .chev {
 .tick {
   list-style: none;
   background: var(--sunk);
-  border: 1px solid var(--line);
+  border: 1px solid var(--hair);
   border-radius: var(--r2);
-  box-shadow: inset 0 1px 2px rgb(var(--ink-c) / 0.05);
+  box-shadow: inset 0 2px 5px rgb(var(--shade-c) / 0.5);
   padding: 6px 16px;
 }
 .tick li {
@@ -1048,7 +1154,7 @@ section {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--r2);
-  box-shadow: var(--e1);
+  box-shadow: var(--lip), var(--e1);
   padding: 18px 18px 0;
   display: flex;
   flex-direction: column;
@@ -1080,7 +1186,7 @@ section {
   gap: 10px;
   margin: 16px -18px 0;
   padding: 11px 18px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--hair);
   background: var(--wash);
   border-radius: 0 0 var(--r2) var(--r2);
   font-family: var(--mono);
@@ -1096,11 +1202,13 @@ section {
 }
 
 /* ---------- the closer ---------- */
+/* The hero's bookend, and the same surface: the page opens and closes on the one
+   thing still lifted clear of the pit. */
 .closer {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--rise);
+  color: var(--ink);
   border-radius: var(--r3);
-  box-shadow: var(--e3);
+  box-shadow: var(--lip), var(--e3);
   padding: clamp(28px, 4.5vw, 46px);
   margin-top: 40px;
 }
@@ -1114,13 +1222,13 @@ section {
 }
 .closer h2 em {
   font-style: normal;
-  color: rgb(255 255 255 / 0.5);
+  color: var(--dimmer);
 }
 .closer p {
   font-family: var(--mono);
   font-size: 11.5px;
   letter-spacing: 0.04em;
-  color: rgb(255 255 255 / 0.48);
+  color: var(--dimmer);
   margin-top: 18px;
 }
 
@@ -1152,6 +1260,8 @@ section {
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 1px;
   margin-top: 22px;
+  /* The 1px gaps are the grid: a lit hairline between raised cells, which is the
+     dark-theme equivalent of the light theme's ink rule. */
   background: var(--line);
   border: 1px solid var(--line);
   border-radius: var(--r2);
@@ -1223,9 +1333,11 @@ section {
 }
 .caveat {
   background: var(--sunk);
+  border: 1px solid var(--hair);
   border-radius: var(--r2);
   padding: 15px 16px;
   margin-top: 16px;
+  box-shadow: inset 0 2px 5px rgb(var(--shade-c) / 0.5);
 }
 .caveat p {
   font-size: 13.5px;
@@ -1257,14 +1369,17 @@ section {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--r2);
-  box-shadow: var(--e1);
+  box-shadow: var(--lip), var(--e1);
   padding: 20px;
   text-decoration: none;
   color: inherit;
-  transition: box-shadow 0.16s ease, transform 0.16s ease;
+  transition: box-shadow 0.16s ease, transform 0.16s ease, background 0.16s ease;
 }
+/* Hover raises it a step in the stack as well as in the shadow — on dark, lifting
+   without getting lighter reads as nothing happening. */
 .bcard:hover {
-  box-shadow: var(--e2);
+  background: var(--rise);
+  box-shadow: var(--lip), var(--e2);
   transform: translateY(-2px);
 }
 .bcard h2 {
@@ -1292,7 +1407,7 @@ section {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--r2);
-  box-shadow: var(--e1);
+  box-shadow: var(--lip), var(--e1);
   padding: 28px;
   margin-top: 26px;
   font-size: 14px;

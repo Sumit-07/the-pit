@@ -31,6 +31,7 @@
 
 import { createHash } from 'node:crypto';
 
+import { MAIL_BODY_STYLE, MAIL_BUTTON_STYLE, MAIL_SMALL_STYLE } from './theme.js';
 import type { OutboundEmail } from './types.js';
 import { escapeHtml } from './render.js';
 
@@ -77,13 +78,13 @@ export function renderCapabilityEmail(input: CapabilityMessageInput): OutboundEm
 
   const html = [
     '<!doctype html>',
-    '<html lang="en"><body style="margin:0;padding:24px;background:#0b0b0c;color:#e8e8ea;font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif">',
+    `<html lang="en"><body style="${MAIL_BODY_STYLE}">`,
     '<h1 style="font-size:20px;margin:0 0 16px">Your account link</h1>',
     '<p style="margin:0 0 20px">The same link the page showed you after payment. Bookmark it — it is how you reach your remaining attempts, your history, and a re-pitch.</p>',
-    `<p style="margin:0 0 24px"><a href="${safeUrl}" style="display:inline-block;padding:12px 20px;background:#e8e8ea;color:#0b0b0c;text-decoration:none;border-radius:4px;font-weight:600">Open my account</a></p>`,
-    `<p style="margin:0 0 20px;font-size:14px;word-break:break-all;opacity:.7">${safeUrl}</p>`,
-    '<p style="margin:0 0 8px;font-size:14px;opacity:.7">No password, no expiry. Treat it like a key: anyone who has it can reach your account. If you think it has got out, sign in and rotate it — the old link stops working the moment you do.</p>',
-    '<p style="margin:0;font-size:14px;opacity:.7">Your verdict page is public and separate. Nothing here is needed to view or share it.</p>',
+    `<p style="margin:0 0 24px"><a href="${safeUrl}" style="${MAIL_BUTTON_STYLE}">Open my account</a></p>`,
+    `<p style="margin:0 0 20px;word-break:break-all;${MAIL_SMALL_STYLE}">${safeUrl}</p>`,
+    `<p style="margin:0 0 8px;${MAIL_SMALL_STYLE}">No password, no expiry. Treat it like a key: anyone who has it can reach your account. If you think it has got out, sign in and rotate it — the old link stops working the moment you do.</p>`,
+    `<p style="margin:0;${MAIL_SMALL_STYLE}">Your verdict page is public and separate. Nothing here is needed to view or share it.</p>`,
     '</body></html>',
   ].join('');
 

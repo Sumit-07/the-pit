@@ -10,12 +10,16 @@
  * assertion. So the requirements live one module down, where they can be checked,
  * and what is left here is a picture.
  *
- * The card is the verdict card at 1200x630 in `lib/theme.ts`'s palette, and it is
- * the one surface that inverts: a share image is seen at thumbnail size in a feed
- * next to other people's, so it is the ink slab rather than the paper, with the
+ * The card is the verdict card at 1200x630 in `lib/theme.ts`'s palette, with the
  * single hue on the single number that matters. `brief` Part 5's rule rides in the
  * data — `fields.rank` cannot be produced without its product count and its
  * timestamp — so there is no arrangement of this layout that shows a bare rank.
+ *
+ * When the site was paper this card was the one surface that INVERTED, because a
+ * share image is seen at thumbnail size in a feed next to other people's and the
+ * light version disappeared there. Now that the site is dark the card and the site
+ * are the same thing, and the exception is gone: these literals are the theme's
+ * own tokens resolved, not a second palette. `theme-drift.test.ts` pins them.
  */
 
 import { ImageResponse } from 'next/og';
@@ -26,14 +30,21 @@ import { verdictStore } from '@/lib/verdict/service';
 
 /**
  * `lib/theme.ts`'s tokens, as literals — satori resolves no `var()` and no
- * `rgb(… / a)`, so the derived tones are written out at their resolved values.
+ * `rgb(… / a)`, so the surfaces are the tokens themselves and the derived tones
+ * are written out at the values the browser would composite them to.
  */
-const INK = '#101317';
-const PANEL = '#1B1F26';
-const RULE = '#2C323B';
-const PAPER = '#EDEFF3';
-const MUTED = '#8C939E';
-const CUT = '#C2455C';
+/** `--pit`. */
+const GROUND = '#1A1610';
+/** `--card`, one step up: the quote panel. */
+const PANEL = '#29241C';
+/** `--line` (ink at .17) resolved over `--card`. */
+const RULE = '#4A453D';
+/** `--ink`. */
+const INK = '#EDE6DE';
+/** `--dimmer` (ink at .66) resolved over `--pit`. */
+const MUTED = '#A59F98';
+/** `--cut`. */
+const CUT = '#F45C33';
 
 const SIZE = { width: 1200, height: 630 } as const;
 
@@ -56,8 +67,8 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          background: INK,
-          color: PAPER,
+          background: GROUND,
+          color: INK,
           padding: '56px 64px',
           borderLeft: `14px solid ${CUT}`,
         }}
@@ -81,7 +92,7 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
           <div style={{ display: 'flex', fontSize: 120, fontWeight: 700, color: CUT, lineHeight: 1 }}>
             {fields.cuts}
           </div>
-          <div style={{ display: 'flex', fontSize: 34, color: PAPER, marginLeft: 18 }}>{fields.cutsLabel}</div>
+          <div style={{ display: 'flex', fontSize: 34, color: INK, marginLeft: 18 }}>{fields.cutsLabel}</div>
         </div>
 
         {/* `marginBottom` guarantees a gap even when the quote below is pushed
@@ -104,7 +115,7 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
               padding: '20px 24px',
             }}
           >
-            <div style={{ display: 'flex', fontSize: 28, lineHeight: 1.35, color: PAPER }}>{fields.quote}</div>
+            <div style={{ display: 'flex', fontSize: 28, lineHeight: 1.35, color: INK }}>{fields.quote}</div>
             <div style={{ display: 'flex', fontSize: 20, color: MUTED, marginTop: 12 }}>{fields.attribution}</div>
           </div>
         )}
