@@ -42,7 +42,7 @@
 import type { ReactNode } from 'react';
 
 import { CLOSER_PARTS, COPY, HEADLINE_PARTS } from '@/lib/boards/copy';
-import { boardStats, toHomeBoard, tickerLines } from '@/lib/boards/home';
+import { boardStats, toHomeBoard, tickerLines, type HomeBoard as HomeBoardData } from '@/lib/boards/home';
 import { defaultBoardSource } from '@/lib/boards/source';
 import { n1, toBoardView, type BoardView } from '@/lib/boards/view';
 import { HomeBoard } from '@/components/home-board';
@@ -66,8 +66,29 @@ async function loadBoards(): Promise<BoardView[]> {
   return views.sort((a, b) => b.productCount - a.productCount || a.category.localeCompare(b.category));
 }
 
+/**
+ * The icon rules for every board the rail can rotate to, deduplicated across
+ * them.
+ *
+ * Two categories can hold the same product, and two products can share a
+ * template's favicon; a rule emitted twice would be a duplicate CSS declaration
+ * and duplicated bytes. Sorted so the document is byte-stable between builds
+ * that resolved the same icons.
+ */
+function HomeIconStyles({ boards }: { boards: readonly HomeBoardData[] }): ReactNode {
+  const rules = new Set<string>();
+  for (const board of boards) {
+    for (const rule of board.iconCss.split('\n')) {
+      if (rule !== '') rules.add(rule);
+    }
+  }
+  if (rules.size === 0) return null;
+  return <style>{[...rules].sort().join('\n')}</style>;
+}
+
 export default async function Home(): Promise<ReactNode> {
   const boards = await loadBoards();
+  const homeBoards = boards.map((board) => toHomeBoard(board));
   // Folded over the FULL boards, before the eight-row slice below.
   const stats = boardStats(boards);
 
@@ -147,11 +168,19 @@ export default async function Home(): Promise<ReactNode> {
             </div>
           </div>
 
-          <HomeBoard
-            boards={boards.map((board) => toHomeBoard(board))}
-            ticker={tickerLines(boards)}
-            deepest={stats.deepest}
-          />
+          {/*
+            Every icon the homepage's rotating boards can show, emitted ONCE by
+            this server component.
+            `<HomeBoard>` is a client component, so anything handed to it as a
+            prop is serialized into the hydration payload as well as rendered —
+            an icon passed down as a `data:` URL would be in the document twice.
+            Rows carry a class name; the bytes stay here. And they are emitted
+            for every board, not just the one showing, because the rail rotates
+            on a 7s timer and `brief` Part 3 does not allow a read to go back to
+            the network when it does.
+          */}
+          <HomeIconStyles boards={homeBoards} />
+          <HomeBoard boards={homeBoards} ticker={tickerLines(boards)} deepest={stats.deepest} />
         </>
       )}
 

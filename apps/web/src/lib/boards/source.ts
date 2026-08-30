@@ -81,6 +81,9 @@ import type { Ranking } from '@the-pit/engine';
 import { defaultSnapshotSink } from '@/lib/pipeline/sink';
 import { FileSnapshotSink, type BoardSnapshot, type SnapshotSink } from '@/lib/pipeline/snapshot';
 
+import type { FaviconIndex } from './favicon';
+import { readFaviconIndex } from './favicon-store';
+
 /**
  * One board's stored document, however it was found.
  *
@@ -104,6 +107,23 @@ export interface BoardDocument {
   origin: 'snapshot' | 'seeded-run';
   /** The engine's ranking document, verbatim. Never re-derived here. */
   ranking: Ranking;
+  /**
+   * The board's favicons, as stored bytes, keyed by product URL.
+   *
+   * Read from `<workdir>/runs/<slug>/favicons.json` on the same `readFile` as
+   * everything else here, for BOTH origins. A published snapshot does not carry
+   * icons of its own: the index is keyed by product URL, so it is orthogonal to
+   * a re-rank, and re-publishing a board on every placement would otherwise
+   * re-transmit every icon byte for a document in which only the order changed.
+   *
+   * Optional, like the other envelope fields, and for the same reason: a
+   * document that has never had a backfill run over it genuinely has no index,
+   * and one that invented an empty one would be indistinguishable from one that
+   * looked and found nothing. `favicon-store.ts` says why a missing index is a
+   * normal state rather than an error, and `board-parts.tsx` says what a row
+   * does with an absent icon.
+   */
+  favicons?: FaviconIndex;
 }
 
 /** A place boards are read from. A bucket implements the same two methods. */
@@ -255,7 +275,12 @@ export class SnapshotBoardSource implements BoardSource {
 
   async read(slug: string): Promise<BoardDocument | undefined> {
     if (!isBoardSlug(slug)) return undefined;
-    return (await this.readSnapshot(slug)) ?? (await this.readSeededRun(slug));
+    const document_ = (await this.readSnapshot(slug)) ?? (await this.readSeededRun(slug));
+    if (document_ === undefined) return undefined;
+    // One more `readFile`, on the same static path, for a document that is
+    // committed beside the ranking. No network, no database, no decode: the
+    // icons arrive as base64 and leave as base64.
+    return { ...document_, favicons: await readFaviconIndex(this.workdir, slug) };
   }
 
   /**

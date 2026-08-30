@@ -51,7 +51,7 @@ import {
   type DodoConfig,
   type ListingSnapshot,
 } from '@the-pit/payments';
-import type { FetchOutcome, FetchedDocument, FetchRefusalCode, GuardedFetcher, ResolvedTarget } from '@the-pit/fetch';
+import type { FetchOutcome, FetchedAsset, FetchedDocument, FetchRefusalCode, GuardedFetcher, ResolvedTarget } from '@the-pit/fetch';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { runSubmissionGuards, type ListingLookup, type SubmissionGuardDeps } from '@/lib/checkout/guards';
@@ -453,6 +453,7 @@ describe('the resolution is not a hard dependency of paying', () => {
     registerProductUrlFetcher({
       resolveFinal: () => Promise.reject(new Error('the DNS library exploded')),
       fetchDocument: () => Promise.reject(new Error('the DNS library exploded')),
+      fetchAsset: () => Promise.reject(new Error('the DNS library exploded')),
     });
 
     const result = await resolveSubmissionUrl(DIRECT_URL);
@@ -633,6 +634,17 @@ function fakeFetcher(
           bytesRead: 0,
           truncated: false,
         },
+      });
+    },
+    /**
+     * These suites are about resolving a URL, never about pulling bytes. A fake
+     * that could return an image would be a fake with a capability the code
+     * under test does not use.
+     */
+    fetchAsset(url: string): Promise<FetchOutcome<FetchedAsset>> {
+      return Promise.resolve({
+        ok: false,
+        refusal: { code: 'unsupported_content_type', reason: 'this fake fetches no assets', url },
       });
     },
   };

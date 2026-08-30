@@ -48,6 +48,16 @@ const FORBIDDEN = [
   '@the-pit/engine',
   '@the-pit/auth',
   '@the-pit/payments',
+  // The guarded fetcher. Nothing a visitor loads may be able to dereference a
+  // URL: the favicons on a board were fetched OFFLINE by
+  // `lib/boards/favicon-backfill.ts` and stored beside the board data, and the
+  // difference between that and a board that resolves icons at render is the
+  // difference between a cached document and forty-eight outbound requests per
+  // page view. `favicon-backfill.ts` imports this; `favicon-store.ts` and
+  // `favicon.ts`, which the read path does use, deliberately do not.
+  '@the-pit/fetch',
+  '@the-pit/fetch/node',
+  '@/lib/boards/favicon-backfill',
   'postgres',
   'pg',
   'drizzle-orm',
@@ -197,6 +207,33 @@ describe('the board read path cannot reach a database or a model', () => {
     // own module rather than a function exported from there.
     expect(FORBIDDEN).toContain('@/lib/pipeline/service');
     expect(FORBIDDEN).not.toContain('@/lib/pipeline/sink');
+  });
+
+  it('keeps the favicon BACKFILL off the graph while the favicon STORE is on it', async () => {
+    // The two halves of the feature, and the line between them. A board reads
+    // stored icon bytes out of a JSON file next to its ranking; it must never be
+    // able to go and get one. So the module that owns the fetcher is forbidden
+    // by name, and the modules the read path actually uses are checked to import
+    // nothing that could dereference a URL.
+    const store = await readModule(join(SRC, 'lib/boards/favicon-store.ts'));
+    const shape = await readModule(join(SRC, 'lib/boards/favicon.ts'));
+    expect(store).toBeDefined();
+    expect(shape).toBeDefined();
+    for (const [name, source] of [
+      ['favicon-store.ts', store],
+      ['favicon.ts', shape],
+    ] as const) {
+      for (const edge of importsOf(source ?? '')) {
+        expect(edge.specifier, `${name} imports something a board read must not`).not.toContain('@the-pit/fetch');
+      }
+    }
+
+    // And the backfill really does import it, so the rule above is a claim about
+    // a real separation rather than about two files that happen not to.
+    const backfill = await readModule(join(SRC, 'lib/boards/favicon-backfill.ts'));
+    expect(importsOf(backfill ?? '').some((edge) => edge.specifier === '@the-pit/fetch' && !edge.typeOnly)).toBe(true);
+
+    expect(await offences()).toEqual([]);
   });
 
   it('would fail if a route reached for the pipeline bindings', () => {

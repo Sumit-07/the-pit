@@ -48,6 +48,8 @@
 import type { FlaggedInjection, Ranking, RankedProduct } from '@the-pit/engine';
 
 import { SOLO_NOTE } from './copy';
+import { emptyFaviconIndex, faviconClass, faviconCss, faviconInitial, type FaviconIndex, type StoredFavicon } from './favicon';
+import { productIdentity } from './identity';
 import type { BoardDocument } from './source';
 
 /** One juror's deduction, as the board shows it: points, reason, and who took it. */
@@ -119,6 +121,40 @@ export interface RowView {
   verdictHref?: string;
   /** Only `http(s)` survives; anything else is printed as text and never as an href. */
   href?: string;
+  /**
+   * The class that paints this row's favicon, from the board's own `iconCss`.
+   *
+   * A class and not a `data:` URL, because a URL passed as a prop is written
+   * into the page twice — see `faviconClass` in `favicon.ts`. Absent means one
+   * of two very different things, and the row draws a different mark for each:
+   * the product is anonymous (see `anonymous` below), or nothing usable was
+   * found at its site, which is the ORDINARY outcome for roughly a third of any
+   * board.
+   *
+   * **Never present on an anonymous row.** That is enforced in `projectRow`
+   * rather than in a component, so no surface can leak an identity it was never
+   * given. `lib/boards/identity.ts` says why a favicon is an identity.
+   */
+  iconClass?: string;
+  /**
+   * This product withheld its name, its URL and its face at submission.
+   *
+   * Carried on the row so a surface renders the robot rather than inferring
+   * anonymity from a missing icon — those are different states and only one of
+   * them is a choice the product made.
+   */
+  anonymous: boolean;
+  /** The deterministic input to the robot generator. Present only when `anonymous`. */
+  robotSeed?: string;
+  /**
+   * The letter a NAMED row shows when it has no icon.
+   *
+   * Always present. The fallback is not conditional data a surface has to go and
+   * derive — it is the row's own mark, computed once here beside everything else
+   * the row renders, so no component can render the gutter with nothing to put
+   * in it.
+   */
+  mark: string;
   /** `100 - mean(metric score)`. See the module comment. */
   cuts: number;
   /**
@@ -177,6 +213,18 @@ export interface BoardView {
     avg_metric_spread: number;
     tiebreak_count: number;
   };
+  /**
+   * Every distinct favicon on this board, as one block of CSS.
+   *
+   * Rendered into a single `<style>` element by the surface. This is the
+   * board's icon "sprite": one document, no extra request, each icon's bytes
+   * written exactly once however many rows wear them. `faviconClass` in
+   * `favicon.ts` carries the measurement that made this the shape rather than
+   * a `data:` URL on every row.
+   *
+   * Empty when no row on the board has an icon, which is a normal state.
+   */
+  iconCss: string;
   /** ISO-8601. `brief` Part 5: the surface is timestamped because the board moves. */
   generatedAt: string;
   origin: BoardDocument['origin'];
@@ -204,6 +252,7 @@ function projectRow(
   row: RankedProduct,
   flagsById: Map<number, FlaggedInjection[]>,
   categorySlug: string,
+  favicons: FaviconIndex,
 ): RowView {
   const metrics: MetricView[] = row.scorecard.map((entry) => ({
     metric: entry.metric,
@@ -228,6 +277,15 @@ function projectRow(
   const headline = [...allDeductions].sort((a, b) => b.points - a.points).at(0) ?? null;
   const soloCluster = row.demand_status === 'solo_cluster';
   const href = safeHref(row.url);
+  const identity = productIdentity(row);
+  // The one place a favicon is allowed to reach a board row. An anonymous
+  // product does not get one — not a blurred one, not a generic one, none — and
+  // it is decided here rather than in a component so that the icon is simply not
+  // in the data a surface receives. `lib/boards/identity.ts` says why.
+  //
+  // Keyed by the URL the ranking spells, which is the product's identity. A
+  // re-rank renumbers rows; it does not rename products.
+  const icon = identity.kind === 'named' ? favicons.icons[row.url] : undefined;
   const cuts = 100 - mean(row.scorecard.map((entry) => entry.score));
 
   return {
@@ -238,6 +296,10 @@ function projectRow(
       ? {}
       : { verdictHref: `/v/of/${encodeURIComponent(categorySlug)}/${encodeURIComponent(String(row.id))}` }),
     ...(href === undefined ? {} : { href }),
+    ...(icon === undefined ? {} : { iconClass: faviconClass(icon) }),
+    anonymous: identity.kind === 'anonymous',
+    ...(identity.kind === 'anonymous' ? { robotSeed: identity.seed } : {}),
+    mark: faviconInitial(row.name),
     cuts,
     health: 100 - cuts,
     composite: row.composite,
@@ -296,7 +358,22 @@ export function toBoardView(document_: BoardDocument): BoardView {
     else bucket.push(flag);
   }
 
-  const rows = ranking.ranking.map((row) => projectRow(row, flagsById, document_.slug));
+  // A document with no index is a category whose backfill has not run: every row
+  // draws its fallback mark, which is a state the surfaces are built for.
+  const favicons = document_.favicons ?? emptyFaviconIndex(document_.slug);
+
+  const rows = ranking.ranking.map((row) => projectRow(row, flagsById, document_.slug, favicons));
+
+  // One rule per DISTINCT icon actually on the board, built from the rows rather
+  // than from the whole index: a stored icon whose product is anonymous, or
+  // whose product has since left the category, must not put its bytes on a page
+  // that will never draw them.
+  const drawn = new Map<string, StoredFavicon>();
+  for (const row of rows) {
+    if (row.iconClass === undefined) continue;
+    const icon = favicons.icons[row.url];
+    if (icon !== undefined) drawn.set(row.iconClass, icon);
+  }
 
   return {
     slug: document_.slug,
@@ -322,6 +399,7 @@ export function toBoardView(document_: BoardDocument): BoardView {
       avg_metric_spread: ranking.health.avg_metric_spread,
       tiebreak_count: ranking.health.tiebreak_count,
     },
+    iconCss: faviconCss([...drawn.values()]),
     generatedAt: document_.generatedAt,
     origin: document_.origin,
     ...(document_.caveat === undefined ? {} : { caveat: document_.caveat }),

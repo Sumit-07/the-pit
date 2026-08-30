@@ -1,5 +1,5 @@
 /**
- * `@the-pit/fetch` — the guarded URL fetcher, and the two features that needed
+ * `@the-pit/fetch` — the guarded URL fetcher, and the three features that needed
  * one.
  *
  * This entry point is transport-agnostic on purpose: every export here takes its
@@ -20,6 +20,8 @@ export {
 } from './address.js';
 export {
   createGuardedFetcher,
+  type AssetOptions,
+  type FetchedAsset,
   type FetchedDocument,
   type GuardedFetcher,
   type GuardedFetcherOptions,
@@ -28,6 +30,8 @@ export {
 export {
   ALLOWED_PORTS,
   HTML_CONTENT_TYPES,
+  IMAGE_CONTENT_TYPES,
+  MAX_ASSET_BYTES,
   MAX_REDIRECTS,
   MAX_RESPONSE_BYTES,
   MAX_URL_LENGTH,

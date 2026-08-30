@@ -47,6 +47,51 @@ export const ALLOWED_PORTS: readonly number[] = [80, 443];
 /** Content types whose body may be read as HTML. Checked before any read. */
 export const HTML_CONTENT_TYPES: readonly string[] = ['text/html', 'application/xhtml+xml'];
 
+/**
+ * Content types whose body may be read as a RASTER image. Checked before any read.
+ *
+ * `image/svg+xml` is deliberately absent, and its absence is a security decision
+ * rather than an oversight. An SVG is a document: it can carry `<script>`, an
+ * `onload`, a `<foreignObject>` full of HTML and an external `<image href>`. A
+ * favicon is fetched from an arbitrary host chosen by the person who submitted
+ * the product, and the bytes are then stored and served back inside our own
+ * pages — so an SVG here is a stored-XSS primitive with an extra fetch in front
+ * of it. Sanitising SVG correctly is a project; refusing it is a line. This is
+ * the line.
+ *
+ * `image/x-icon`, `image/vnd.microsoft.icon` and `image/ico` are all the same
+ * thing spelled three ways by three generations of server config, and a `.ico`
+ * is still what most of the web serves. `application/octet-stream` is NOT here:
+ * "I don't know what this is" is not a claim that it is an image, and the header
+ * is only half the check anyway — see `IMAGE_SIGNATURES` in the consumer, which
+ * decides the real format from the bytes.
+ */
+export const IMAGE_CONTENT_TYPES: readonly string[] = [
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/gif',
+  'image/webp',
+  'image/bmp',
+  'image/x-icon',
+  'image/vnd.microsoft.icon',
+  'image/ico',
+  'image/x-ms-bmp',
+  'image/apng',
+];
+
+/**
+ * Bytes of an asset body read before truncating.
+ *
+ * 96 KB. An icon that does not fit in this is not an icon — it is a hero image
+ * with the wrong `rel`, or a multi-resolution `.ico` carrying a 256×256 layer
+ * nobody will ever see at 16 pixels. The read is still CAPPED rather than
+ * refused up front, but a truncated image is a corrupt image, so
+ * `fetchAsset` refuses a body that hit the cap instead of handing back a
+ * prefix: half a PNG is not a smaller PNG.
+ */
+export const MAX_ASSET_BYTES = 96 * 1024;
+
 /** `<title>` and `og:title` truncation, in characters. Matches `LABEL_LIMIT`'s intent for short display text. */
 export const TITLE_LIMIT = 200;
 
