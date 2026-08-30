@@ -186,6 +186,20 @@ export interface PaidPlacement {
    * the pipeline with the same submission and the same ordinal.
    */
   readonly attemptNumber: number;
+  /**
+   * The buyer asked to be published without their name or URL.
+   *
+   * Carried from the SUBMISSION, which is the only moment it can be chosen: the
+   * panel has to be prompted with a designation rather than a name
+   * (`lib/pipeline/pg-catalog.ts` says why), so the decision has to exist before
+   * the run starts. `products_anonymity_immutable` freezes it once the row is
+   * written, and the reason is `brief §2.4`'s never-keep-the-best rule in another
+   * currency: a choice made after seeing a verdict would let good scores stay
+   * named and bad ones hide.
+   *
+   * Absent means named, which is the ordinary case.
+   */
+  readonly anonymous?: boolean;
 }
 
 /**

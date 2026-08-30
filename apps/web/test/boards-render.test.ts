@@ -34,6 +34,8 @@ function board(overrides: Partial<Parameters<typeof toBoardView>[0]> = {}): Boar
     categoryVersion: 'v2',
     engineVersion: '0.1.0-test',
     caveat: SAMPLE_CAVEAT,
+    // Named products: this fixture is about the projection, not about anonymity.
+    anonymousIds: [],
     origin: 'seeded-run',
     ranking: sampleRanking(),
     ...overrides,

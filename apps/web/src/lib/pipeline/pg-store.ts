@@ -192,6 +192,13 @@ export interface PaidListing {
   readonly engineId: number;
   /** The address Dodo verified, lowercased. `products.submitted_by_email`. */
   readonly email: string;
+  /**
+   * The buyer asked to be published without their name or URL.
+   *
+   * Chosen at submission and frozen there — see `PaidPlacement.anonymous` in
+   * `types.ts` and `products_anonymity_immutable`. Absent means named.
+   */
+  readonly anonymous?: boolean;
 }
 
 /**
@@ -353,6 +360,19 @@ export class PgPipelineStore implements PipelineStore {
             description: product.description,
             descriptionHash: digest(product.description),
             source: bought ? ('paid' as const) : ('seeded' as const),
+            /**
+             * Scaffolding rows are seeded, and a seeded row is anonymous —
+             * `products_seeded_is_anonymous` accepts nothing else for an
+             * unclaimed one (`DECISIONS.md`, S4-source: 913 of the 1028 seeded
+             * descriptions were scraped rather than written by the companies).
+             *
+             * The PAID row takes the choice the buyer made at submission, which
+             * arrives on `this.paid`. It is written here and never revisited: the
+             * `onConflictDoNothing` above means a listing whose row already
+             * exists keeps the choice it was created with, and
+             * `products_anonymity_immutable` would refuse an UPDATE anyway.
+             */
+            anonymous: bought ? this.paid?.anonymous ?? false : true,
             status: 'pending' as const,
             // `products_email_lowercase` and `accounts_email_lowercase` are the
             // same rule on two tables: one address is one person. Lowercased here

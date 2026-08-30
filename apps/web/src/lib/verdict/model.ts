@@ -48,6 +48,8 @@
 
 import type { CategoryType, RankingWeights } from '@the-pit/engine';
 
+import { robotSvg } from '@/lib/anon';
+
 import type { StoredVerdict } from './store';
 
 /** One juror's deduction, with the juror attached. `brief` Part 6 requires both. */
@@ -204,8 +206,31 @@ export interface VerdictCluster {
 export interface Verdict {
   /** The public URL this was resolved by. */
   readonly slug: string;
+  /**
+   * What the listing was called ON THE DAY IT WAS DELIVERED.
+   *
+   * On an anonymous listing this is the designation, and it came out of the
+   * frozen payload like everything else on this page. That is what makes the
+   * promise hold over time: `verdicts` is append-only and the payload carries the
+   * name the verdict was issued under, so a link somebody shared last month
+   * cannot start naming the product because its founder has since claimed it and
+   * chosen to be named. Claiming names a product on FUTURE boards; it never
+   * reaches back into a verdict that was issued anonymously.
+   */
   readonly name: string;
+  /** The address, or `''` on an anonymous listing, which withholds it. */
   readonly url: string;
+  /**
+   * Delivered without a name or a URL.
+   *
+   * From the payload, never from a live lookup on `products.anonymous` — a live
+   * read would make this page say something different from what it said when it
+   * was handed over, which is the one thing `DECISIONS.md §1.2` and `brief`
+   * Part 6 forbid it to do.
+   */
+  readonly anonymous: boolean;
+  /** The robot, inline SVG, sized for the page header. Present iff `anonymous`. */
+  readonly robot?: string;
   readonly category: string;
   readonly categoryType: CategoryType;
 
@@ -591,10 +616,30 @@ export function parseVerdict(row: StoredVerdict): Verdict {
   const weights = requireRecord(slug, payload['weights'], 'weights');
   const demand = verdict['demand'];
 
+  /**
+   * Anonymity, from the frozen document.
+   *
+   * `payload.anonymous` is the explicit record and is what a verdict frozen since
+   * this feature existed carries. A blank `verdict.url` is the fallback for one
+   * frozen before it: `products.url` is `NOT NULL` and the engine's `Product.url`
+   * is required, so an empty address in a delivered payload can only have come
+   * from a redaction.
+   *
+   * Read BEFORE `url` is required, because `requireString` rejects `''` — an
+   * anonymous listing withholding its address is exactly the case that must not
+   * be treated as a malformed payload.
+   */
+  const anonymous = payload['anonymous'] === true || verdict['url'] === '';
+  const name = requireString(slug, verdict['name'], 'name');
+
   return {
     slug,
-    name: requireString(slug, verdict['name'], 'name'),
-    url: requireString(slug, verdict['url'], 'url'),
+    name,
+    url: anonymous ? '' : requireString(slug, verdict['url'], 'url'),
+    anonymous,
+    ...(anonymous
+      ? { robot: robotSvg(name, { size: 88, label: `${name}, an anonymous listing` }) }
+      : {}),
     category: requireString(slug, payload['category'], 'category'),
     categoryType,
 

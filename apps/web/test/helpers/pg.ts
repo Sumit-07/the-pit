@@ -113,13 +113,27 @@ export async function installProducts(
   categoryId: string,
   population: readonly Product[],
   status: 'placed' | 'pending' | 'held' | 'rejected' = 'placed',
+  /**
+   * Whether these rows are published without their names.
+   *
+   * `true` by default because these are SEEDED rows, and
+   * `products_seeded_is_anonymous` accepts nothing else for an unclaimed one
+   * (`DECISIONS.md`, S4-source). A test that needs a named population passes
+   * `false`, which writes the rows as claimed — the one state in which a seeded
+   * listing may carry its own name.
+   */
+  options: { anonymous?: boolean } = {},
 ): Promise<void> {
+  const anonymous = options.anonymous ?? true;
+  const claim = anonymous ? undefined : await claimingAccount(pg);
+
   for (const product of population) {
     await pg.query(
       `INSERT INTO products
          (category_id, engine_id, name, url, normalized_url, description, description_hash,
-          source, status, placed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'seeded', $8, $9)`,
+          source, status, anonymous, claimed_at, claimed_by_account_id, placed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'seeded', $8, $10,
+               CASE WHEN $11::uuid IS NULL THEN NULL ELSE now() END, $11::uuid, $9)`,
       [
         categoryId,
         product.id,
@@ -130,7 +144,26 @@ export async function installProducts(
         'a'.repeat(64),
         status,
         status === 'placed' ? new Date().toISOString() : null,
+        anonymous,
+        claim ?? null,
       ],
     );
   }
+}
+
+/**
+ * An account to hang a claim on, created once per database.
+ *
+ * A seeded listing may be named only when it has been claimed — `brief` Part 7's
+ * unclaimed rows are exactly the ones whose copy nobody at the company wrote —
+ * so a fixture that wants named seeded rows has to produce the consent that
+ * authorizes them.
+ */
+async function claimingAccount(pg: PGlite): Promise<string> {
+  const rows = await pg.query<{ id: string }>(
+    `INSERT INTO accounts (email) VALUES ('fixture-owner@example.com')
+     ON CONFLICT (email) DO UPDATE SET email = excluded.email
+     RETURNING id`,
+  );
+  return rows.rows[0]?.id ?? '';
 }

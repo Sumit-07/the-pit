@@ -24,6 +24,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { redactRanking } from '@the-pit/anon';
 import type { Metric, Ranking } from '@the-pit/engine';
 import { rankCategory } from '@the-pit/engine';
 import { describe, expect, it } from 'vitest';
@@ -128,18 +129,79 @@ describe.each(BOARDS)('$slug', ({ slug, type, products }) => {
     for (const verdict of rows.verdicts) expect(verdict.productCount).toBe(products);
   });
 
-  it('freezes each verdict against the exact board row it was issued from', async () => {
+  it('freezes each verdict against the exact board row it was issued from, less the identity', async () => {
     // Not a projection: the whole `RankedProduct` is embedded, so every deduction
     // with its reason and juror, the cluster judged inside, and the Floor's picks
     // survive verbatim. `DECISIONS.md` §1.2 means re-deriving them later gives
     // different numbers, which is why the page cannot be rendered live.
+    //
+    // TWO fields do not survive verbatim, and only two: `name` and `url`. Every
+    // seeded listing is anonymous (`DECISIONS.md`, S4-source — 913 of the 1028
+    // seeded descriptions were scraped rather than written by the companies they
+    // describe), so the frozen page carries a designation and no address. This
+    // assertion is written as "everything else is identical" rather than as a
+    // list of the fields that are, so a field the engine adds later is covered by
+    // it automatically.
     const input = await loadSeedInput(slug, WORKDIR);
     const rows = buildSeedRows(input);
 
+    // Compared against `redactRanking`'s own output rather than against the raw
+    // board, because the redaction is document-wide: a juror or cluster reason
+    // that named a withheld product has that name replaced too, and on
+    // `developer-tools` exactly one does. Restoring `name` and `url` and
+    // demanding the rest be byte-identical would therefore fail on the one row
+    // the scrub exists for.
+    //
+    // What this pins is the property that matters at this seam: the seed builder
+    // freezes THE canonical redaction, not a second one of its own. That there is
+    // nothing but identity in the difference is proved next door, in
+    // `packages/anon`, over every number, reason, role and cluster on the row.
+    const expected = redactRanking(
+      input.ranking,
+      input.ranking.ranking.map((row) => row.id),
+      slug,
+    );
     const byProduct = new Map(rows.verdicts.map((v) => [v.productId, v.payload as { verdict: unknown }]));
-    for (const row of input.ranking.ranking) {
+
+    for (const row of expected.ranking) {
       const productId = rows.products.find((p) => p.engineId === row.id)?.id;
-      expect(byProduct.get(productId as string)?.verdict).toEqual(row);
+      const frozen = byProduct.get(productId as string)?.verdict as Record<string, unknown>;
+
+      expect(frozen['name']).toMatch(/^Unit [A-Za-z]+-\d{3}$/);
+      expect(frozen['url']).toBe('');
+      expect(frozen).toEqual(row);
+    }
+  });
+
+  it('publishes no seeded listing’s name or address in any frozen verdict', async () => {
+    // The promise, asserted as an absence over the whole permanent record rather
+    // than field by field: `verdicts` is append-only, so a name frozen into a
+    // payload here is a name published forever and one that no later claim could
+    // retract. Free text is included — a juror reason or a cluster reason can
+    // mention another product by name, and on this board exactly one does.
+    const input = await loadSeedInput(slug, WORKDIR);
+    const rows = buildSeedRows(input);
+    const frozen = JSON.stringify(rows.verdicts.map((v) => v.payload));
+
+    for (const row of input.ranking.ranking) {
+      if (row.name.length >= 4) expect(frozen).not.toContain(row.name);
+      expect(frozen).not.toContain(row.url);
+    }
+  });
+
+  it('keeps the real name and address on the products row, which is what a claim reveals', async () => {
+    // Anonymity is a publishing decision, not amnesia. `products.name` and
+    // `products.url` stay real because they are what a founder proves ownership
+    // of, and `products_anonymity_immutable` lets a CLAIMED listing choose to be
+    // named. A seed that forgot them could never be claimed.
+    const input = await loadSeedInput(slug, WORKDIR);
+    const rows = buildSeedRows(input);
+
+    for (const product of input.productSet.products) {
+      const stored = rows.products.find((p) => p.engineId === product.id);
+      expect(stored?.name).toBe(product.name);
+      expect(stored?.url).toBe(product.url);
+      expect(stored?.anonymous).toBe(true);
     }
   });
 

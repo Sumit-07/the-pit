@@ -47,6 +47,8 @@
 
 import type { FlaggedInjection, Ranking, RankedProduct } from '@the-pit/engine';
 
+import { redactRanking } from '@/lib/anon';
+
 import { SOLO_NOTE } from './copy';
 import { emptyFaviconIndex, faviconClass, faviconCss, faviconInitial, type FaviconIndex, type StoredFavicon } from './favicon';
 import { productIdentity } from './identity';
@@ -98,7 +100,16 @@ export interface DemandView {
 /** One row of a board. */
 export interface RowView {
   rank: number;
+  /**
+   * What the row is called.
+   *
+   * On an anonymous listing this is the DESIGNATION — `Unit Kilo-427` — and the
+   * real name is not present anywhere on this object, because `source.ts`
+   * redacted the document before it was projected. There is no second field
+   * holding the true name that a careless surface could reach for.
+   */
   name: string;
+  /** The submitted address, or `''` on an anonymous listing, which withholds it. */
   url: string;
   /**
    * This row's own verdict page, as a path that RESOLVES to one rather than a
@@ -142,9 +153,26 @@ export interface RowView {
    * Carried on the row so a surface renders the robot rather than inferring
    * anonymity from a missing icon — those are different states and only one of
    * them is a choice the product made.
+   *
+   * **This is the flag that decides the identity slot**, and by the time a
+   * surface sees it the decision has already been enforced in the data: `name`
+   * is the designation, `url` and `href` are absent, and `iconClass` was never
+   * attached. There is nothing left for a component to leak.
    */
   anonymous: boolean;
-  /** The deterministic input to the robot generator. Present only when `anonymous`. */
+  /**
+   * The deterministic input to the robot generator. Present only when `anonymous`.
+   *
+   * The DESIGNATION — `Unit Kilo-427` — not the engine id. `lib/boards/identity.ts`
+   * says why: it is what `verdicts.payload` freezes, so a shared verdict link
+   * keeps the avatar it was delivered with, and it keeps the picture and the name
+   * on one derivation chain so they cannot disagree about whose row this is.
+   *
+   * The seed and not the finished SVG, because a board carries up to forty of
+   * these and the markup would otherwise be serialized into the page twice —
+   * once in the HTML and again in the RSC payload. The same reasoning
+   * `favicon.ts` gives for passing a class rather than a `data:` URL.
+   */
   robotSeed?: string;
   /**
    * The letter a NAMED row shows when it has no icon.
@@ -252,6 +280,7 @@ function projectRow(
   row: RankedProduct,
   flagsById: Map<number, FlaggedInjection[]>,
   categorySlug: string,
+  anonymousIds: ReadonlySet<number>,
   favicons: FaviconIndex,
 ): RowView {
   const metrics: MetricView[] = row.scorecard.map((entry) => ({
@@ -276,22 +305,29 @@ function projectRow(
   // The heaviest cut anywhere on the card, chosen before the ledger is re-sorted.
   const headline = [...allDeductions].sort((a, b) => b.points - a.points).at(0) ?? null;
   const soloCluster = row.demand_status === 'solo_cluster';
-  const href = safeHref(row.url);
-  const identity = productIdentity(row);
+  const identity = productIdentity(row, anonymousIds);
+  const anonymous = identity.kind === 'anonymous';
+  // An anonymous listing has no address to link to, and `row.url` is already `''`
+  // by the time this runs — `source.ts` redacted the document. `safeHref` is
+  // skipped rather than relied on: the rule is that an anonymous row NEVER
+  // produces an href, and stating it here means it does not depend on the
+  // redaction upstream having been thorough.
+  const href = anonymous ? undefined : safeHref(row.url);
   // The one place a favicon is allowed to reach a board row. An anonymous
   // product does not get one — not a blurred one, not a generic one, none — and
   // it is decided here rather than in a component so that the icon is simply not
   // in the data a surface receives. `lib/boards/identity.ts` says why.
   //
   // Keyed by the URL the ranking spells, which is the product's identity. A
-  // re-rank renumbers rows; it does not rename products.
-  const icon = identity.kind === 'named' ? favicons.icons[row.url] : undefined;
+  // re-rank renumbers rows; it does not rename products. An anonymous row's
+  // `url` is `''`, so even this lookup has nothing to find.
+  const icon = anonymous ? undefined : favicons.icons[row.url];
   const cuts = 100 - mean(row.scorecard.map((entry) => entry.score));
 
   return {
     rank: row.rank,
     name: row.name,
-    url: row.url,
+    url: anonymous ? '' : row.url,
     ...(categorySlug === ''
       ? {}
       : { verdictHref: `/v/of/${encodeURIComponent(categorySlug)}/${encodeURIComponent(String(row.id))}` }),
@@ -346,9 +382,27 @@ function projectRow(
   };
 }
 
-/** Project one stored board document into the shape the surfaces render. */
+/**
+ * Project one stored board document into the shape the surfaces render.
+ *
+ * ## The redaction happens here, at the projection
+ *
+ * Not in a component, and not left to whoever assembled the document. `RowView`
+ * is the only thing every board surface sees — the category board, the homepage,
+ * the ticker, and whatever is written next year — so removing an anonymous
+ * listing's identity here means no surface can render one, because no surface is
+ * ever handed one. That is the same rule the favicon follows one field down, for
+ * the same reason: an icon or a name that is present in the data and merely not
+ * drawn is a leak that renders correctly, which is the worst kind.
+ *
+ * `redactRanking` is idempotent, so running it over a document `source.ts` or
+ * `buildSnapshot` already cleaned is a no-op that re-derives the same
+ * designations. The cost of the extra pass is a clone of a document already in
+ * memory; the cost of assuming it was done upstream is a name on a page that paid
+ * not to have one.
+ */
 export function toBoardView(document_: BoardDocument): BoardView {
-  const ranking: Ranking = document_.ranking;
+  const ranking: Ranking = redactRanking(document_.ranking, document_.anonymousIds, document_.slug);
 
   const flagsById = new Map<number, FlaggedInjection[]>();
   for (const flag of ranking.flaggedInjections) {
@@ -358,11 +412,15 @@ export function toBoardView(document_: BoardDocument): BoardView {
     else bucket.push(flag);
   }
 
+  const anonymousIds = new Set(document_.anonymousIds);
+
   // A document with no index is a category whose backfill has not run: every row
   // draws its fallback mark, which is a state the surfaces are built for.
   const favicons = document_.favicons ?? emptyFaviconIndex(document_.slug);
 
-  const rows = ranking.ranking.map((row) => projectRow(row, flagsById, document_.slug, favicons));
+  const rows = ranking.ranking.map((row) =>
+    projectRow(row, flagsById, document_.slug, anonymousIds, favicons),
+  );
 
   // One rule per DISTINCT icon actually on the board, built from the rows rather
   // than from the whole index: a stored icon whose product is anonymous, or

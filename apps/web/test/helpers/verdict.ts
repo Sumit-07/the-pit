@@ -52,14 +52,28 @@ export function seededVerdicts(slug: string): Promise<StoredVerdict[]> {
   return rows;
 }
 
-/** The frozen row for one product, by the name it was submitted under. */
+/**
+ * The frozen row for one product, by the name it was submitted under.
+ *
+ * The name is resolved against the RAW board and then matched to a verdict by
+ * ENGINE ID, because a frozen payload no longer contains the submitted name:
+ * every seeded listing is anonymous (`DECISIONS.md`, S4-source) and the payload
+ * carries a designation. Looking a verdict up by the name printed on it would
+ * therefore find nothing — which is the promise working, not a broken fixture.
+ *
+ * Callers keep passing a readable prefix ('Ashgrove', 'Sequo') because that is
+ * what makes a test say which product it is about. `verdict.id` is the join, and
+ * it is the same number `ranking.json` carries and `lib/boards/view.ts` projects
+ * a row from.
+ */
 export async function seededVerdictNamed(slug: string, startsWith: string): Promise<StoredVerdict> {
+  const input = await loadSeedInput(slug, WORKDIR);
+  const target = input.ranking.ranking.find((row) => row.name.startsWith(startsWith));
+  if (target === undefined) throw new Error(`no product in ${slug} whose name starts with ${startsWith}`);
+
   const rows = await seededVerdicts(slug);
-  const found = rows.find((row) => {
-    const payload = row.payload as { verdict?: { name?: unknown } };
-    return typeof payload.verdict?.name === 'string' && payload.verdict.name.startsWith(startsWith);
-  });
-  if (found === undefined) throw new Error(`no seeded verdict in ${slug} whose name starts with ${startsWith}`);
+  const found = rows.find((row) => (row.payload as { verdict?: { id?: unknown } }).verdict?.id === target.id);
+  if (found === undefined) throw new Error(`no seeded verdict in ${slug} for engine id ${target.id}`);
   return found;
 }
 

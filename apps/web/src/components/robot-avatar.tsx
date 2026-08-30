@@ -1,5 +1,10 @@
 /**
- * The mark an anonymous product wears. **This file is a seam, not a generator.**
+ * The mark an anonymous product wears.
+ *
+ * **The generator has landed.** This file was a seam with a placeholder in it;
+ * the drawing now comes from `lib/anon/robot.ts`, which is shared with the
+ * verdict page. The contract the seam specified is unchanged and is restated
+ * below, because every clause of it is still load-bearing.
  *
  * The decision it serves is in `lib/boards/identity.ts`: a product submitted
  * anonymously keeps every cut, every reason and every juror in public, and
@@ -12,8 +17,11 @@
  * CONTRACT it plugs into, and it is deliberately minimal so that replacing the
  * body of `RobotAvatar` is the whole integration:
  *
- * - **`seed`** is `ProductIdentity.seed` — the product id as a string. Stable
- *   across re-ranks, which is what makes the robot stable.
+ * - **`seed`** is `ProductIdentity.seed` — the product's designation, e.g.
+ *   `Unit Kilo-427`. Stable across re-ranks, which is what makes the robot
+ *   stable, and it is what `verdicts.payload` freezes, so a shared verdict link
+ *   keeps the avatar it was delivered with. `lib/boards/identity.ts` says why the
+ *   name rather than the id.
  * - **The box is fixed.** Whatever is drawn must fill exactly `size` pixels
  *   square and no more. A row's mark gutter is reserved at 16px whether the row
  *   shows a favicon, a robot or a fallback, so that nothing on the board moves
@@ -28,12 +36,29 @@
  *   from the seed — inline SVG or a `data:` URL built here — and never from an
  *   avatar service.
  *
- * Until the generator lands, this draws a neutral placeholder in the right box,
- * so the three-way branch in `<RowMark>` is live, testable and visibly correct
- * rather than waiting on someone else's file to exist.
+ * ## Why the SVG arrives as a string
+ *
+ * `robotSvg` returns markup rather than React elements, and this component
+ * injects it. That is not laziness about JSX — it is the only way there is ONE
+ * generator. `brief` Part 6 makes the verdict page a self-contained HTML
+ * document that has to survive being saved to disk, so it is built by string
+ * concatenation and cannot render a component. A JSX robot here would mean a
+ * second implementation there, drawing the same 768 faces from the same hash,
+ * with nothing keeping them in step; the first divergence would be a listing
+ * whose avatar changed when a reader followed the link from the board to the
+ * verdict, which is precisely the "is this the same product?" question the robot
+ * exists to answer.
+ *
+ * It is the safe kind of `dangerouslySetInnerHTML`: every byte is generated from
+ * a closed vocabulary of rects and theme tokens, no product name, URL or juror
+ * reason is ever interpolated, and the two attributes that can carry a string are
+ * escaped in `robot.ts`. Here, nothing is passed at all — `label` is omitted
+ * because the wrapper is `aria-hidden` per the contract above.
  */
 
 import type { ReactNode } from 'react';
+
+import { robotSvg } from '@/lib/anon';
 
 export interface RobotAvatarProps {
   /** `ProductIdentity.seed`. The only input; the same seed must always draw the same robot. */
@@ -44,20 +69,11 @@ export interface RobotAvatarProps {
 
 export function RobotAvatar({ seed, size = 16 }: RobotAvatarProps): ReactNode {
   return (
-    <span className="favbot" style={{ width: size, height: size }} data-seed={seed}>
-      {/*
-        A placeholder, not a robot: two eyes and a mouth in the row's own muted
-        ink, at the size the real one will be. It borrows neither hue — `--cut`
-        is what was taken and `--held` is what survived, and being anonymous is
-        neither — for the same reason the named fallback does not.
-      */}
-      <svg viewBox="0 0 16 16" width={size} height={size} focusable="false" aria-hidden="true">
-        <rect x="2.5" y="4.5" width="11" height="9" rx="2" fill="none" stroke="currentColor" strokeWidth="1" />
-        <circle cx="6" cy="8.5" r="1" fill="currentColor" />
-        <circle cx="10" cy="8.5" r="1" fill="currentColor" />
-        <path d="M6 11.2h4" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
-        <path d="M8 2.4v2" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
-      </svg>
-    </span>
+    <span
+      className="favbot"
+      style={{ width: size, height: size }}
+      aria-hidden="true"
+      dangerouslySetInnerHTML={{ __html: robotSvg(seed, { size }) }}
+    />
   );
 }

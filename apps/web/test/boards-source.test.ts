@@ -45,7 +45,14 @@ describe('reading a seeded run', () => {
     expect(document_?.engineVersion).toBe('0.1.0-test');
     expect(document_?.categoryVersion).toBe('v2');
     expect(document_?.caveat).toBe(SAMPLE_CAVEAT);
-    expect(document_?.ranking.ranking[0]?.name).toBe('Ashgrove');
+
+    // Every row of a seeded run is anonymous, and the document it hands back has
+    // already had the identities taken out of it — `DECISIONS.md`'s resolution of
+    // S4-source. So the first row wears a designation, not the name the workbook
+    // carried, and the real name is not in the document at all.
+    expect(document_?.anonymousIds).toEqual(document_?.ranking.ranking.map((row) => row.id));
+    expect(document_?.ranking.ranking[0]?.name).toMatch(/^Unit [A-Za-z]+-\d{3}$/);
+    expect(JSON.stringify(document_?.ranking)).not.toContain('Ashgrove');
   });
 
   it('stamps the board with the ranking file mtime, not with "now"', async () => {

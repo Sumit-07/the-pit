@@ -54,11 +54,15 @@ export async function insertProduct(
   normalizedUrl = 'example.com',
 ): Promise<string> {
   const result = await pg.query<{ id: string }>(
+    // `anonymous` is true because this fixture is a SEEDED row and
+    // `products_seeded_is_anonymous` accepts no other shape for an unclaimed one
+    // (`0009_anonymous_listings.sql`). Tests that need a named product make a
+    // paid one, or claim this one.
     `INSERT INTO products
        (category_id, engine_id, name, url, normalized_url, description, description_hash,
-        source, status, placed_at)
+        source, status, anonymous, placed_at)
      VALUES ($1, $2, 'A product', 'https://example.com', $3, 'A description.', $4,
-             'seeded', 'placed', now())
+             'seeded', 'placed', true, now())
      RETURNING id`,
     [categoryId, engineId, normalizedUrl, A_HASH],
   );

@@ -12,6 +12,7 @@
     "favicons": "node --experimental-strip-types --no-warnings --import ./scripts/register.mjs ./scripts/backfill-favicons.ts"
   },
   "dependencies": {
+    "@the-pit/anon": "workspace:*",
     "@the-pit/auth": "workspace:*",
     "@the-pit/db": "workspace:*",
     "@the-pit/engine": "workspace:*",

@@ -225,6 +225,21 @@ const CSS = `${TOKENS}${BASE}
 .vtop h1{font-weight:700;font-size:clamp(23px,4.2vw,34px);line-height:1.06;
   letter-spacing:-.03em;margin-top:9px;overflow-wrap:anywhere}
 .vtop .purl{display:block;margin-top:10px}
+/* The anonymous masthead: the robot beside the designation rather than above it,
+   because at 88px it is the same visual weight as the h1 and the two read as one
+   identity. align-items:flex-start keeps the plate square against the label
+   rather than centring it against a two-line sentence. No hue — an avatar in
+   --cut or --held would make an identity read as a score. */
+.vtop.anon{display:flex;align-items:flex-start;gap:18px}
+.vtop .vident{min-width:0;flex:1 1 auto}
+.vtop .vavatar{flex:0 0 auto;display:inline-flex;background:var(--sunk);
+  border:1px solid var(--hair);box-shadow:inset 0 1px 3px rgb(var(--shade-c) / .55)}
+.vtop .vavatar svg{display:block}
+.vtop .purl.anon{font-family:var(--mono);font-size:11px;line-height:1.6;
+  color:var(--dimmer);max-width:52ch}
+@media (max-width:520px){
+  .vtop.anon{flex-direction:column;gap:12px}
+}
 .plink{font-family:var(--mono);font-size:11px;color:var(--dimmer);
   text-decoration:none;overflow-wrap:anywhere}
 a.plink:hover{color:var(--ink);text-decoration:underline}
@@ -1701,10 +1716,22 @@ ${FONTS}
 </nav>
 
 <article class="vcard">
-  <header class="vtop">
-    <span class="lbl">Verdict &middot; ${escapeHtml(verdict.category)}</span>
-    <h1>${escapeHtml(verdict.name)}</h1>
-    <span class="purl">${productLink(verdict.url)}</span>
+  <header class="vtop${verdict.anonymous ? ' anon' : ''}">
+    ${verdict.anonymous && verdict.robot !== undefined ? `<span class="vavatar">${verdict.robot}</span>` : ''}
+    <div class="vident">
+      <span class="lbl">Verdict &middot; ${escapeHtml(verdict.category)}</span>
+      <h1>${escapeHtml(verdict.name)}</h1>
+      ${
+        verdict.anonymous
+          ? // The listing chose this before it was scored, and the sentence says so
+            // in the identity slot rather than in a footnote — a reader meeting a
+            // robot and a call sign should learn why in the same glance, and should
+            // learn that the evidence below is untouched by it.
+            '<span class="purl anon">Name and address withheld &middot; chosen at submission, before scoring. ' +
+            'Every cut, reason and score below is published in full.</span>'
+          : `<span class="purl">${productLink(verdict.url)}</span>`
+      }
+    </div>
   </header>
 
   <div class="vrank">

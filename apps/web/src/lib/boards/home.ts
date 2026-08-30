@@ -37,6 +37,10 @@ export type HomeRow = Pick<
   | 'rank'
   | 'name'
   | 'iconClass'
+  // The identity slot. `RowLead` draws the mark from these, and the homepage
+  // shows the same eight rows the category board does — an anonymous listing
+  // that arrived named on the front page would be the leak in its most public
+  // place.
   | 'anonymous'
   | 'robotSeed'
   | 'mark'

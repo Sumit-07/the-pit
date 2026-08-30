@@ -125,9 +125,9 @@ async function paidListing(createdAt: Date, description = FIRST_PITCH): Promise<
 async function seededListing(createdAt: Date, description = FIRST_PITCH): Promise<string> {
   const rows = await database.pg.query<{ id: string }>(
     `INSERT INTO products (category_id, engine_id, name, url, normalized_url, description,
-                           description_hash, source, status, submitted_by_email, created_at,
-                           updated_at, placed_at)
-     VALUES ($1, 2, 'Margin', $2, $3, $4, $5, 'seeded', 'placed', NULL, $6, $6, $6)
+                           description_hash, source, status, anonymous, submitted_by_email,
+                           created_at, updated_at, placed_at)
+     VALUES ($1, 2, 'Margin', $2, $3, $4, $5, 'seeded', 'placed', true, NULL, $6, $6, $6)
      RETURNING id`,
     [categoryId, URL, NORMALIZED, description, 'b'.repeat(64), createdAt.toISOString()],
   );

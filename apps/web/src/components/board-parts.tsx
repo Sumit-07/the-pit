@@ -107,9 +107,23 @@ function segClass(index: number): string {
  * and a solo cluster took nothing from anyone.
  */
 function RowTags({ row }: { row: RowView }): ReactNode {
-  if (!row.soloCluster && !row.tiebroken && row.flagged.length === 0) return null;
+  if (!row.anonymous && !row.soloCluster && !row.tiebroken && row.flagged.length === 0) return null;
   return (
     <span className="tags">
+      {/*
+       * First, because it explains the two things a reader has already noticed
+       * about the row — the robot and the designation — before they wonder
+       * whether something failed to load. The tag is a plain state chip and takes
+       * neither hue: withholding a name is not a deduction and not health.
+       */}
+      {row.anonymous ? (
+        <span
+          className="tag anon"
+          title="Published without its name or URL, by a choice made at submission and frozen before scoring. Every cut, reason, score and cluster below is unchanged."
+        >
+          anonymous
+        </span>
+      ) : null}
       {row.soloCluster ? (
         <span className="tag solo" title={row.soloNote ?? SOLO_NOTE}>
           solo cluster
@@ -486,7 +500,14 @@ export function RowLedger({ row }: { row: RowView }): ReactNode {
         {row.metrics.length === 1 ? 'metric' : 'metrics'}, from {row.deductionCount}{' '}
         {row.deductionCount === 1 ? 'reason' : 'reasons'}, and walked out with{' '}
         <b className="held">{Math.round(row.health)}</b> health.{' '}
-        {row.href === undefined ? (
+        {/*
+         * An anonymous listing withholds its address, and says so rather than
+         * leaving a blank where a link goes — a gap there reads as data that
+         * failed to load, and this is a choice the listing made.
+         */}
+        {row.anonymous ? (
+          <span className="who">address withheld</span>
+        ) : row.href === undefined ? (
           <span className="who">{row.url}</span>
         ) : (
           <a href={row.href} target="_blank" rel="noopener noreferrer nofollow">

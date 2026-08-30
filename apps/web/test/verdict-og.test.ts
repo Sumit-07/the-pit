@@ -18,8 +18,12 @@ describe('what the share card says', () => {
   it('carries the four things brief Part 6 asks for', async () => {
     const fields = ogFields(parseVerdict(await seededVerdictNamed('developer-tools', 'Sequo')));
 
-    // 1. the name
-    expect(fields.name).toContain('Sequo');
+    // 1. the name — the DESIGNATION, because a seeded listing is anonymous
+    //    (`DECISIONS.md`, S4-source). A share card is the most public surface
+    //    there is, so it carries what the verdict was delivered under and never
+    //    the withheld name.
+    expect(fields.name).toMatch(/^Unit [A-Za-z]+-\d{3}$/);
+    expect(fields.name).not.toContain('Sequo');
     // 2. the cuts total — 100 - mean(87.5, 86.667, 57.5, 35, 81.667) = 30.333
     expect(fields.cuts).toBe('30');
     expect(fields.cutsLabel).toBe('took 30 in cuts');

@@ -979,6 +979,14 @@ details[open] > summary .chev {
   background: rgb(var(--ink-c) / 0.86);
   color: var(--pit);
 }
+/* Withholding a name is a property of the listing, not a deduction and not
+   health, so it takes neither hue — the same reasoning as .tag.solo, and a
+   hairline chip for the same reason. */
+.tag.anon {
+  border: 1px solid var(--line);
+  color: var(--dim);
+  background: transparent;
+}
 /* The accent means taken, so a flag borrows it at an alpha rather than filling
    with it. .06 vanished on dark; .16 is a visible tint that is still not a block
    of the hue. */

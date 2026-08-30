@@ -24,6 +24,7 @@
     "db:backfill-urls": "node dist/cli/backfill-urls.js"
   },
   "dependencies": {
+    "@the-pit/anon": "workspace:*",
     "@the-pit/engine": "workspace:*",
     "@the-pit/fetch": "workspace:*",
     "drizzle-orm": "^0.45.2",

@@ -99,7 +99,10 @@ describe('the homepage says them', () => {
     const panelsAt = html.indexOf('class="three"');
     expect(boardAt).toBeGreaterThan(-1);
     expect(panelsAt).toBeGreaterThan(boardAt);
-    expect(html).toContain('Ashgrove');
+    // A real row, wearing the designation every seeded listing now wears
+    // (`DECISIONS.md`, S4-source) — and not the scraped name it used to show.
+    expect(html).toMatch(/Unit [A-Za-z]+-\d{3}/);
+    expect(html).not.toContain('Ashgrove');
   });
 });
 
@@ -116,7 +119,12 @@ describe('the board page behind it stays plain', () => {
     );
 
     expect(text).toContain('Cuts');
-    expect(text).toContain('Runlet took 97 in cuts');
+    // `brief` Part 5's connective word, on the row that lost the most. The
+    // subject is a designation because seeded listings are anonymous, and the
+    // SENTENCE is what this test is about — the shape survives the redaction,
+    // which is the point: anonymity withholds the identity and nothing else.
+    expect(text).toMatch(/Unit [A-Za-z]+-\d{3} took 97 in cuts/);
+    expect(text).not.toContain('Runlet');
     expect(text).toContain(STAMP_NOTE);
     // Part 5: aggressive on the homepage, plain everywhere behind it.
     expect(text).not.toContain(COPY.headline);

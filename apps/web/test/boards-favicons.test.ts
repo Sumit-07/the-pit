@@ -20,6 +20,7 @@
  * the page twice.
  */
 
+import type { Ranking } from '@the-pit/engine';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -51,7 +52,11 @@ function storedIcon(data: string, overrides: Partial<StoredFavicon> = {}): Store
   };
 }
 
-function boardDocument(icons: Record<string, StoredFavicon> = {}, ranking = sampleRanking()): BoardDocument {
+function boardDocument(
+  icons: Record<string, StoredFavicon> = {},
+  ranking = sampleRanking(),
+  anonymousIds: readonly number[] = [],
+): BoardDocument {
   return {
     slug: 'developer-tools',
     category: 'Developer Tools',
@@ -59,6 +64,7 @@ function boardDocument(icons: Record<string, StoredFavicon> = {}, ranking = samp
     productCount: ranking.ranking.length,
     categoryVersion: 'v2',
     origin: 'seeded-run',
+    anonymousIds,
     ranking,
     favicons: {
       version: 2,
@@ -73,12 +79,18 @@ function boardDocument(icons: Record<string, StoredFavicon> = {}, ranking = samp
 const render = (document_: BoardDocument): string =>
   renderToStaticMarkup(createElement(CategoryBoard, { board: toBoardView(document_) }));
 
-/** Mark an entry in the ranking anonymous, the way the submission path will. */
-function anonymise(url: string, ranking = sampleRanking()) {
-  for (const row of ranking.ranking) {
-    if (row.url === url) (row as unknown as { anonymous: boolean }).anonymous = true;
-  }
-  return ranking;
+/**
+ * The engine ids of the rows at these URLs, which is how a board document names
+ * its anonymous listings.
+ *
+ * A set of ids on the document rather than a flag on the row, because by the time
+ * a surface sees a ranking the identity has already been REMOVED from it — the
+ * row's `name` is a designation and its `url` is `''`, so there is no row field
+ * left that could say "this one used to be Ashgrove". `lib/boards/identity.ts`
+ * carries the argument.
+ */
+function anonymousIdsFor(ranking: Ranking, ...urls: string[]): number[] {
+  return ranking.ranking.filter((row) => urls.includes(row.url)).map((row) => row.id);
 }
 
 // -------------------------------------------------------- the three states
@@ -179,7 +191,14 @@ describe('a named product with no icon', () => {
 });
 
 describe('an anonymous product', () => {
-  const ANON = boardDocument({ [ASHGROVE]: storedIcon('QU5PTllNT1VTTEVBSw==') }, anonymise(ASHGROVE));
+  const ANON_RANKING = sampleRanking();
+  const ANON = boardDocument(
+    { [ASHGROVE]: storedIcon('QU5PTllNT1VTTEVBSw==') },
+    ANON_RANKING,
+    anonymousIdsFor(ANON_RANKING, ASHGROVE),
+  );
+  /** The designation the redaction gave it, which is also its robot's seed. */
+  const ANON_ROW = () => toBoardView(ANON).rows.find((row) => row.anonymous);
 
   it('never renders its favicon — the bytes are not even on the page', () => {
     const html = render(ANON);
@@ -201,21 +220,35 @@ describe('an anonymous product', () => {
   });
 
   it('does not fall back to the initial, which would leak the withheld name', () => {
-    const view = toBoardView(ANON);
-    const row = view.rows.find((entry) => entry.url === ASHGROVE);
+    const row = ANON_ROW();
 
     expect(row?.anonymous).toBe(true);
     expect(row?.iconClass).toBeUndefined();
-    // The robot's seed is the product id, so the same product draws the same
-    // robot on every board and every rebuild.
-    expect(row?.robotSeed).toBe('1');
+    // The seed is the row's own designation, so the same listing draws the same
+    // robot on every board, every rebuild, and on the verdict page that froze it.
+    expect(row?.robotSeed).toBe(row?.name);
+    expect(row?.robotSeed).toMatch(/^Unit [A-Za-z]+-\d{3}$/);
+  });
+
+  it('withholds the name and the URL as well as the icon', () => {
+    // The icon is one third of an identity. A board that hid the favicon and
+    // printed "Ashgrove" beside it would have withheld nothing at all.
+    const html = render(ANON);
+    const row = ANON_ROW();
+
+    expect(html).not.toContain('Ashgrove');
+    expect(html).not.toContain(ASHGROVE);
+    expect(row?.url).toBe('');
+    expect(row?.href).toBeUndefined();
   });
 
   it('keeps its icon out of the board’s style block even when other rows have one', () => {
+    const ranking = sampleRanking();
     const html = render(
       boardDocument(
         { [ASHGROVE]: storedIcon('QU5PTllNT1VT'), [RUNLET]: storedIcon('bmFtZWRyb3c=') },
-        anonymise(ASHGROVE),
+        ranking,
+        anonymousIdsFor(ranking, ASHGROVE),
       ),
     );
 
@@ -223,28 +256,33 @@ describe('an anonymous product', () => {
     expect(html).toContain('bmFtZWRyb3c=');
   });
 
-  it('reads the flag strictly, so a loose value does not silently un-anonymise', () => {
+  it('is decided by the document’s own record, not by anything on the row', () => {
+    // A row cannot make itself anonymous by carrying a field, and cannot make
+    // itself named by dropping one: the set travels beside the ranking, written
+    // by whoever redacted it. A privacy decision inferred from row data is a
+    // privacy decision that changes when the row shape does.
     const ranking = sampleRanking();
     for (const row of ranking.ranking) {
       if (row.url === ASHGROVE) (row as unknown as { anonymous: unknown }).anonymous = 'true';
     }
-    const view = toBoardView(boardDocument({}, ranking));
+    const view = toBoardView(boardDocument({}, ranking, []));
 
-    // A privacy flag read by truthiness is a privacy flag that turns itself off
-    // when a column type changes. `'true'` is not `true`, and the row is named —
-    // which is the SAFE direction only because the flag is the authority and
-    // nothing infers it. If this ever inverts, invert this test with it.
     expect(view.rows.find((row) => row.url === ASHGROVE)?.anonymous).toBe(false);
   });
 
   it('draws its robot from the seed and nothing else', () => {
-    const html = renderToStaticMarkup(createElement(RobotAvatar, { seed: '42', size: 16 }));
-    expect(html).toContain('data-seed="42"');
+    const html = renderToStaticMarkup(createElement(RobotAvatar, { seed: 'Unit Kilo-427', size: 16 }));
+
     expect(html).toContain('width="16"');
+    expect(html).toContain('viewBox="0 0 16 16"');
     // Decoration: the row states the pseudonym in text beside it.
     expect(html).toContain('aria-hidden="true"');
     // In-process, from the seed. `02 §4`: a board read fetches nothing.
     expect(html).not.toContain('http');
+    // The two hues carry meaning — `--cut` is what was taken, `--held` is what
+    // survived — so an avatar in either would make an identity read as a score.
+    expect(html).not.toContain('--cut');
+    expect(html).not.toContain('--held');
   });
 });
 
@@ -255,7 +293,7 @@ describe('the mark is decoration, in every state', () => {
     for (const [label, document_] of [
       ['icon', boardDocument({ [ASHGROVE]: storedIcon('QUFBQg==') })],
       ['fallback', boardDocument({})],
-      ['robot', boardDocument({}, anonymise(ASHGROVE))],
+      ['robot', boardDocument({}, sampleRanking(), anonymousIdsFor(sampleRanking(), ASHGROVE))],
     ] as const) {
       const html = render(document_);
       for (const match of html.matchAll(/<span class="fav(?:[ ][^"]*)?"([^>]*)>/g)) {

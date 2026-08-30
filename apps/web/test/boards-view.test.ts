@@ -23,6 +23,8 @@ function view() {
     categoryVersion: 'v2',
     engineVersion: '0.1.0-test',
     caveat: SAMPLE_CAVEAT,
+    // Named products: this fixture is about the projection, not about anonymity.
+    anonymousIds: [],
     origin: 'seeded-run',
     ranking: sampleRanking(),
   });
@@ -158,6 +160,8 @@ describe('the board carries its own provenance', () => {
       generatedAt: '2026-08-29T14:05:00.000Z',
       productCount: 3,
       categoryVersion: 'v2',
+      // Named products: this fixture is about the projection, not about anonymity.
+      anonymousIds: [],
       origin: 'snapshot',
       ranking: sampleRanking(),
     });
@@ -289,6 +293,8 @@ describe('the stats row is a fold over the boards, or it is nothing', () => {
       generatedAt: '2026-08-29T14:05:00.000Z',
       productCount: 3,
       categoryVersion: 'v2',
+      // Named products: this fixture is about the projection, not about anonymity.
+      anonymousIds: [],
       origin: 'seeded-run',
       ranking: sampleRanking({ ranking: sampleRanking().ranking.slice(0, 1) }),
     });
