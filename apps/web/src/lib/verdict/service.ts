@@ -38,11 +38,27 @@ import {
   SEEDED_SLUGS,
 } from '@the-pit/db';
 
+import { resolveWorkdir } from '@/lib/boards/source';
+import { STORAGE_MODE_ENV } from '@/lib/pipeline/mode';
+
 import { MemoryVerdictStore, type StoredVerdict, type VerdictStore } from './store';
 
-/** Where the seeded boards live. `PIT_WORKDIR` matches `lib/pipeline/service.ts`. */
+/**
+ * Where the seeded boards live.
+ *
+ * `resolveWorkdir` and not a relative `'cjr'`, which is the bug this replaced:
+ * `next dev` and `next build` both run with `apps/web` as the working directory,
+ * so `'cjr'` resolved to `apps/web/cjr`, which does not exist. The `stat` below
+ * then failed for every seeded slug, the loop skipped both categories, and the
+ * store came up EMPTY — so every one of the 92 cold-start verdict URLs 404'd on a
+ * running server while the test suite passed, because the suite sets
+ * `PIT_WORKDIR` explicitly. `lib/boards/source.ts` had already hit this and
+ * solved it by walking up for the directory that actually holds `runs/`; the
+ * boards rendered and the verdicts did not, from one line's difference. Sharing
+ * its resolver is what keeps the two surfaces reading the same `cjr/`.
+ */
 function workdir(): string {
-  return process.env['PIT_WORKDIR'] ?? 'cjr';
+  return resolveWorkdir();
 }
 
 /**
@@ -60,32 +76,86 @@ function workdir(): string {
  * delivery transaction, and never comes through here.
  */
 async function seededVerdicts(): Promise<StoredVerdict[]> {
-  const root = workdir();
-  const rows: StoredVerdict[] = [];
+  return (await seededIndex()).rows;
+}
 
-  for (const slug of SEEDED_SLUGS) {
-    let rankedAt: Date;
-    try {
-      rankedAt = (await stat(join(root, 'runs', slug, 'ranking.json'))).mtime;
-    } catch {
-      // A category that has not been seeded in this checkout is not an error:
-      // its verdict URLs simply do not resolve.
-      continue;
+/** The seeded rows, plus the reverse lookup a board row needs to link to one. */
+interface SeededIndex {
+  readonly rows: StoredVerdict[];
+  /** Category slug -> engine product id -> public verdict slug. */
+  readonly slugs: Map<string, Map<number, string>>;
+}
+
+let seeded: Promise<SeededIndex> | undefined;
+
+function seededIndex(): Promise<SeededIndex> {
+  seeded ??= (async (): Promise<SeededIndex> => {
+    const root = workdir();
+    const rows: StoredVerdict[] = [];
+    const slugs = new Map<string, Map<number, string>>();
+
+    for (const slug of SEEDED_SLUGS) {
+      let rankedAt: Date;
+      try {
+        rankedAt = (await stat(join(root, 'runs', slug, 'ranking.json'))).mtime;
+      } catch {
+        // A category that has not been seeded in this checkout is not an error:
+        // its verdict URLs simply do not resolve.
+        continue;
+      }
+
+      const seed = buildSeedRows(await loadSeedInput(slug, root));
+      const byProduct = new Map<number, string>();
+      for (const row of seed.verdicts) {
+        rows.push({
+          publicSlug: row.publicSlug,
+          payload: row.payload,
+          productCount: row.productCount,
+          attemptNumber: row.attemptNumber ?? null,
+          deliveredAt: rankedAt,
+        });
+        // The engine id is read back off the frozen payload rather than
+        // re-derived from the id hash. `verdict-payload.ts` embeds the ranked row
+        // whole, so `verdict.id` is the same number `ranking.json` carries and the
+        // same number `lib/boards/view.ts` projects a board row from — one join
+        // key, taken from the document both sides already read.
+        const payload = row.payload as { verdict?: { id?: unknown } };
+        const id = payload.verdict?.id;
+        if (typeof id === 'number') byProduct.set(id, row.publicSlug);
+      }
+      slugs.set(slug, byProduct);
     }
 
-    const seed = buildSeedRows(await loadSeedInput(slug, root));
-    for (const row of seed.verdicts) {
-      rows.push({
-        publicSlug: row.publicSlug,
-        payload: row.payload,
-        productCount: row.productCount,
-        attemptNumber: row.attemptNumber ?? null,
-        deliveredAt: rankedAt,
-      });
-    }
+    return { rows, slugs };
+  })();
+  return seeded;
+}
+
+/**
+ * Every cold-start listing's verdict URL for one category, by engine product id.
+ *
+ * The board is rendered from `cjr/runs/<slug>/ranking.json` and every verdict on
+ * that board is frozen from the same file by `buildSeedRows`, so the two agree by
+ * construction — this map is not a second derivation of the slug, it is the
+ * freezer's own output read back. Without it a board row has no way to name its
+ * verdict: `verdicts.public_slug` is a hash of a deterministic uuid, and a
+ * surface that recomputed that hash would be a second definition of a permanent
+ * public URL.
+ *
+ * Empty for a category with no seeded run, and a caller that gets no entry for a
+ * row renders no link rather than a link to nothing. A verdict delivered through
+ * the money path lives in Postgres under its own slug and is not in here; when
+ * `DECISIONS.md` S8 settles what a re-pitch does to the old URL, the board's
+ * lookup becomes a store read and this stays the cold-start arm of it.
+ */
+export async function seededVerdictSlugs(categorySlug: string): Promise<ReadonlyMap<number, string>> {
+  try {
+    return (await seededIndex()).slugs.get(categorySlug) ?? new Map();
+  } catch {
+    // Same posture as `verdictStore` below: a missing or malformed `cjr/` costs
+    // the board its verdict links, never its render.
+    return new Map();
   }
-
-  return rows;
 }
 
 let cached: Promise<VerdictStore> | undefined;
@@ -118,19 +188,32 @@ function postgresVerdicts(): VerdictStore {
 /**
  * The store this deployment reads.
  *
- * ## Bound by environment, and the seeded store is not a fallback for a failure
+ * ## Bound by the deployment's storage mode, not by one environment variable
  *
- * With `DATABASE_URL` set, `/v/<slug>` reads the table — every delivered verdict,
- * including the seeded rows, which `db:seed` inserts. Without it, the seeded rows
- * are materialised from `cjr/` through the seed's own freezing code, which is
- * what makes local development and CI resolve a verdict URL with no database in
- * existence.
+ * In `postgres` mode `/v/<slug>` reads the table — every delivered verdict,
+ * including the seeded rows, which `db:seed` inserts. In `filesystem` mode the
+ * seeded rows are materialised from `cjr/` through the seed's own freezing code,
+ * which is what makes local development and CI resolve a verdict URL with no
+ * database in existence.
  *
- * The choice is the environment's and there is no silent fallback from one to the
- * other. A deployment whose database is unreachable must 500 or 404, not quietly
- * start serving 92 cold-start pages while a customer's paid verdict is missing —
- * that is the same class of bug as `service.ts`'s refusal to fall back to a local
- * filesystem store in production, and it is refused here for the same reason.
+ * `PIT_STORAGE=filesystem` narrows it, and that was a live bug rather than a
+ * tidy-up. The repository's local `.env` sets both `DATABASE_URL` — so a reader
+ * can point at a database if they start one — and `PIT_STORAGE=filesystem`,
+ * declaring that this deployment does not. Every other surface honoured the
+ * second; this one read only the first, opened a client against a Postgres
+ * nobody was running, and threw. `/v/<slug>` 500'd on all 92 seeded verdicts
+ * while the boards beside them rendered from the same files, and the one page
+ * `brief` Part 6 calls the paid deliverable was unreachable by any route on a
+ * running server. `mode.ts`'s own docblock names this failure: two copies of the
+ * binding rule, and the day they disagree a surface reads somewhere nothing
+ * writes.
+ *
+ * It is still not a fallback, in either direction. Nothing here reacts to a
+ * database being DOWN — an unreachable database throws, as it should, rather than
+ * quietly serving 92 cold-start pages while a customer's paid verdict is missing.
+ * The seeded arm is reached only by an operator declaring the mode, and
+ * `storageMode` refuses that declaration where durable storage is required, with
+ * `assertBindingsConfigured` enforcing it at boot before any request.
  *
  * Cached per process: the seeded rows are derived from files that only a
  * placement rewrites, and rebuilding 92 frozen payloads on every page view would
@@ -139,7 +222,8 @@ function postgresVerdicts(): VerdictStore {
  */
 export function verdictStore(): Promise<VerdictStore> {
   if (registered !== undefined) return Promise.resolve(registered);
-  cached ??= hasDatabaseUrl()
+  const declaredFilesystem = process.env[STORAGE_MODE_ENV] === 'filesystem';
+  cached ??= !declaredFilesystem && hasDatabaseUrl()
     ? Promise.resolve(postgresVerdicts())
     : seededVerdicts()
         .then((rows) => new MemoryVerdictStore(rows) as VerdictStore)
@@ -158,4 +242,5 @@ export function registerVerdictStore(store: VerdictStore): void {
 export function resetVerdictStore(): void {
   cached = undefined;
   registered = undefined;
+  seeded = undefined;
 }

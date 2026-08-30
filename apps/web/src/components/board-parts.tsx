@@ -398,6 +398,21 @@ export function RowLedger({ row }: { row: RowView }): ReactNode {
             {row.url}
           </a>
         )}
+        {/*
+         * The row's own verdict page. The board shows what came off; the verdict
+         * shows the whole panel at once — the juror × metric grid, the spread the
+         * six disagreed by, and the buyers who named it. Until this link existed
+         * the page had no route into it from anywhere on the site.
+         *
+         * Rendered only when a verdict has actually been issued for the row
+         * (`RowView.verdictHref`), so there is no path here to a 404.
+         */}
+        {row.verdictHref === undefined ? null : (
+          <>
+            {' · '}
+            <a href={row.verdictHref}>Read the full verdict &rarr;</a>
+          </>
+        )}
       </p>
 
       {row.metrics.map((metric) => (

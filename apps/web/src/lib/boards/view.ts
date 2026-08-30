@@ -98,6 +98,25 @@ export interface RowView {
   rank: number;
   name: string;
   url: string;
+  /**
+   * This row's own verdict page, as a path that RESOLVES to one rather than a
+   * path that is one.
+   *
+   * `verdicts.public_slug` is a hash of a deterministic uuid, held in
+   * `@the-pit/db`. A board view cannot look it up and must not re-derive it:
+   * `test/boards-read-path.test.ts` keeps the database package off the graph of
+   * every public board route — a board is a CDN snapshot and loading a driver to
+   * render one is the thing that rule exists to prevent — and a second
+   * implementation of a permanent public URL would be worse than no link at all.
+   *
+   * So the board names the two things it legitimately knows, its category and the
+   * engine's product id, and `app/v/of/[category]/[product]` turns that into the
+   * verdict's own URL with a redirect. The resolver is also where
+   * `DECISIONS.md` S8 will land when it settles what a re-pitch does to an older
+   * verdict URL: the board keeps pointing at the product, and the redirect
+   * decides which of its verdicts that means.
+   */
+  verdictHref?: string;
   /** Only `http(s)` survives; anything else is printed as text and never as an href. */
   href?: string;
   /** `100 - mean(metric score)`. See the module comment. */
@@ -181,7 +200,11 @@ function safeHref(url: string): string | undefined {
   return /^https?:\/\//i.test(url) ? url : undefined;
 }
 
-function projectRow(row: RankedProduct, flagsById: Map<number, FlaggedInjection[]>): RowView {
+function projectRow(
+  row: RankedProduct,
+  flagsById: Map<number, FlaggedInjection[]>,
+  categorySlug: string,
+): RowView {
   const metrics: MetricView[] = row.scorecard.map((entry) => ({
     metric: entry.metric,
     score: entry.score,
@@ -211,6 +234,9 @@ function projectRow(row: RankedProduct, flagsById: Map<number, FlaggedInjection[
     rank: row.rank,
     name: row.name,
     url: row.url,
+    ...(categorySlug === ''
+      ? {}
+      : { verdictHref: `/v/of/${encodeURIComponent(categorySlug)}/${encodeURIComponent(String(row.id))}` }),
     ...(href === undefined ? {} : { href }),
     cuts,
     health: 100 - cuts,
@@ -270,7 +296,7 @@ export function toBoardView(document_: BoardDocument): BoardView {
     else bucket.push(flag);
   }
 
-  const rows = ranking.ranking.map((row) => projectRow(row, flagsById));
+  const rows = ranking.ranking.map((row) => projectRow(row, flagsById, document_.slug));
 
   return {
     slug: document_.slug,

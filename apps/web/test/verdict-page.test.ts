@@ -16,7 +16,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { parseVerdict } from '@/lib/verdict/model';
-import { TOKENS } from '@/lib/theme';
+import { BASE, TOKENS } from '@/lib/theme';
 import { renderVerdictNotFound, renderVerdictPage, stampedRank, stampTime } from '@/lib/verdict/page';
 
 import { handBuiltVerdict, seededVerdictNamed } from './helpers/verdict.js';
@@ -304,6 +304,59 @@ describe('the downloadable artifact', () => {
     // Absolute, so a saved copy still resolves.
     expect(html).toContain('href="https://thepit.show/');
     expect(html).not.toContain('href="/"');
+  });
+});
+
+describe('the two hues, on the one page that draws both halves', () => {
+  it('paints the surviving head --held and the taken segments --cut', async () => {
+    const html = await renderSeeded('developer-tools', 'Sequo');
+
+    // `lib/theme.ts`: --cut is taken, --held is survived, and nothing else on any
+    // surface is either. This page used to carry its own `.meter .kept` painted
+    // `rgb(--ink-c / .40)` — a local copy of a rule the rest of the app had moved
+    // on from — so the largest quantity on the card was drawn in the absence of
+    // colour while the smaller one had the only colour on the page.
+    //
+    // Asserted against the theme rather than against a hex, for the same reason
+    // the palette test above is: a re-theme must fail `theme-drift.test.ts`, not
+    // this file.
+    expect(/\.meter \.kept\{([^}]*)\}/.exec(TOKENS + BASE)?.[1] ?? '').toContain('--held-c');
+
+    // Every `.kept` rule in the stylesheet this page actually serves — the
+    // theme's and any the page adds — paints the head in --held. The cascade is
+    // what a reader sees, so the cascade is what is asserted.
+    const style = /<style>([\s\S]*?)<\/style>/.exec(html)?.[1] ?? '';
+    const kept = style.match(/\.kept\s*\{[^}]*background:[^}]*\}/g) ?? [];
+    expect(kept.length, 'the served stylesheet paints a kept head at all').toBeGreaterThan(0);
+    for (const rule of kept) {
+      expect(rule, 'a kept head must be --held').toContain('--held-c');
+      expect(rule, 'a kept head must never be --cut').not.toContain('--cut');
+      expect(rule, 'a kept head must not be a neutral again').not.toContain('--ink-c');
+    }
+    // And the taken segments are --cut, in the same stylesheet.
+    for (const rule of style.match(/\.seg\s*\{[^}]*background:[^}]*\}/g) ?? []) {
+      expect(rule, 'a taken segment must be --cut').toMatch(/--cut/);
+      expect(rule, 'a taken segment must never be --held').not.toContain('--held');
+    }
+  });
+
+  it('leads the card with the health figure, in the colour that means survived', async () => {
+    const html = await renderSeeded('developer-tools', 'Sequo');
+
+    // Sequo took 30 in cuts, so it walked out with 70.
+    expect(html).toContain('<b class="held">70 health left</b>');
+    expect(html).toContain('<b class="pts">&minus;30 in cuts</b>');
+    expect(html).toContain('<span class="held">70 / 100</span>');
+  });
+
+  it('carries the health note wherever it shows the health figure', async () => {
+    const html = await renderSeeded('developer-tools', 'Sequo');
+
+    // `lib/boards/copy.ts`: the canvas ranks BY health and this board does not.
+    // A health figure without this sentence publishes a sort rule the engine
+    // does not run — so the note travels with the number, on every surface.
+    expect(html).toContain('It is not the sort order');
+    expect(html).toContain('ranked by core, which blends merit with demand');
   });
 });
 
