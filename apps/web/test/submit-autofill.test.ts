@@ -12,17 +12,37 @@
  * or an enhancement that silently binds to nothing all fail here.
  *
  * The stub is deliberately tiny: `getElementById`, `addEventListener`, `.value`,
- * `.textContent`, `.hidden`, `.className`, `.src`, and a `fetch` that answers
- * from a fixture. That is the entire browser API the script is allowed to use,
- * and the stub is therefore also a specification of that.
+ * `.textContent`, `.hidden`, `.src`, a `fetch` that answers from a fixture, and
+ * a `setTimeout`/`clearTimeout` pair over a fake clock. That is the entire
+ * browser API the script is allowed to use, and the stub is therefore also a
+ * specification of that.
+ *
+ * The clock is stubbed rather than real. A debounce tested by sleeping is a test
+ * that is slow AND flaky; `tick(ms)` fires what the script scheduled, so the
+ * pause is asserted rather than waited out.
  *
  * ## The rules being discriminated
  *
+ * - **`linear.app` is looked up.** A bare domain is what people type, and the
+ *   version of this script that shipped tested the raw value against
+ *   `/^https?:\/\//` and returned — no request, no icon, no status line, on the
+ *   commonest input there is. That test is first in the file, and it fails
+ *   against the code it replaced, as do the ones for `www.`, a path, a trailing
+ *   slash and the whitespace around a paste.
+ * - **Nothing returns silently.** Garbage says it is garbage, a half-typed host
+ *   says it is waiting, an emptied field clears the line and the icon, and the
+ *   rate limit says it is the rate limit. Every one of those was previously a
+ *   `return`.
+ * - **The pause is a pause.** A burst of keystrokes is one lookup, fired after
+ *   they stop; a paste does not wait for it; `blur` still works for a tab away.
  * - A fetched description fills an EMPTY field.
  * - It does NOT overwrite a field the visitor typed in — including one they
  *   typed while the lookup was in flight.
- * - Every path ends with the status line saying something. No spinner survives.
- * - Nothing the script does can prevent the form from posting.
+ * - A slow answer never paints over a newer one, and an answer that arrives
+ *   after the field was cleared paints nothing at all.
+ * - Nothing the script does can prevent the form from posting — including the
+ *   scheme it writes back on blur, which is there so `type="url"` validation
+ *   does not refuse at the button what the script accepted at the door.
  * - The pitch cap is enforced on the SERVER: 801 characters is refused before a
  *   Dodo session is opened and before a `submissions` row is written, and the
  *   accepted value is what reaches the writer.
@@ -106,7 +126,6 @@ describe('the rendered form', () => {
     expect(page).not.toMatch(/<script[^>]*\ssrc=/);
   });
 });
-
 // ---------------------------------------------------------------------------
 // The DOM stub, and the script that ships.
 // ---------------------------------------------------------------------------
@@ -148,30 +167,56 @@ function shippedScript(): string {
   return match[1] as string;
 }
 
+type Answer =
+  | { readonly ok: boolean; readonly status?: number; readonly body: unknown }
+  | { readonly reject: true };
+
+/**
+ * An answer the harness holds until the test hands it over.
+ *
+ * The out-of-order case cannot be written with promises that resolve in call
+ * order, because that is the case that never happens in a browser. `'hold'`
+ * parks the request; `deliver(n, answer)` is what lets a test answer the SECOND
+ * lookup first and then watch the first one land into a form it must not touch.
+ */
+type Scripted = Answer | 'hold';
+
 interface Harness {
   readonly url: StubElement;
   readonly name: StubElement;
   readonly description: StubElement;
   readonly icon: StubElement;
-  readonly row: StubElement;
   readonly state: StubElement;
   /** Every URL the script asked the endpoint about, in order. */
   readonly asked: string[];
+  /** Type into the field, the way a keyboard does: value first, then `input`. */
+  type(value: string): Promise<void>;
+  /** Paste into the field: `paste` fires first, and the value lands after it. */
+  paste(value: string): Promise<void>;
+  /** Move the wall clock, firing anything the script had scheduled. */
+  tick(ms: number): Promise<void>;
   blur(): Promise<void>;
+  change(): Promise<void>;
+  /** Hand over a held answer, by the index of the request it belongs to. */
+  deliver(index: number, answer: Answer): Promise<void>;
 }
 
-type Answer = { readonly ok: boolean; readonly body: unknown } | { readonly reject: true };
+/** Four turns: `fetch().then().then()`, plus room for the `catch`. */
+async function flush(): Promise<void> {
+  for (let i = 0; i < 4; i += 1) await Promise.resolve();
+}
 
 /**
- * Run the shipped script against a stub form.
+ * Run the shipped script against a stub form and a stub clock.
  *
  * `answers` is consumed one per lookup, so a test can give a slow first answer
  * and a fast second one — which is the out-of-order case the `seq` guard exists
- * for.
+ * for. The clock is stubbed rather than real: a 600ms debounce that a test slept
+ * through would add six seconds to the suite and would still be a race.
  */
 function harness(
   fields: { url?: string; name?: string; description?: string },
-  answers: readonly Answer[],
+  answers: readonly Scripted[],
   hooks: { readonly beforeResolve?: (h: Harness) => void } = {},
 ): Harness {
   const url = element('f-url', fields.url ?? '');
@@ -188,37 +233,100 @@ function harness(
   const asked: string[] = [];
   let served = 0;
 
+  let clock = 0;
+  let nextTimer = 1;
+  const scheduled = new Map<number, { at: number; fire: () => void }>();
+  const held = new Map<number, (answer: Answer) => void>();
+
+  function settled(answer: Answer): Promise<unknown> {
+    if ('reject' in answer) return Promise.reject(new Error('network down'));
+    return Promise.resolve({
+      ok: answer.ok,
+      status: answer.status ?? 200,
+      json: () => Promise.resolve(answer.body),
+    });
+  }
+
   const documentStub = { getElementById: (id: string): StubElement | null => byId.get(id) ?? null };
   const windowStub = {
     fetch: (_target: string, init: { body: string }): Promise<unknown> => {
+      const index = served;
       asked.push((JSON.parse(init.body) as { url: string }).url);
       const answer = answers[served] ?? { ok: false, body: null };
       served += 1;
       // The hook runs between the request and its answer: that is where a
       // visitor typing into a field mid-flight lives.
       hooks.beforeResolve?.(built);
-      if ('reject' in answer) return Promise.reject(new Error('network down'));
-      return Promise.resolve({ ok: answer.ok, json: () => Promise.resolve(answer.body) });
+      if (answer === 'hold') {
+        return new Promise((resolve, reject) => {
+          held.set(index, (given) => {
+            if ('reject' in given) reject(new Error('network down'));
+            else resolve({ ok: given.ok, status: given.status ?? 200, json: () => Promise.resolve(given.body) });
+          });
+        });
+      }
+      return settled(answer);
+    },
+    setTimeout: (fire: () => void, ms: number): number => {
+      const id = nextTimer;
+      nextTimer += 1;
+      scheduled.set(id, { at: clock + ms, fire });
+      return id;
+    },
+    clearTimeout: (id: number): void => {
+      scheduled.delete(id);
     },
   };
 
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   new Function('document', 'window', shippedScript())(documentStub, windowStub);
 
+  function fireEvent(el: StubElement, type: string): void {
+    for (const handler of el.listeners.get(type) ?? []) handler();
+  }
+
   const built: Harness = {
     url,
     name,
     description,
     icon,
-    row,
     state,
     asked,
+    async type(value: string): Promise<void> {
+      url.value = value;
+      fireEvent(url, 'input');
+      await flush();
+    },
+    async paste(value: string): Promise<void> {
+      fireEvent(url, 'paste');
+      url.value = value;
+      fireEvent(url, 'input');
+      await flush();
+    },
+    async tick(ms: number): Promise<void> {
+      clock += ms;
+      for (const [id, timer] of [...scheduled]) {
+        if (timer.at <= clock) {
+          scheduled.delete(id);
+          timer.fire();
+        }
+      }
+      await flush();
+    },
     async blur(): Promise<void> {
-      for (const handler of url.listeners.get('blur') ?? []) handler();
-      // Two microtask turns: `fetch().then().then()`.
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+      fireEvent(url, 'blur');
+      await flush();
+    },
+    async change(): Promise<void> {
+      fireEvent(url, 'change');
+      await flush();
+    },
+    async deliver(index: number, answer: Answer): Promise<void> {
+      const give = held.get(index);
+      if (give === undefined) throw new Error(`no request ${index} is waiting for an answer`);
+      held.delete(index);
+      give(answer);
+      await flush();
     },
   };
   return built;
@@ -234,6 +342,151 @@ const FOUND = {
     faviconUrl: 'https://ashgrove.dev/icon.png',
   },
 } as const;
+
+/** Long enough that every debounce the script can schedule has fired. */
+const PAUSE = 700;
+
+describe('what a person actually types, running the script the page ships', () => {
+  it('looks up a bare domain — the case that used to do nothing at all', async () => {
+    // This is the bug. `linear.app` is what somebody types when a form asks for
+    // a web address, and the old script tested the raw value against
+    // /^https?:\/\// and returned: no request, no icon, no status line.
+    const h = harness({}, [FOUND]);
+
+    await h.type('linear.app');
+    await h.tick(PAUSE);
+
+    expect(h.asked).toEqual(['https://linear.app/']);
+    expect(h.state.hidden).toBe(false);
+    expect(h.name.value).toBe('Ashgrove');
+  });
+
+  it('normalizes www., a path and a trailing slash to one URL each', async () => {
+    expect((await lookedUp('www.example.com')).asked).toEqual(['https://www.example.com/']);
+    expect((await lookedUp('example.com/path')).asked).toEqual(['https://example.com/path']);
+    expect((await lookedUp('example.com/')).asked).toEqual(['https://example.com/']);
+    expect((await lookedUp('  example.com  ')).asked).toEqual(['https://example.com/']);
+    expect((await lookedUp('HTTPS://Example.com')).asked).toEqual(['https://example.com/']);
+    expect((await lookedUp('http://example.com/x?utm=1')).asked).toEqual(['http://example.com/x?utm=1']);
+  });
+
+  it('treats the schemed and schemeless spellings of one address as one lookup', async () => {
+    const h = harness({}, [FOUND, FOUND]);
+
+    await h.type('linear.app');
+    await h.tick(PAUSE);
+    await h.type('https://linear.app');
+    await h.tick(PAUSE);
+    await h.blur();
+
+    expect(h.asked).toEqual(['https://linear.app/']);
+  });
+
+  it('says the value is not an address rather than returning silently', async () => {
+    const h = harness({}, [FOUND]);
+
+    await h.type('not a url');
+    await h.tick(PAUSE);
+
+    expect(h.asked).toEqual([]);
+    expect(h.state.hidden).toBe(false);
+    expect(h.state.textContent).toContain('does not look like a web address');
+  });
+
+  it('refuses a scheme that is not http(s), out loud', async () => {
+    for (const value of ['javascript:alert(1)', 'data:text/html,<b>x</b>', 'ftp://example.com']) {
+      const h = harness({}, [FOUND]);
+
+      await h.type(value);
+      await h.tick(PAUSE);
+
+      expect(h.asked).toEqual([]);
+      expect(h.state.textContent).toContain('does not look like a web address');
+    }
+  });
+
+  it('waits for a half-typed host while typing, and calls it wrong once they leave', async () => {
+    const h = harness({}, [FOUND]);
+
+    await h.type('linear');
+    await h.tick(PAUSE);
+
+    expect(h.asked).toEqual([]);
+    expect(h.state.textContent).toContain('Waiting for the rest');
+
+    // Leaving the field with it is a different statement: they are done, and it
+    // is not an address.
+    await h.blur();
+    expect(h.state.textContent).toContain('does not look like a web address');
+  });
+
+  it('says it is reading BEFORE the answer arrives, so a slow first fetch reads as alive', async () => {
+    const h = harness({}, ['hold']);
+
+    await h.type('linear.app');
+    await h.tick(PAUSE);
+
+    expect(h.asked).toEqual(['https://linear.app/']);
+    expect(h.state.hidden).toBe(false);
+    expect(h.state.textContent).toBe('Reading linear.app…');
+
+    await h.deliver(0, FOUND);
+    expect(h.state.textContent).not.toContain('Reading');
+  });
+
+  it('asks once for a burst of keystrokes, on the pause at the end of it', async () => {
+    const h = harness({}, [FOUND]);
+
+    await h.type('lin');
+    await h.tick(200);
+    await h.type('linear.a');
+    await h.tick(200);
+    await h.type('linear.app');
+    expect(h.asked).toEqual([]);
+
+    await h.tick(PAUSE);
+    expect(h.asked).toEqual(['https://linear.app/']);
+  });
+
+  it('acts on a paste without waiting out the typing pause', async () => {
+    const h = harness({}, [FOUND]);
+
+    await h.paste('https://ashgrove.dev/');
+    await h.tick(100);
+
+    expect(h.asked).toEqual(['https://ashgrove.dev/']);
+  });
+
+  it('still fires on blur, for a field left by tab or by click', async () => {
+    const h = harness({ url: 'ashgrove.dev' }, [FOUND]);
+
+    await h.blur();
+
+    expect(h.asked).toEqual(['https://ashgrove.dev/']);
+    expect(h.description.value).toBe('Meeting notes to action lists.');
+  });
+
+  it('writes the scheme back into the field, so the browser will let the form post', async () => {
+    // `type="url" required` refuses a bare host at submit time. Accepting one at
+    // the door and then having the browser refuse it at the button is the same
+    // silent dead end, moved.
+    const h = harness({ url: '  linear.app  ' }, [FOUND]);
+
+    await h.blur();
+
+    expect(h.url.value).toBe('https://linear.app');
+    expect(h.asked).toEqual(['https://linear.app/']);
+  });
+
+  it('leaves a value that is not an address exactly as typed', async () => {
+    const h = harness({ url: 'not a url' }, [FOUND]);
+
+    await h.blur();
+
+    expect(h.url.value).toBe('not a url');
+    expect(h.asked).toEqual([]);
+  });
+});
 
 describe('the autofill, running the script the page ships', () => {
   it('fills empty name and description from what the site said', async () => {
@@ -287,14 +540,13 @@ describe('the autofill, running the script the page ships', () => {
     expect(h.name.value).toBe('Ashgrove');
   });
 
-  it('shows the favicon beside the field and lights the row', async () => {
+  it('shows the favicon beside the field', async () => {
     const h = harness({ url: 'https://ashgrove.dev/' }, [FOUND]);
 
     await h.blur();
 
     expect(h.icon.src).toBe('https://ashgrove.dev/icon.png');
     expect(h.icon.hidden).toBe(false);
-    expect(h.row.className).toBe('urlrow lit');
   });
 
   it('refuses a favicon that is not http(s), even if the endpoint somehow returned one', async () => {
@@ -315,12 +567,28 @@ describe('the autofill, running the script the page ships', () => {
 
     expect(h.name.value).toBe('');
     expect(h.description.value).toBe('');
-    expect(h.state.textContent).toContain('Nothing we could read');
+    expect(h.state.textContent).toContain('Nothing we could read at ashgrove.dev');
     expect(h.state.textContent).not.toContain('Reading');
   });
 
-  it('resolves the status line when the endpoint answers 429', async () => {
-    const h = harness({ url: 'https://ashgrove.dev/' }, [{ ok: false, body: null }]);
+  it('says the rate limit is the rate limit, and not that the site is unreadable', async () => {
+    // A 429 reported as "nothing we could read there" describes every site in a
+    // row as broken, which is how a working fetcher gets reported as a bug.
+    const h = harness({ url: 'https://ashgrove.dev/' }, [
+      { ok: false, status: 429, body: { status: 'limited', retryAfterSeconds: 42 } },
+    ]);
+
+    await h.blur();
+
+    expect(h.state.textContent).toContain('lot of lookups');
+    expect(h.state.textContent).not.toContain('Nothing we could read');
+    // And it is retryable: the wall comes down on its own.
+    await h.blur();
+    expect(h.asked).toHaveLength(2);
+  });
+
+  it('resolves the status line when the endpoint answers some other failure', async () => {
+    const h = harness({ url: 'https://ashgrove.dev/' }, [{ ok: false, status: 500, body: null }]);
 
     await h.blur();
 
@@ -344,23 +612,128 @@ describe('the autofill, running the script the page ships', () => {
 
     await h.blur();
     await h.blur();
-    await h.blur();
+    await h.change();
 
     expect(h.asked).toEqual(['https://ashgrove.dev/']);
   });
 
-  it('asks about nothing at all for an empty or non-http field', async () => {
-    expect((await withBlur({ url: '' })).asked).toEqual([]);
-    expect((await withBlur({ url: 'ashgrove.dev' })).asked).toEqual([]);
-    expect((await withBlur({ url: 'javascript:alert(1)' })).asked).toEqual([]);
+  it('asks about nothing at all for an empty field', async () => {
+    const h = harness({ url: '' }, [FOUND]);
 
-    async function withBlur(fields: { url: string }): Promise<Harness> {
-      const h = harness(fields, [FOUND]);
-      await h.blur();
-      return h;
-    }
+    await h.blur();
+    await h.type('');
+    await h.tick(PAUSE);
+
+    expect(h.asked).toEqual([]);
+    expect(h.state.hidden).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The two ways a stale answer can lie: out of order, and after a clear.
+// ---------------------------------------------------------------------------
+
+describe('a stale answer never paints over a newer one', () => {
+  it('drops a slow FIRST response that lands after a fast second one', async () => {
+    const h = harness({}, ['hold', 'hold']);
+
+    await h.type('slow.example');
+    await h.tick(PAUSE);
+    await h.type('fast.example');
+    await h.tick(PAUSE);
+
+    expect(h.asked).toEqual(['https://slow.example/', 'https://fast.example/']);
+
+    // The second lookup answers first — the ordinary case on a real network.
+    await h.deliver(1, {
+      ok: true,
+      body: { status: 'found', url: 'https://fast.example/', title: 'Fast', description: 'The one they meant.' },
+    });
+    expect(h.name.value).toBe('Fast');
+
+    // And now the first one lands. It must change nothing at all.
+    await h.deliver(0, {
+      ok: true,
+      body: {
+        status: 'found',
+        url: 'https://slow.example/',
+        title: 'Slow',
+        description: 'The typo.',
+        faviconUrl: 'https://slow.example/icon.png',
+      },
+    });
+
+    expect(h.name.value).toBe('Fast');
+    expect(h.description.value).toBe('The one they meant.');
+    expect(h.state.textContent).toContain('fast.example');
+    expect(h.icon.src).toBe('');
+  });
+
+  it('clears the icon and the line when the URL is cleared, and ignores the answer still in flight', async () => {
+    const h = harness({}, [FOUND, 'hold']);
+
+    await h.type('ashgrove.dev');
+    await h.tick(PAUSE);
+    expect(h.icon.hidden).toBe(false);
+    expect(h.state.hidden).toBe(false);
+
+    // Select-all, delete. Immediately — no waiting on a debounce to notice.
+    await h.type('');
+
+    expect(h.icon.hidden).toBe(true);
+    expect(h.state.textContent).toBe('');
+    expect(h.state.hidden).toBe(true);
+
+    // The two text fields keep what is in them: the visitor may have edited the
+    // words we offered, and an emptied URL is not a reason to take them back.
+    expect(h.name.value).toBe('Ashgrove');
+
+    // A second lookup that was already in flight when they cleared must not put
+    // a status line, an icon or another site's copy onto an empty field.
+    await h.type('other.example');
+    await h.tick(PAUSE);
+    await h.type('');
+    await h.deliver(1, {
+      ok: true,
+      body: {
+        status: 'found',
+        url: 'https://other.example/',
+        title: 'Other',
+        description: 'Somewhere else entirely.',
+        faviconUrl: 'https://other.example/icon.png',
+      },
+    });
+
+    expect(h.state.hidden).toBe(true);
+    expect(h.icon.hidden).toBe(true);
+    expect(h.name.value).toBe('Ashgrove');
+    expect(h.description.value).toBe('Meeting notes to action lists.');
+  });
+
+  it('drops the old site’s favicon the moment a different host is looked up', async () => {
+    const h = harness({}, [FOUND, 'hold']);
+
+    await h.type('ashgrove.dev');
+    await h.tick(PAUSE);
+    expect(h.icon.hidden).toBe(false);
+
+    await h.type('linear.app');
+    await h.tick(PAUSE);
+
+    // Reading linear.app, so ashgrove.dev's icon is gone rather than sitting
+    // beside a URL it does not belong to.
+    expect(h.icon.hidden).toBe(true);
+    expect(h.state.textContent).toBe('Reading linear.app…');
+  });
+});
+
+async function lookedUp(value: string): Promise<Harness> {
+  const h = harness({}, [FOUND]);
+  await h.type(value);
+  await h.tick(PAUSE);
+  return h;
+}
+
 
 // ---------------------------------------------------------------------------
 // The pitch cap, on the server.

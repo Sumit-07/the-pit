@@ -92,18 +92,28 @@ a.act{margin-top:16px}
 .terms{margin-top:14px;font-size:14px;line-height:1.65;color:var(--dim);padding-left:1.2rem}
 .terms li{margin-top:6px}
 
-/* The URL field's autofill. Three new rules, all of them structural — the
-   surfaces, the type and the colours are the tokens the rest of the form uses.
-   The icon is absolutely positioned inside the field's own box so it reads as
-   part of the input rather than as a second control, and the left padding only
-   appears once there is actually an icon to make room for. */
+/* The URL field's autofill. Three rules, all of them structural — the surfaces,
+   the type and the colours are the tokens the rest of the form uses. The icon is
+   absolutely positioned inside the field's own box so it reads as part of the
+   input rather than as a second control.
+
+   The gutter it sits in is reserved ALWAYS, not only once an icon has arrived.
+   Padding that appears with the favicon moves the caret and every character to
+   its right in the middle of typing, which is the one moment a text field must
+   hold still. Sixteen pixels of empty space is the cheap half of that trade. */
 .urlrow{position:relative;display:block}
 .urlrow .icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);
   width:16px;height:16px;border-radius:3px;background:var(--rise);object-fit:contain}
-.urlrow.lit input{padding-left:37px}
+.urlrow input{padding-left:37px}
 /* The status line. Same mono hint type as every other hint, one shade up so it
-   reads as an answer rather than as more instructions. */
-.look{display:block;font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:6px}
+   reads as an answer rather than as more instructions.
+
+   The reserved line height is there for the same reason as the gutter: it says something on
+   every path now, including while someone is still typing, so it appears and is
+   replaced far more often than it used to. Reserving its one line keeps the
+   fields below it from stepping down and back up as it does. */
+.look{display:block;font-family:var(--mono);font-size:11px;line-height:1.45;color:var(--dim);
+  margin-top:6px;min-height:16px}
 .look[hidden]{display:none}
 `;
 
@@ -122,37 +132,89 @@ const ICON_ID = 'site-icon';
 const STATE_ID = 'site-state';
 
 /**
- * The autofill: read the page the visitor pasted, and offer what it says.
+ * How long a pause in typing counts as "they have stopped".
  *
- * ## What it does, and the three rules it will not break
+ * 600ms is the middle of the band where a pause stops being a pause and starts
+ * being a stop. Lower and the lookup fires between the syllables of a domain
+ * somebody is still typing; higher and the icon arrives after they have already
+ * tabbed away, which is the behaviour this replaces.
+ */
+const PAUSE_MS = 600;
+
+/**
+ * A pasted value is not a pause — it is a finished value, arriving whole.
  *
- * On `blur` and on `change` of the URL field — the moment the visitor has
- * finished with it and moved on — it POSTs the value to `/api/site-metadata`,
- * which runs it through `@the-pit/fetch`'s guards and answers with a title, a
- * description and a favicon. Then:
+ * The short timer exists only because `paste` fires BEFORE the field holds the
+ * pasted text; it is a turn of the event loop, not a wait.
+ */
+const PASTE_MS = 60;
+
+/**
+ * The sentences that do not depend on what a site answered.
  *
- * 1. **It fills empty fields only.** `value.trim() === ''` is checked
+ * `LIMITED` is the rate limit (`SITE_METADATA_RATE_LIMIT`) said as itself. The
+ * endpoint's 429 used to reach the browser as "nothing we could read there",
+ * which describes every site in a row as broken and is the kind of thing that
+ * gets reported as a bug in the fetcher.
+ */
+const NOT_A_URL = 'That does not look like a web address — try linear.app, or paste the full https:// one.';
+const KEEP_TYPING = 'Waiting for the rest of the address — something like linear.app.';
+const LIMITED = 'That is a lot of lookups in a few minutes. Give it a moment, or type the two fields in yourself.';
+
+/**
+ * The autofill: read the page the visitor named, and offer what it says.
+ *
+ * ## What it does, and the four rules it will not break
+ *
+ * On a pause in typing, on paste, and on `blur`/`change`, it normalizes what is
+ * in the URL field and POSTs it to `/api/site-metadata`, which runs it through
+ * `@the-pit/fetch`'s guards and answers with a title, a description and a
+ * favicon. Then:
+ *
+ * 1. **It accepts what people actually type.** `linear.app` is what somebody
+ *    types when asked for a web address; `https://linear.app` is what a form
+ *    designer types. The previous version tested the raw value against
+ *    `/^https?:\/\//` and returned if it failed, so the common case did
+ *    nothing at all — no fetch, no icon, no message — and read as a feature that
+ *    had never been built. `shape()` below now does what the server already does
+ *    with the same string (`normalizeUrl` in `@the-pit/engine` defaults a bare
+ *    host to `https://`), so the browser is no longer stricter than the thing it
+ *    is a front end for.
+ * 2. **It fills empty fields only.** `value.trim() === ''` is checked
  *    immediately before every write, not when the request was sent, so a
  *    visitor who typed their own name into the field WHILE the lookup was in
  *    flight keeps it. An autofill that clobbers the sentence you just finished
  *    is the single most annoying way to ship this, and the check is cheap.
- * 2. **It says what is happening, and it always finishes saying it.** Looking,
- *    found, nothing found — every path through `look()` ends in a `say()`,
- *    including the network failure and the rate limit. A spinner that never
- *    resolves is worse than no spinner at all.
- * 3. **It never blocks the submission.** Nothing here touches `submit`, nothing
+ * 3. **It never returns silently.** Every path out of `look()` leaves a visible
+ *    state: reading, found, nothing found, not an address, or — for an emptied
+ *    field — deliberately blank with the icon gone. That is the rule the old
+ *    version broke, and breaking it is what made a working endpoint look like
+ *    dead markup.
+ * 4. **It never blocks the submission.** Nothing here touches `submit`, nothing
  *    disables the button, and every failure is caught. The worst case is a form
  *    with an empty description that the visitor fills in by hand, which is
  *    exactly the form that shipped before this existed.
  *
- * ## Two smaller decisions
+ * ## The smaller decisions
  *
- * A monotonic `seq` guards against out-of-order answers: paste one URL, correct
+ * A monotonic `seq` guards against out-of-order answers: type one URL, correct
  * it, and the slow first response must not overwrite the fast second one's
- * fields or its status line. And `last` suppresses a re-fetch of an unchanged
- * value — tabbing back and forth through a filled form should cost nothing, and
- * the rate limit is only generous because of it. It is deliberately cleared on
- * failure so that a retry after a dropped connection is still possible.
+ * fields or its status line. Clearing the field bumps it too, so an answer that
+ * lands after the visitor has wiped the URL paints nothing.
+ *
+ * `last` suppresses a re-fetch of an unchanged value — tabbing back and forth
+ * through a filled form should cost nothing, and the rate limit
+ * (`SITE_METADATA_RATE_LIMIT`, twenty per five minutes) is only generous because
+ * of it. It holds the NORMALIZED url, so `linear.app`, `linear.app/` and
+ * `https://linear.app` are one lookup and not three. It is deliberately cleared
+ * on failure so that a retry after a dropped connection is still possible.
+ *
+ * `blur` also writes the scheme back into the field when the visitor left it
+ * out. That is not cosmetic: the input is `type="url" required`, so a bare
+ * `linear.app` would be stopped by the browser's own validation at the moment
+ * they press the button, having been told all along that we understood it. The
+ * server normalizes the same way, so this only makes the field agree with what
+ * both ends already decided the value means.
  *
  * The favicon is set through `img.src`, and the text through `.value` and
  * `.textContent` — never `innerHTML`. The endpoint sanitizes on the way out;
@@ -168,49 +230,110 @@ const AUTOFILL_SCRIPT = `(function(){
   var nameField=document.getElementById(${JSON.stringify(NAME_ID)});
   var descField=document.getElementById(${JSON.stringify(DESC_ID)});
   var icon=document.getElementById(${JSON.stringify(ICON_ID)});
-  var row=document.getElementById(${JSON.stringify(ROW_ID)});
-  var last='',seq=0;
+  var timers=typeof window.setTimeout==='function'&&typeof window.clearTimeout==='function';
+  var NOT_A_URL=${JSON.stringify(NOT_A_URL)},KEEP_TYPING=${JSON.stringify(KEEP_TYPING)},LIMITED=${JSON.stringify(LIMITED)};
+  var last='',shown='',seq=0,timer=null,pasted=false;
   function say(text){state.textContent=text;state.hidden=text==='';}
-  function host(value){try{return new URL(value).host;}catch(e){return 'that address';}}
-  function showIcon(href){
-    if(!icon||!row)return;
+  function nothingAt(where){return 'Nothing we could read at '+where+' — type the two fields in yourself.';}
+  function hideIcon(){if(icon){icon.onerror=null;icon.hidden=true;}shown='';}
+  function showIcon(href,where){
+    if(!icon)return;
     if(typeof href!=='string'||!/^https?:\\/\\//i.test(href)){hideIcon();return;}
-    icon.onerror=hideIcon;
-    icon.src=href;icon.hidden=false;row.className='urlrow lit';
+    icon.onerror=hideIcon;icon.src=href;icon.hidden=false;shown=where;
   }
-  function hideIcon(){if(icon)icon.hidden=true;if(row)row.className='urlrow';}
   function fill(field,text){
     if(!field||typeof text!=='string'||text==='')return false;
     if(field.value.trim()!=='')return false;
     field.value=text;return true;
   }
-  function look(){
-    var value=url.value.trim();
-    if(value===''||value===last||!/^https?:\\/\\//i.test(value))return;
-    last=value;
+  /* '' nothing typed, '?' still typing, '!' not an address, anything else is the
+     absolute URL to ask about. No real URL can be one of those three. */
+  function shape(raw){
+    var value=raw.trim();
+    if(value==='')return '';
+    if(/\\s/.test(value))return '!';
+    var absolute=/^[a-z][a-z0-9+.-]*:\\/\\//i.test(value);
+    if(absolute&&!/^https?:\\/\\//i.test(value))return '!';
+    if(!absolute&&/^[a-z][a-z0-9+.-]*:(?![0-9])/i.test(value))return '!';
+    var parsed;
+    try{parsed=new URL(absolute?value:'https://'+value);}catch(e){return '!';}
+    if(parsed.protocol!=='http:'&&parsed.protocol!=='https:')return '!';
+    if(parsed.hostname==='')return '!';
+    if(/^[0-9.]+$/.test(parsed.hostname))return parsed.href;
+    /* No dot yet, or nothing that can be a TLD after the last one: they are
+       part way through typing a host, not wrong. */
+    if(!/\\.[a-z]{2,}$/i.test(parsed.hostname))return '?';
+    return parsed.href;
+  }
+  function hostOf(value){try{return new URL(value).host;}catch(e){return 'that address';}}
+  function reset(){seq++;last='';hideIcon();say('');}
+  function look(typing){
+    var target=shape(url.value);
+    if(target===''){reset();return;}
+    if(target==='!'||target==='?'){
+      seq++;last='';hideIcon();
+      say(target==='?'&&typing?KEEP_TYPING:NOT_A_URL);
+      return;
+    }
+    /* The one quiet return, and only when the line already says the answer for
+       exactly this URL. */
+    if(target===last&&!state.hidden)return;
+    last=target;
     var mine=++seq;
-    say('Reading '+host(value)+'…');
+    var where=hostOf(target);
+    if(where!==shown)hideIcon();
+    say('Reading '+where+'…');
     window.fetch('/api/site-metadata',{
       method:'POST',
       headers:{'content-type':'application/json'},
-      body:JSON.stringify({url:value})
-    }).then(function(r){return r.ok?r.json():null;}).then(function(data){
+      body:JSON.stringify({url:target})
+    }).then(function(r){return r.ok?r.json():(r.status===429?{status:'limited'}:null);}).then(function(data){
       if(mine!==seq)return;
-      if(!data||data.status!=='found'){hideIcon();say('Nothing we could read there — type it in yourself.');return;}
-      showIcon(data.faviconUrl);
+      if(data&&data.status==='limited'){
+        /* The rate limit, said as itself. Reported as "nothing found" it reads
+           as every site in a row being unreadable, which is a bug report. */
+        last='';hideIcon();say(LIMITED);return;
+      }
+      if(!data||data.status!=='found'){hideIcon();say(nothingAt(where));return;}
+      showIcon(data.faviconUrl,where);
       var filled=[];
       if(fill(nameField,data.title))filled.push('name');
       if(fill(descField,data.description))filled.push('description');
       say(filled.length===0
-        ? 'Read the page. Your own words were already there, so nothing was changed.'
-        : 'Read the page and filled in the '+filled.join(' and ')+'. Edit anything it got wrong.');
+        ? 'Read '+where+'. Your own words were already there, so nothing was changed.'
+        : 'Read '+where+' and filled in the '+filled.join(' and ')+'. Edit anything it got wrong.');
     }).catch(function(){
       if(mine!==seq)return;
-      last='';hideIcon();say('Nothing we could read there — type it in yourself.');
+      last='';hideIcon();say(nothingAt(where));
     });
   }
-  url.addEventListener('blur',look);
-  url.addEventListener('change',look);
+  function stop(){if(timer!==null&&timers){window.clearTimeout(timer);}timer=null;}
+  function after(ms){
+    stop();
+    if(!timers){look(true);return;}
+    timer=window.setTimeout(function(){timer=null;look(true);},ms);
+  }
+  function settle(){stop();look(false);}
+  url.addEventListener('input',function(){
+    var wait=pasted?${String(PASTE_MS)}:${String(PAUSE_MS)};
+    pasted=false;
+    if(url.value.trim()===''){stop();reset();return;}
+    after(wait);
+  });
+  /* A paste event fires before the value lands, and a paste is a finished
+     address rather than a pause in typing — so it only shortens the wait that
+     the input event following it is about to schedule. */
+  url.addEventListener('paste',function(){pasted=true;});
+  url.addEventListener('blur',function(){
+    var value=url.value.trim();
+    if(value!==url.value)url.value=value;
+    var target=shape(value);
+    if(target!==''&&target!=='!'&&target!=='?'&&!/^https?:\\/\\//i.test(value)){
+      url.value='https://'+value;
+    }
+    settle();
+  });
+  url.addEventListener('change',settle);
 })();`;
 
 function document_(title: string, body: string): string {
@@ -247,9 +370,9 @@ export interface SubmitFormValues {
    *
    * Still the field the panel reads and still capped at `SANITIZE_LIMIT`, but it
    * is now pre-filled from the product's own `<meta name="description">` by
-   * `POST /api/site-metadata` when the URL field loses focus. Pre-filled, not
-   * locked: a founder whose meta description is stale edits it, and a founder
-   * who typed first is never overwritten.
+   * `POST /api/site-metadata`, on a pause in typing or on leaving the URL field.
+   * Pre-filled, not locked: a founder whose meta description is stale edits it,
+   * and a founder who typed first is never overwritten.
    */
   readonly description: string;
   /** What they CLAIM, in their own words. `lib/checkout/pitch.ts`; up to `PITCH_LIMIT`. */
@@ -353,10 +476,14 @@ export function renderSubmitPage(view: SubmitPageView): string {
     // `alt=""` and `hidden`: it is decoration until there is one, and a favicon
     // is never information a screen reader needs to hear.
     `<img class="icon" id="${ICON_ID}" alt="" width="16" height="16" hidden>`,
-    `<input type="url" name="url" id="${URL_ID}" required inputmode="url" autocomplete="url" placeholder="https://" value="${escapeHtml(view.values.url)}">`,
+    // The placeholder is a bare domain on purpose. `https://` as a placeholder
+    // read as a requirement, and the script that this page ships used to treat
+    // it as one; both ends now accept either, and the hint says so.
+    `<input type="url" name="url" id="${URL_ID}" required inputmode="url" autocomplete="url" placeholder="linear.app" value="${escapeHtml(view.values.url)}">`,
     '</span>',
     '<span class="hint">We reduce this to an identity — no protocol, no www., no tracking parameters. ' +
-      'The same product under two spellings is the same product. Tab away and we will read the page.</span>',
+      'The same product under two spellings is the same product, so type it however you say it out loud: ' +
+      '<b>linear.app</b> is enough. We read the page while you type.</span>',
     // `role="status"` + `aria-live="polite"`: the autofill announces itself to a
     // screen reader without stealing focus from the field being left.
     `<span class="look" id="${STATE_ID}" role="status" aria-live="polite" hidden></span></label>`,
@@ -474,7 +601,7 @@ function renderFormOnly(view: SubmitPageView): string {
     '<label><span class="sh">Product URL</span>',
     `<span class="urlrow" id="${ROW_ID}">`,
     `<img class="icon" id="${ICON_ID}" alt="" width="16" height="16" hidden>`,
-    `<input type="url" name="url" id="${URL_ID}" required value="${escapeHtml(view.values.url)}">`,
+    `<input type="url" name="url" id="${URL_ID}" required inputmode="url" autocomplete="url" placeholder="linear.app" value="${escapeHtml(view.values.url)}">`,
     '</span>',
     `<span class="look" id="${STATE_ID}" role="status" aria-live="polite" hidden></span></label>`,
     '<label><span class="sh">Name</span>',
