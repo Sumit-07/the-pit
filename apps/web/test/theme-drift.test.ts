@@ -26,6 +26,12 @@
  * 4. **Contrast.** Every text stop clears WCAG AA on every surface it is used on.
  *    The mono numerals are 10–12px and are where dark themes fail; a token nudged
  *    "just a little darker" for looks is the normal way that happens.
+ * 5. **Each hue keeps its one job.** There are two now — `--cut` for what was
+ *    taken and `--held` for the health that survived — and a two-colour system is
+ *    only better than a one-colour system for exactly as long as neither colour
+ *    leaks. So the meaning is asserted as CSS: a kept head is `--held` and never
+ *    `--cut`, a deduction is `--cut` and never `--held`, and the marks that are
+ *    merely states (`solo`, `moved`) get neither.
  *
  * It reads the engine's file as TEXT rather than importing it, so the test
  * dependency runs from the app toward the engine and `PHASE-0.md §3` is untouched.
@@ -115,8 +121,10 @@ const SHARED = [
   '--rise',
   '--ink',
   '--cut',
+  '--held',
   '--ink-c',
   '--cut-c',
+  '--held-c',
   '--pit-c',
   '--shade-c',
   '--dim',
@@ -190,10 +198,10 @@ const STACK = ['--sunk', '--pit', '--card', '--rise'] as const;
 /**
  * Which surfaces each text stop actually sits on.
  *
- * `--cut` is deliberately absent from `--rise`: `--rise` is a slab surface — the
- * hero, the closer, the board's rim — and it carries no accent type anywhere in
- * the system. That is a constraint on the CSS, not an exemption, and the row
- * hover cap in `pit.css` exists to keep it true.
+ * `--cut` and `--held` are deliberately absent from `--rise`: `--rise` is a slab
+ * surface — the hero, the closer, the board's rim — and it carries neither hue as
+ * type anywhere in the system. That is a constraint on the CSS, not an exemption,
+ * and the row hover cap in `pit.css` exists to keep it true.
  */
 const TEXT_ON: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['--ink', STACK],
@@ -201,6 +209,10 @@ const TEXT_ON: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['--dimmer', STACK],
   ['--faint', STACK],
   ['--cut', ['--sunk', '--pit', '--card']],
+  // `--held` sets 10.5px mono in the meter caption and on the board's stat strip,
+  // both of which sit on the `--card` -> `--pit` ramp, and 30px on the homepage
+  // stats row over `--pit`.
+  ['--held', ['--sunk', '--pit', '--card']],
 ];
 
 // ------------------------------------------------------------------ the tests
@@ -234,6 +246,7 @@ describe('the channel triplets match the colours they are derived from', () => {
   for (const [triplet, colour] of [
     ['--ink-c', '--ink'],
     ['--cut-c', '--cut'],
+    ['--held-c', '--held'],
     ['--pit-c', '--pit'],
   ] as const) {
     it(`${triplet} is ${colour}'s own channels`, () => {
@@ -293,7 +306,10 @@ describe('contrast clears WCAG AA on every surface a stop is used on', () => {
     for (const surface of surfaces) {
       it(`${stop} on ${surface}`, () => {
         const ground = hex(surface);
-        const colour = stop === '--cut' || stop === '--ink' ? hex(stop) : over(hex('--ink'), ground, alphaOf(stop));
+        const colour =
+          stop === '--cut' || stop === '--held' || stop === '--ink'
+            ? hex(stop)
+            : over(hex('--ink'), ground, alphaOf(stop));
         const ratio = contrast(colour, ground);
         expect(ratio, `${stop} on ${surface} is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
       });
@@ -311,6 +327,8 @@ describe('contrast clears WCAG AA on every surface a stop is used on', () => {
         expect(contrast(over(hex('--ink'), ground, alphaOf(stop)), ground)).toBeGreaterThanOrEqual(4.5);
       }
       expect(contrast(hex('--cut'), ground), `--cut at depth ${step / 10}`).toBeGreaterThanOrEqual(4.5);
+      // The health figure in the meter caption rides the same ramp as the cut.
+      expect(contrast(hex('--held'), ground), `--held at depth ${step / 10}`).toBeGreaterThanOrEqual(4.5);
     }
   });
 
@@ -349,33 +367,81 @@ describe('the meter reads in the dark', () => {
   it('keeps what SURVIVED quieter than what was TAKEN', () => {
     // The head is the 83 of 100 a product kept. It is most of the bar, so if it
     // outshone the accent the drawing would say the opposite of what it means.
-    const kept = over(hex('--ink'), track, 0.4);
+    // It is `--held` now rather than a neutral, and the rule is unchanged: a hue
+    // is not a licence to be louder than the thing it is quieter than.
+    const kept = over(hex('--held'), track, 0.7);
     expect(lightness(kept)).toBeLessThan(lightness(hex('--cut')));
     // But it is still a visible object in a groove, not a smear.
     expect(contrast(kept, track)).toBeGreaterThanOrEqual(3);
   });
+
+  it('did not get louder when it got a colour', () => {
+    // The head was `rgb(--ink-c / .40)` — CIE L* 41.9 over the track. Recolouring
+    // it was supposed to give the larger half of the bar a MEANING, not more
+    // weight; a teal head that arrived three stops brighter would have quietly
+    // rebalanced every row on the site. Half a stop of drift is the allowance.
+    const before = lightness(over(hex('--ink'), track, 0.4));
+    const after = lightness(over(hex('--held'), track, 0.7));
+    expect(Math.abs(after - before), 'the kept head changed weight, not just hue').toBeLessThan(2);
+  });
 });
 
-describe('the accent means exactly one thing', () => {
-  it('is the only hue in the system', () => {
+describe('there are two hues, and each means exactly one thing', () => {
+  it('is a system of exactly two colours over a neutral stack', () => {
     // Every other token is a neutral: a colour is a colour only if its channels
     // spread far enough to read as one.
     for (const token of [...STACK, '--ink']) {
       const [r, g, b] = hex(token);
       expect(Math.max(r, g, b) - Math.min(r, g, b), `${token} has become a colour`).toBeLessThan(20);
     }
-    const [r, g, b] = hex('--cut');
-    expect(Math.max(r, g, b) - Math.min(r, g, b), '--cut must be unmistakably a hue').toBeGreaterThan(120);
+    for (const [token, floor] of [
+      ['--cut', 120],
+      ['--held', 60],
+    ] as const) {
+      const [r, g, b] = hex(token);
+      expect(Math.max(r, g, b) - Math.min(r, g, b), `${token} must be unmistakably a hue`).toBeGreaterThan(floor);
+    }
+    // And they must be far enough apart to be told apart in a 10px bar sitting
+    // beside each other. Opposite sides of the wheel is the whole point: one is
+    // what was taken and the other is what is left.
+    const [cr, cg, cb] = hex('--cut');
+    const [hr, hg, hb] = hex('--held');
+    const distance = Math.hypot(cr - hr, cg - hg, cb - hb);
+    expect(distance, 'the two hues must not converge').toBeGreaterThan(150);
   });
 
-  it('is used for taken points and for nothing that is merely a state', () => {
+  it('spends --cut on taken points and on nothing that is merely a state', () => {
     // The two marks that used to be gold and teal must stay neutral: a solo
     // cluster is 32 of 48 products and must never read as an alarm, and "moved by
     // demand" is a fact about arithmetic rather than a loss.
     const solo = /\.tag\.solo \{[^}]*\}/.exec(PIT_CSS)?.[0] ?? '';
-    expect(solo, 'a solo cluster must not borrow the accent').not.toContain('--cut');
+    expect(solo, 'a solo cluster must not borrow a hue').not.toContain('--cut');
+    expect(solo, 'a solo cluster must not borrow a hue').not.toContain('--held');
     const moved = /\.tag\.tb \{[^}]*\}/.exec(PIT_CSS)?.[0] ?? '';
-    expect(moved, 'moved-by-demand must not borrow the accent').not.toContain('--cut');
+    expect(moved, 'moved-by-demand must not borrow a hue').not.toContain('--cut');
+    expect(moved, 'moved-by-demand must not borrow a hue').not.toContain('--held');
+  });
+
+  it('spends --held on what survived, and never on what was taken', () => {
+    // The two rules that make the meter readable at a glance, stated as CSS
+    // facts rather than as an intention. If either flips, the drawing means the
+    // opposite of its caption and nothing else in the suite would notice.
+    for (const [name, source] of [
+      ['app/pit.css', PIT_CSS],
+      ['engine/board/page.ts', ENGINE_PAGE],
+    ] as const) {
+      const body = stripComments(source);
+      for (const kept of body.match(/\.(?:meter|jurorbar|bar i)[^{]*\.?kept[^{]*\{[^}]*\}/g) ?? []) {
+        expect(kept, `${name}: a kept head must be --held`).toContain('--held-c');
+        expect(kept, `${name}: a kept head must never be --cut`).not.toContain('--cut');
+      }
+      for (const taken of body.match(/\.(?:pts|ded \.pts)\s*\{[^}]*\}/g) ?? []) {
+        expect(taken, `${name}: a deduction must never be --held`).not.toContain('--held');
+      }
+    }
+    // And the rule is real in both directions: the search above has to have found
+    // the heads it is asserting about.
+    expect((stripComments(PIT_CSS).match(/\.kept \{[^}]*\}/g) ?? []).length).toBeGreaterThan(0);
   });
 });
 
@@ -468,8 +534,10 @@ describe('the emails are the theme too', () => {
     expect(family).not.toContain('system-ui');
   });
 
-  it('spends no accent, because an email has nothing taken in it', () => {
-    expect(MAIL_THEME).not.toContain(THEME.get('--cut') ?? '#000000');
+  it('spends neither hue, because an email has nothing taken and nothing left in it', () => {
+    for (const hue of ['--cut', '--held'] as const) {
+      expect(MAIL_THEME.toUpperCase()).not.toContain(THEME.get(hue) ?? '#000000');
+    }
   });
 });
 

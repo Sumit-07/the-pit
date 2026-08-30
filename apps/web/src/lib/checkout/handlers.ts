@@ -76,6 +76,7 @@ import {
   runSubmissionGuards,
   type SubmissionGuardDeps,
 } from '@/lib/checkout/guards';
+import { readCategoryPanels } from '@/lib/checkout/panel';
 import { PITCH_LIMIT, readPitch } from '@/lib/checkout/pitch';
 import {
   renderRejectionPage,
@@ -293,8 +294,13 @@ async function pageView(
   signedIn: boolean,
   notice?: string,
 ): Promise<SubmitPageView> {
+  const categories = await candidateCategories();
   return {
-    categories: await candidateCategories(),
+    categories,
+    // The jury for each offered category, read off the installed reference files.
+    // A deployment with no reference files gets `[]` and the form renders alone;
+    // nothing here invents a panel. See `lib/checkout/panel.ts`.
+    panels: await readCategoryPanels(categories),
     tiers: PRICE_TIERS,
     values,
     descriptionLimit: SANITIZE_LIMIT,

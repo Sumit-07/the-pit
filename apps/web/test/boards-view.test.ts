@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { SOLO_NOTE } from '@/lib/boards/copy';
-import { toHomeBoard, tickerLines } from '@/lib/boards/home';
+import { boardStats, toHomeBoard, tickerLines } from '@/lib/boards/home';
 import { depthOf, metricLabel, stampUtc, toBoardView } from '@/lib/boards/view';
 
 import { HOSTILE_NAME, HOSTILE_URL, sampleRanking, SAMPLE_CAVEAT } from './helpers/boards';
@@ -230,7 +230,94 @@ describe('the homepage slice', () => {
       points: 97,
       reason: 'Cron with a graph is a feature, not a product.',
       role: 'The Weekend Shipper',
+      metric: 'Problem Sharpness',
     });
     expect(lines[1]?.product).toBe(HOSTILE_NAME);
+  });
+});
+
+/**
+ * The four numbers the homepage prints under the hero.
+ *
+ * The rule these exist to keep is the one in the brief for this work: **every
+ * stat is derived from the real board or it is not shown.** So each is checked
+ * against a figure that can be read straight off `helpers/boards.ts`'s table —
+ * Ashgrove 25 cuts, the hostile row 50, Runlet 97 — and not against whatever the
+ * function happened to return the first time it ran. A stat that quietly stopped
+ * being a fold over the boards would still render a plausible number, which is
+ * exactly the failure that is impossible to spot on the page.
+ */
+describe('the stats row is a fold over the boards, or it is nothing', () => {
+  it('counts every product on every board, not the eight the homepage draws', () => {
+    const stats = boardStats([view()]);
+    expect(stats.products).toBe(3);
+    expect(stats.categories).toBe(1);
+    // Two boards is two categories and six products, which is the property that
+    // breaks if the fold ever starts reading the sliced homepage payload.
+    expect(boardStats([view(), view()]).products).toBe(6);
+    expect(boardStats([view(), view()]).categories).toBe(2);
+  });
+
+  it('takes the MEDIAN health, which is the middle row and not the mean', () => {
+    // Health is 100 − cuts: Ashgrove 75, hostile 50, Runlet 3. The median is 50;
+    // the mean would be 42.67, and a board with a long tail of gutted cards is
+    // exactly where those two answers diverge.
+    expect(boardStats([view()]).medianHealth).toBe(50);
+    // Even counts take the middle pair: [3, 50, 50, 75] -> (50 + 50) / 2.
+    expect(boardStats([view(), view()]).medianHealth).toBe(50);
+  });
+
+  it('counts reasons a juror wrote, and never sums the cuts column', () => {
+    const board = view();
+    const written = board.rows.reduce((total, row) => total + row.deductionCount, 0);
+    expect(boardStats([board]).cuts).toBe(written);
+    // The distinction that matters: the cuts column is a mean of means, so adding
+    // it up is not a count of anything. 25 + 50 + 97 = 172, and there are far
+    // fewer than 172 reasons on this fixture.
+    expect(boardStats([board]).cuts).not.toBe(172);
+    expect(boardStats([board]).cuts).toBeLessThan(172);
+  });
+
+  it('reports the largest single deduction anywhere, in one juror’s own points', () => {
+    // Runlet's 97, which is `brief` Part 5's own example and the deepest thing on
+    // the fixture. Not 97-the-cuts-column: they coincide here because Runlet has
+    // one metric, and the assertion below is what tells them apart.
+    expect(boardStats([view()]).deepest).toBe(97);
+    const shallow = toBoardView({
+      slug: 'developer-tools',
+      category: 'Developer Tools',
+      generatedAt: '2026-08-29T14:05:00.000Z',
+      productCount: 3,
+      categoryVersion: 'v2',
+      origin: 'seeded-run',
+      ranking: sampleRanking({ ranking: sampleRanking().ranking.slice(0, 1) }),
+    });
+    // Ashgrove alone: its heaviest single deduction is 40, while its cuts column
+    // reads 25. The two are different quantities and this holds them apart.
+    expect(boardStats([shallow]).deepest).toBe(40);
+    expect(Math.round(shallow.rows[0]?.cuts ?? 0)).toBe(25);
+  });
+
+  it('answers with zeroes rather than NaN when there is no board at all', () => {
+    // The homepage renders the empty state instead, but a fold that divided by
+    // zero would put `NaN` on the page the first time a category was mid-seed.
+    expect(boardStats([])).toEqual({ products: 0, categories: 0, medianHealth: 0, cuts: 0, deepest: 0 });
+  });
+});
+
+describe('health is the same hundred points, said the other way up', () => {
+  it('is 100 − cuts on every row, exactly', () => {
+    for (const row of view().rows) {
+      expect(row.health).toBe(100 - row.cuts);
+    }
+  });
+
+  it('reads 75, 50 and 3 on the fixture, which is the mean metric score', () => {
+    expect(view().rows.map((row) => Math.round(row.health))).toEqual([75, 50, 3]);
+  });
+
+  it('survives the homepage slice, because the homepage row shows it', () => {
+    const home = toHomeBoard(view(), 3);
+    expect(home.rows.map((row) => Math.round(row.health))).toEqual([75, 50, 3]);
   });
 });

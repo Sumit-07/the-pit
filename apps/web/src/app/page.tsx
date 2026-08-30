@@ -42,9 +42,9 @@
 import type { ReactNode } from 'react';
 
 import { CLOSER_PARTS, COPY, HEADLINE_PARTS } from '@/lib/boards/copy';
-import { toHomeBoard, tickerLines } from '@/lib/boards/home';
+import { boardStats, toHomeBoard, tickerLines } from '@/lib/boards/home';
 import { defaultBoardSource } from '@/lib/boards/source';
-import { toBoardView, type BoardView } from '@/lib/boards/view';
+import { n1, toBoardView, type BoardView } from '@/lib/boards/view';
 import { HomeBoard } from '@/components/home-board';
 
 /**
@@ -68,6 +68,8 @@ async function loadBoards(): Promise<BoardView[]> {
 
 export default async function Home(): Promise<ReactNode> {
   const boards = await loadBoards();
+  // Folded over the FULL boards, before the eight-row slice below.
+  const stats = boardStats(boards);
 
   return (
     <div className="wrap">
@@ -117,10 +119,40 @@ export default async function Home(): Promise<ReactNode> {
           snapshot on its next rebuild &mdash; it computes nothing at read time and never will.
         </div>
       ) : (
-        <HomeBoard
-          boards={boards.map((board) => toHomeBoard(board))}
-          ticker={tickerLines(boards)}
-        />
+        <>
+          {/*
+            The canvas's stats row, with the canvas's numbers taken out of it.
+            Every figure here is a fold over the boards on disk — `boardStats` in
+            `lib/boards/home.ts` says which fold, and why "verdicts per run" is
+            not among them. `brief` Part 5 forbids promising a rank, and a
+            fabricated headline number on the page whose argument is that the
+            board cannot be bought would be worse than a missing one.
+          */}
+          <div className="stats">
+            <div>
+              <span className="n">{stats.products}</span>
+              <span className="k">products judged</span>
+            </div>
+            <div>
+              <span className="n held">{n1(stats.medianHealth)}</span>
+              <span className="k">median health left</span>
+            </div>
+            <div>
+              <span className="n">{stats.cuts}</span>
+              <span className="k">cuts on the record</span>
+            </div>
+            <div>
+              <span className="n">{stats.categories}</span>
+              <span className="k">categories open</span>
+            </div>
+          </div>
+
+          <HomeBoard
+            boards={boards.map((board) => toHomeBoard(board))}
+            ticker={tickerLines(boards)}
+            deepest={stats.deepest}
+          />
+        </>
       )}
 
       {/*

@@ -89,7 +89,43 @@ export const BOARD_LEDE =
  * hoping nobody notices.
  */
 export const HOME_LEGEND =
-  'Every row leads with the cut that hurt most and the juror who took it. Cuts is what came off the whole card. The full board has the rest.';
+  'Every row leads with the cut that hurt most and the juror who took it. Cuts is what came off the whole card, and the full board has the rest.';
+
+/**
+ * The panel labels for a category.
+ *
+ * `brief` Part 4: categories carry a `type`, and it drives panel labels — "B2B
+ * boards can say 'The Panel' and 'The Buyers' where consumer boards say 'The Six'
+ * and 'The Floor'. Same data, register that fits the room."
+ *
+ * It lives here rather than in the board component because `/submit` now names
+ * the panel too, and `lib/checkout/page.ts` is an HTML-string renderer that has
+ * no business importing a React module to get four words. `components/category-board.tsx`
+ * re-exports it, so it is still importable from where it used to be.
+ */
+export function panelLabels(type: string): { critics: string; buyers: string } {
+  return type === 'b2b' ? { critics: 'The Panel', buyers: 'The Buyers' } : { critics: 'The Six', buyers: 'The Floor' };
+}
+
+/**
+ * What "health" is allowed to mean, said out loud on every surface that shows it.
+ *
+ * The boards now lead with **health remaining** rather than with cuts taken. That
+ * is the founder's own design canvas talking — "an app enters with 100 health,
+ * the board shows what is left" — and it is free: the meter has always drawn a
+ * hundred-point track whose head is what survived, and every caption on the site
+ * already said "83 of 100 left". Naming the number is what was missing.
+ *
+ * But the canvas goes one sentence further than this board can. It says the
+ * shallowest cut sits top — health *is* the ranking. **Here it is not.** `01 §2`
+ * ranks on `core`, a 65/35 blend of a merit z-score and a demand z-score, and
+ * `brief §1.2` reshuffles all of it on every placement. A board that put a health
+ * column on the right and let a reader assume it was sorted by it would be
+ * publishing a ranking rule it does not run. So the number is shown and the rule
+ * is stated beside it, in this sentence, on every surface that carries the column.
+ */
+export const HEALTH_NOTE =
+  'Health is what a card walked out with: 100 minus its cuts. It is not the sort order — rows are ranked by core, which blends merit with demand.';
 
 /**
  * The solo-cluster explanation, stated once.

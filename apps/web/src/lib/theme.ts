@@ -39,19 +39,47 @@
  * light ground one channel could do both jobs, but on a dark one a shadow made of
  * the text colour is a glow, so the two are split.
  *
- * `--cut` is the only hue on any surface. That is the theme's whole argument and
- * it comes from the subject rather than from a palette: everyone walks in at 100,
- * the product is the list of things that were taken, so **if it is coloured, it
- * was taken**. A deduction is `--cut`. A juror's points are `--cut`. The consumed
- * part of a meter is `--cut`. Nothing else in the system is allowed to be, which
- * is why the marks that used to be gold and teal are a hairline chip and a filled
- * ink chip — a solo cluster is 32 of 48 products and must not read as an alarm,
- * and "moved by demand" is a fact about arithmetic, not a loss.
+ * There are exactly **two** hues, and each one names one half of the same
+ * quantity. Everyone walks in at 100; the bar under every row is that hundred;
+ * every point on it either survived or was taken. So:
  *
- * It is the founder's own vermilion, lifted from `#E2482C` to `#F45C33` — the
- * least that clears 4.5:1 on `--card`, which is the lightest surface that ever
- * sets 12px mono in the accent. `--rise` is a slab surface and carries no accent
- * type, which is the one place the hue does not have to clear AA.
+ * - `--cut` is **taken**. A deduction is `--cut`. A juror's points are `--cut`.
+ *   The consumed segments of a meter are `--cut`.
+ * - `--held` is **survived**. The kept head of a health bar is `--held`, and the
+ *   figure that says how much health is left is `--held`. That is its whole job.
+ *
+ * Nothing that is merely a *state* gets either of them, which is why the marks
+ * that used to be gold and teal are a hairline chip and a filled ink chip — a
+ * solo cluster is 32 of 48 products and must not read as an alarm, and "moved by
+ * demand" is a fact about arithmetic, not a loss.
+ *
+ * The second hue was added when the boards started leading with **health
+ * remaining** rather than with cuts taken. The meter had always drawn health —
+ * a hundred-point track whose head is what a product walked out with — but the
+ * head was `rgb(--ink-c / .40)`, a dead grey that read as the empty part of a
+ * track rather than as the larger and more important of the two quantities. A
+ * bar whose primary number is drawn in the absence of colour and whose secondary
+ * number is drawn in the only colour on the page is a bar arguing against its own
+ * caption. `--held` fixes that at **identical visual weight**: the kept head is
+ * `rgb(--held-c / .70)`, which composites to CIE L* 42.9 over the track where the
+ * old grey sat at 41.9. Nothing got louder; one thing acquired a meaning. And it
+ * stays quieter than `--cut` (L* 59.1), so what was taken still reads first.
+ *
+ * There is no third hue. The design canvas this direction came from also carries
+ * a sand `#D8C98F` for middling health, banded between the teal and the red — but
+ * a band needs a threshold, and this board has none to state: rank comes from
+ * `core`, a blend of merit and demand, and health is a fact about the scorecard
+ * rather than a pass mark. A colour that implied a passing line the product does
+ * not draw would be decoration that lies. So it was left in the canvas.
+ *
+ * `--cut` is the founder's own vermilion, lifted from `#E2482C` to `#F45C33` —
+ * the least that clears 4.5:1 on `--card`, which is the lightest surface that
+ * ever sets 12px mono in the accent. `--held` is the canvas's `#5FB9A5` taken
+ * three steps down to `#3E9C86` for the same two reasons: at `#5FB9A5` (L* 69.4)
+ * the surviving half of every bar would have outshone the cut, and `#3E9C86`
+ * clears 4.5:1 on `--card` where the health figure is set in 10.5px mono.
+ * `--rise` is a slab surface and carries neither hue as type, which is the one
+ * place they do not have to clear AA.
  *
  * ## Type is one sans and one mono
  *
@@ -64,6 +92,38 @@
  *
  * Every family declares a real local fallback, so a saved verdict page opened on a
  * machine with no network loses its typeface and nothing else.
+ *
+ * ## Instrument Serif was tried, and is not here
+ *
+ * The founder's design canvas sets its display type in Instrument Serif and its
+ * data in JetBrains Mono, and the instruction was to read their earlier "don't
+ * put a fancy font" as "no decorative face" rather than as a veto on their own
+ * choice. So it was tried, on a running page, in the three places it could
+ * plausibly have gone. It is not shipped, for one reason that showed up in all
+ * three: **Instrument Serif has a single 400 weight and hairline thins, and this
+ * theme's ground is CIE L* 7.5.** On a dark ground a hairline serif loses mass,
+ * and mass is what every one of those three elements was doing.
+ *
+ * 1. **The hero.** "You can't outbid the pit." is a taunt, and `brief` Part 5
+ *    fixes the homepage register as aggressive. Archivo 800 uppercase shouts it.
+ *    Instrument Serif turns it into an epigraph — genuinely handsome, and it
+ *    reads as a literary masthead rather than a threat. It also stopped filling
+ *    the hero slab, so the slab collapsed around it and the page opened quieter
+ *    than the sentence it opens with.
+ * 2. **The stats row.** At 44px the numerals are elegant and weightless. The mono
+ *    at 600 reads as a measurement; the serif reads as a pull quote. And it would
+ *    have split the site's numerals across two families on the rule "is this one
+ *    in a column", which is not a rule anyone can hold.
+ * 3. **A board title.** This is the one place it genuinely looked better — the
+ *    board's register is plain, and "Developer Tools" set in a serif is calm and
+ *    editorial. It is still not shipped, because a display face that appears on
+ *    the second page and not on the first is not a typographic system; it is an
+ *    inconsistency with a nice explanation.
+ *
+ * The canvas is right about its own artboards. They are fixed 1280px cards on a
+ * `#e6e2d9` page at a size where that face has plenty of presence. That is a
+ * different problem from setting a shouted headline over a near-black slab, and
+ * the answer transferred less well than the health framing did.
  */
 
 /** The stylesheet link for the two families. The only external reference on any page. */
@@ -100,8 +160,9 @@ export const FONT_LINKS = [
  * text colour.
  *
  * Contrast, measured, worst case across the whole stack: `--ink` 10.5:1,
- * `--dim` 7.0:1, `--dimmer` 5.5:1, `--faint` 4.9:1, `--cut` 4.7:1 on `--card`.
- * Every one clears WCAG AA for small text on every surface it is used on.
+ * `--dim` 7.0:1, `--dimmer` 5.5:1, `--faint` 4.9:1, `--cut` 4.7:1 and `--held`
+ * 4.6:1 on `--card`. Every one clears WCAG AA for small text on every surface it
+ * is used on.
  */
 export const TOKENS = `
 :root{
@@ -114,9 +175,11 @@ export const TOKENS = `
   --rise:#353129;
   --ink:#EDE6DE;
   --cut:#F45C33;
+  --held:#3E9C86;
 
   --ink-c:237 230 222;
   --cut-c:244 92 51;
+  --held-c:62 156 134;
   --pit-c:26 22 16;
   --shade-c:0 0 0;
 
@@ -245,9 +308,11 @@ textarea{min-height:110px;resize:vertical;line-height:1.55}
 /*
  * The track is the recess — --sunk, the one surface below everything, so the
  * hundred points a product walked in with are a groove cut into whatever they
- * are drawn on. The kept head is a quiet neutral at L* 43; the segments are the
- * accent stepped down but FLOORED at .58, because fading an accent toward a dark
- * track by alpha runs it into mud and the smallest block has to still read red.
+ * are drawn on. The kept head is --held at .70, which composites to L* 42.9 —
+ * the same weight the old neutral head carried, now saying which half of the bar
+ * it is. The segments are --cut stepped down but FLOORED at .58, because fading
+ * an accent toward a dark track by alpha runs it into mud and the smallest block
+ * has to still read red.
  *
  * The ends are square, and not merely because the cards are. The track was a
  * 999px pill with overflow:hidden, so the cap was clipping the head and the
@@ -258,7 +323,7 @@ textarea{min-height:110px;resize:vertical;line-height:1.55}
 .meter{display:block;height:9px;border-radius:0;background:var(--sunk);
   overflow:hidden;box-shadow:inset 0 1px 2px rgb(var(--shade-c) / .55)}
 .meter .row{display:flex;height:100%;width:100%}
-.meter .kept{background:rgb(var(--ink-c) / .40);flex:0 0 auto;height:100%}
+.meter .kept{background:rgb(var(--held-c) / .70);flex:0 0 auto;height:100%}
 .meter .seg{background:var(--cut);flex:0 0 auto;height:100%;
   border-left:1px solid rgb(var(--shade-c) / .55)}
 .meter .seg:first-child{border-left:0}
@@ -273,6 +338,11 @@ textarea{min-height:110px;resize:vertical;line-height:1.55}
 .mono,.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .pts{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600;
   font-size:12px;color:var(--cut)}
+/* The other half of the same quantity. .pts is what a juror took; .held is what
+   the card walked out with. Both are mono, both are tabular, and they are the
+   only two coloured stops in the system. */
+.held{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600;
+  color:var(--held)}
 .who{font-family:var(--mono);font-size:11px;color:var(--dimmer);white-space:nowrap}
 
 footer{margin-top:48px;border-top:1px solid var(--line);padding-top:20px;

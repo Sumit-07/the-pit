@@ -8,11 +8,15 @@
  * ## Where the design comes from
  *
  * `apps/web/src/lib/theme.ts`, restated. Six values — the surface stack `--sunk`,
- * `--pit`, `--card`, `--rise`, plus `--ink` for text and one hue, `--cut` — with
+ * `--pit`, `--card`, `--rise`, plus `--ink` for text and two hues — `--cut` for
+ * what was taken and `--held` for the health that survived — with
  * every rule and muted tone derived from `--ink` at an alpha and every shadow from
  * `--shade-c`. One sans and one mono, declared with local fallbacks and loaded
- * from nowhere, because this page must render with the machine offline. `--cut` is
- * the only colour in the system and it means exactly one thing: this was taken.
+ * from nowhere, because this page must render with the machine offline. The two
+ * hues each mean exactly one thing: `--cut` is what was TAKEN — a deduction, a
+ * juror's points, the consumed part of a meter — and `--held` is what SURVIVED,
+ * which is the kept head of a health bar and the figure that names it. Nothing
+ * that is merely a state gets either.
  *
  * The copy is deliberate, not an oversight. `PHASE-0.md §3` forbids the engine
  * importing from `apps/web`, so the preview board and the public board are kept in
@@ -36,8 +40,8 @@
  * because `--cut` sets 12px mono in a row and `--rise` is the one surface it does
  * not clear 4.5:1 against.
  *
- * The signature is the **cut meter**: every product walked in at 100, the graphite
- * head is what survived, and each segment after it is one metric's exact share of
+ * The signature is the **cut meter**: every product walked in at 100, the teal
+ * head is the health that survived, and each segment after it is one metric's exact share of
  * the loss. Inside an open row the same bar splits again by juror. Both
  * decompositions are exact — `cuts = 100 - mean(metric score)`, and a metric's
  * score is the mean of its jurors' own 100s — which is what makes the drawing a
@@ -77,7 +81,8 @@ const CSS = `
   /* One committed scheme, declared so the UA paints its own chrome to match. */
   color-scheme:dark;
   --sunk:#0F0A06; --pit:#1A1610; --card:#29241C; --rise:#353129; --ink:#EDE6DE; --cut:#F45C33;
-  --ink-c:237 230 222; --cut-c:244 92 51; --pit-c:26 22 16; --shade-c:0 0 0;
+  --held:#3E9C86;
+  --ink-c:237 230 222; --cut-c:244 92 51; --held-c:62 156 134; --pit-c:26 22 16; --shade-c:0 0 0;
   --dim:rgb(var(--ink-c) / .78); --dimmer:rgb(var(--ink-c) / .66);
   --faint:rgb(var(--ink-c) / .60); --on-lit:rgb(var(--pit-c) / .70);
   --line:rgb(var(--ink-c) / .17); --hair:rgb(var(--ink-c) / .09); --wash:rgb(var(--shade-c) / .32);
@@ -174,7 +179,7 @@ h1 em{font-style:normal;color:var(--dim)}
  */
 .rowhead{--depth:0;position:relative;display:grid;
   grid-template-columns:38px minmax(0,1fr) auto;
-  grid-template-areas:"rank name cuts" "rank lead nums" "rank meter meter";
+  grid-template-areas:"rank name health" "rank lead nums" "rank meter meter";
   column-gap:16px;row-gap:2px;align-items:start;width:100%;padding:15px 18px 14px;
   border:0;text-align:left;font-family:inherit;color:inherit;cursor:pointer;
   background:color-mix(in srgb, var(--card) calc(100% - var(--depth) * 100%), var(--pit));
@@ -220,7 +225,7 @@ h1 em{font-style:normal;color:var(--dim)}
 .meterwrap{grid-area:meter;min-width:0;margin-top:9px}
 .meter{display:flex;height:10px;border-radius:0;background:var(--sunk);overflow:hidden;
   box-shadow:inset 0 1px 2px rgb(var(--shade-c) / .55)}
-.meter .kept{background:rgb(var(--ink-c) / .40);height:100%;flex:0 0 auto}
+.meter .kept{background:rgb(var(--held-c) / .70);height:100%;flex:0 0 auto}
 .meter .seg{background:var(--cut);height:100%;flex:0 0 auto;box-shadow:-1px 0 0 rgb(var(--shade-c) / .55)}
 .meter .seg.s2{background:rgb(var(--cut-c) / .90)}
 .meter .seg.s3{background:rgb(var(--cut-c) / .80)}
@@ -235,9 +240,13 @@ h1 em{font-style:normal;color:var(--dim)}
 .cell{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11.5px;
   color:var(--dimmer);white-space:nowrap}
 .cell .v{color:var(--dim)}
-.cell.cuts{grid-area:cuts;font-size:15px;font-weight:600;letter-spacing:-.02em;
-  text-align:right;padding-top:1px}
-.cell.cuts .v{color:var(--cut)}
+.cell.health{grid-area:health;font-size:17px;font-weight:600;letter-spacing:-.02em;
+  text-align:right;padding-top:0}
+.cell.health .k{font-size:10.5px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--faint);margin-right:6px}
+.cell.health .v{color:var(--ink)}
+.metercap .held{font-weight:600;color:var(--held)}
+.held{color:var(--held);font-weight:600}
 .nums{grid-area:nums;display:flex;gap:11px;align-items:baseline;justify-content:flex-end;
   align-self:start;padding-top:4px}
 .nums .k{color:var(--faint);margin-right:3px}
@@ -265,7 +274,7 @@ h1 em{font-style:normal;color:var(--dim)}
 .bar{display:flex;height:10px;border-radius:0;background:var(--sunk);overflow:hidden;
   margin-top:10px;box-shadow:inset 0 1px 2px rgb(var(--shade-c) / .55)}
 .bar i{display:block;height:100%}
-.bar i.kept{background:rgb(var(--ink-c) / .40)}
+.bar i.kept{background:rgb(var(--held-c) / .70)}
 .bar i.lost{background:var(--cut)}
 .bar i.j{background:var(--cut);box-shadow:-1px 0 0 rgb(var(--shade-c) / .55)}
 .bar i.j.s2{background:rgb(var(--cut-c) / .90)}
@@ -388,7 +397,7 @@ function rowHead(row, depth, index) {
     '<span class="nm"><b><span class="pname">' + esc(row.name) + '</span>' + tags + '</b>' +
     '<span class="topcut">' + cut + '</span></span>' +
     cutMeter(row) +
-    '<span class="cell cuts" title="100 minus the mean metric score"><span class="v">-' + Math.round(row.cuts) + '</span></span>' +
+    '<span class="cell health" title="the mean metric score - what this card walked out with"><span class="k">health</span><span class="v">' + Math.round(100 - row.cuts) + '</span></span>' +
     '<span class="nums">' +
     '<span class="cell c-hide" title="pure merit composite"><span class="k">merit</span><span class="v">' + n2(row.composite) + '</span></span>' +
     '<span class="cell c-hide" title="reduced demand from the floor"><span class="k">demand</span>' + demand + '</span>' +
@@ -426,7 +435,7 @@ function cutMeter(row) {
   h += '</span><span class="metercap"><span>' +
     (count === 0
       ? 'no metrics scored'
-      : Math.round(kept) + ' of 100 left &middot; ' + count + (count === 1 ? ' metric' : ' metrics')) +
+      : '<b class="held">' + Math.round(kept) + '</b> of 100 health left &middot; ' + count + (count === 1 ? ' metric' : ' metrics')) +
     '</span>' +
     (count === 0
       ? ''
@@ -683,6 +692,7 @@ This page re-reads the files on every refresh, so a re-rank shows up without res
   <div class="bhead">
     <span class="c-rk">#</span>
     <span class="c-nm">Product &middot; heaviest cut and who took it</span>
+    <span class="c-x">Health</span>
     <span class="c-x">Cuts</span>
     <span class="c-x c-hide">Merit</span>
     <span class="c-x c-hide">Demand</span>

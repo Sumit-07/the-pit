@@ -25,6 +25,13 @@
  *    own 100, so six jurors each cutting 20 for the same omission is one 20-point
  *    cut on the merged scorecard, not 120. The board says so in its legend, in
  *    words, because the arithmetic is not guessable from the page.
+ *
+ *    **`health`** is the same number said the other way round — `100 - cuts`,
+ *    i.e. `mean(metric score)` — and it is what the surfaces now lead with. Not a
+ *    second derivation: one subtraction, stated once here rather than inline in
+ *    four components that were each already doing it to caption the meter. See
+ *    `copy.ts`'s `HEALTH_NOTE` for the one thing this number must never be
+ *    allowed to imply.
  * 2. **`headline`** — the single largest deduction anywhere on the scorecard,
  *    with the juror who took it. `brief` Part 6: "Lead with deductions and
  *    reasons, not composites." So one real sentence from one named juror rides on
@@ -95,6 +102,12 @@ export interface RowView {
   href?: string;
   /** `100 - mean(metric score)`. See the module comment. */
   cuts: number;
+  /**
+   * `100 - cuts` — what the card walked out with, out of the hundred it walked
+   * in with. The number the boards lead with; `cuts` is the same fact inverted
+   * and stays on every surface as the connective word (`brief` Part 5).
+   */
+  health: number;
   /** Pure merit composite, before the blend. Secondary, by `brief` Part 6. */
   composite: number;
   /** The blended score the row is ranked by. */
@@ -192,13 +205,15 @@ function projectRow(row: RankedProduct, flagsById: Map<number, FlaggedInjection[
   const headline = [...allDeductions].sort((a, b) => b.points - a.points).at(0) ?? null;
   const soloCluster = row.demand_status === 'solo_cluster';
   const href = safeHref(row.url);
+  const cuts = 100 - mean(row.scorecard.map((entry) => entry.score));
 
   return {
     rank: row.rank,
     name: row.name,
     url: row.url,
     ...(href === undefined ? {} : { href }),
-    cuts: 100 - mean(row.scorecard.map((entry) => entry.score)),
+    cuts,
+    health: 100 - cuts,
     composite: row.composite,
     core: row.core,
     ...(row.demand === undefined ? {} : { demand: row.demand }),

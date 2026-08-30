@@ -33,7 +33,17 @@ export const HOME_ROWS = 8;
 /** A homepage row: the fields `RowLead`, `CutMeter` and `RowNumbers` read, and no others. */
 export type HomeRow = Pick<
   RowView,
-  'rank' | 'name' | 'cuts' | 'composite' | 'core' | 'demand' | 'soloCluster' | 'tiebroken' | 'headline' | 'soloNote'
+  | 'rank'
+  | 'name'
+  | 'cuts'
+  | 'health'
+  | 'composite'
+  | 'core'
+  | 'demand'
+  | 'soloCluster'
+  | 'tiebroken'
+  | 'headline'
+  | 'soloNote'
 > & {
   /** `RowView` fields the homepage never renders, present so the shared row components typecheck. */
   url: string;
@@ -96,6 +106,74 @@ export interface TickerLine {
   points: number;
   reason: string;
   role: string;
+  /** The metric the cut came off, so the line can say where it landed. */
+  metric: string;
+}
+
+/**
+ * The four numbers under the hero, and where every one of them comes from.
+ *
+ * The design canvas puts a stats row on the homepage — PITCHES BLED, VERDICTS PER
+ * RUN, MEDIAN HEALTH LEFT, CATEGORIES — with `12,481` under the first of them.
+ * We have ninety-two products, not twelve thousand, and the whole argument of the
+ * page is that the board cannot be bought. **A stat that cannot be computed is a
+ * stat that is not shown.** So every field here is a fold over the boards that
+ * are actually on disk, computed from the same `BoardView`s the rows are drawn
+ * from, and there is no fifth field holding a number nobody can derive:
+ *
+ * - `products` — rows, summed across boards. The canvas's "pitches bled", except
+ *   it is called what it is: every one of them was judged, none of them arrived.
+ * - `medianHealth` — the median of `100 − cuts` over every row. The canvas's
+ *   headline stat, and the reason the whole surface now leads with health.
+ * - `cuts` — every deduction in every ledger on every board. Not the sum of the
+ *   `cuts` column (that is a mean of means); the *count* of reasons a named juror
+ *   wrote down. It is the number that says what $5 buys.
+ * - `deepest` — the largest single deduction anywhere, which is the canvas's
+ *   "deepest wound so far" and the line the cut feed opens on.
+ * - `categories` — boards.
+ *
+ * `verdicts per run` is deliberately absent. It would be `metrics × jurors`, both
+ * of which vary by category, so there is no single honest number to print under
+ * that label.
+ */
+export interface BoardStats {
+  products: number;
+  categories: number;
+  /** Median of `100 − cuts` across every row on every board, one decimal. */
+  medianHealth: number;
+  /** Every deduction on every ledger. */
+  cuts: number;
+  /** The largest single deduction anywhere, in points off one juror's own 100. */
+  deepest: number;
+}
+
+/** The median of a list. Even lengths take the mean of the middle pair. */
+function median(values: readonly number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? (sorted[middle] ?? 0)
+    : ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
+}
+
+/**
+ * Fold the boards into the stats row.
+ *
+ * Runs over the FULL boards, before `toHomeBoard` slices them to eight rows —
+ * "48 products" has to mean forty-eight products and not the eight the homepage
+ * happens to draw.
+ */
+export function boardStats(boards: readonly BoardView[]): BoardStats {
+  const rows = boards.flatMap((board) => board.rows);
+  const points = rows.flatMap((row) => row.metrics.flatMap((metric) => metric.deductions.map((d) => d.points)));
+  return {
+    products: rows.length,
+    categories: boards.length,
+    medianHealth: median(rows.map((row) => row.health)),
+    cuts: rows.reduce((total, row) => total + row.deductionCount, 0),
+    deepest: points.reduce((most, value) => Math.max(most, value), 0),
+  };
 }
 
 function toHomeRow(row: RowView): HomeRow {
@@ -103,6 +181,7 @@ function toHomeRow(row: RowView): HomeRow {
     rank: row.rank,
     name: row.name,
     cuts: row.cuts,
+    health: row.health,
     composite: row.composite,
     core: row.core,
     ...(row.demand === undefined ? {} : { demand: row.demand }),
@@ -154,6 +233,7 @@ export function tickerLines(boards: readonly BoardView[], perBoard: number = 6):
         points: row.headline.points,
         reason: row.headline.reason,
         role: row.headline.role,
+        metric: row.headline.metric,
       })),
   );
 

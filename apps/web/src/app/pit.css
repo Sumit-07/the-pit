@@ -11,16 +11,20 @@
  *
  * ## The short version
  *
- * Six values. `--sunk` / `--pit` / `--card` / `--rise` are four steps of one warm
+ * Seven values. `--sunk` / `--pit` / `--card` / `--rise` are four steps of one warm
  * umber, 4.5–7 CIE L* apart, and `--ink` is text; every rule and muted tone is
  * `--ink` at an alpha and every shadow is `--shade-c` at an alpha, so there is no
- * muted hex to drift. `--cut` is the only hue anywhere on the site, and it means
- * exactly one thing: **this was taken.** Points, deductions, and the consumed part
- * of a meter are `--cut`. Nothing else is.
+ * muted hex to drift. Two hues, and each names one half of the same hundred
+ * points: `--cut` means **this was taken** — points, deductions, the consumed
+ * part of a meter — and `--held` means **this survived** — the kept head of a
+ * health bar and the figure saying how much is left. Nothing that is merely a
+ * state gets either. There is no third; `theme.ts` says why the canvas's sand
+ * band was left where it was.
  *
  * One sans (Archivo, 400–800 — the grotesque, not Archivo Black) and one mono
  * (IBM Plex Mono, on numbers only, always `tabular-nums`). Weight, scale and
- * tracking carry the personality; there is no display face.
+ * tracking carry the personality; there is still no display face, and `theme.ts`
+ * records what happened when the canvas's Instrument Serif was tried on one.
  *
  * ## On dark, elevation is lightness
  *
@@ -63,9 +67,11 @@
   --rise: #353129;
   --ink: #ede6de;
   --cut: #f45c33;
+  --held: #3e9c86;
 
   --ink-c: 237 230 222;
   --cut-c: 244 92 51;
+  --held-c: 62 156 134;
   --pit-c: 26 22 16;
   --shade-c: 0 0 0;
 
@@ -177,10 +183,10 @@ nav {
 /*
  * The wordmark is one word in ink, preceded by a small square in `--cut`.
  *
- * The one licensed exception to "the only colour means taken", and it earns it:
- * the mark IS a cut. Colouring half the word instead — which is what the rejected
- * design did — spends the system's only hue on branding, and then a deduction and
- * a logo are the same red.
+ * The one licensed exception to "a hue means taken or held", and it earns it: the
+ * mark IS a cut. Colouring half the word instead — which is what the rejected
+ * design did — spends a hue on branding, and then a deduction and a logo are the
+ * same red.
  */
 .mark::before {
   content: "";
@@ -537,7 +543,7 @@ div.brow {
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr) auto;
   grid-template-areas:
-    "rank name  cuts"
+    "rank name  health"
     "rank lead  nums"
     "rank meter meter";
   column-gap: 16px;
@@ -664,9 +670,11 @@ div.brow {
  * the hundred points are a groove cut into the row, and it stays a real recess
  * even on the last row, which is itself down at `--pit`.
  *
- * The kept head is `--ink` at .40: a quiet neutral at L* 43, substantial (it is
- * most of the bar) but plainly below the accent's L* 59, so what was TAKEN is
- * still the brightest thing in the row.
+ * The kept head is `--held` at .70 — the surviving half of the hundred, named by
+ * the second of the system's two hues. It composites to L* 42.9 over the track,
+ * which is where the old neutral head sat (41.9): the head did not get louder, it
+ * acquired a meaning. It stays plainly below the accent's L* 59, so what was
+ * TAKEN is still the brightest thing in the row.
  *
  * The segment ramp is floored at .58. In the light theme the faintest segment
  * could fade to nearly the track and still read, because fading toward white
@@ -702,7 +710,7 @@ div.brow {
   box-shadow: inset 0 1px 2px rgb(var(--shade-c) / 0.55);
 }
 .meter .kept {
-  background: rgb(var(--ink-c) / 0.4);
+  background: rgb(var(--held-c) / 0.7);
   height: 100%;
   flex: 0 0 auto;
 }
@@ -738,6 +746,13 @@ div.brow {
   letter-spacing: 0.02em;
   color: var(--dimmer);
 }
+/* The health figure in the caption is the one place the hue is set as type on a
+   row. It is the same number as `.cell.health`, drawn in the colour of the block
+   it names, so the eye can tie the caption to the bar without counting pixels. */
+.metercap .held {
+  font-weight: 600;
+  color: var(--held);
+}
 .metercap .heaviest {
   text-align: right;
   overflow: hidden;
@@ -756,15 +771,37 @@ div.brow {
 .cell .v {
   color: var(--dim);
 }
-.cell.cuts {
-  grid-area: cuts;
-  font-size: 15px;
+/*
+ * The loud figure at the end of a row is HEALTH — what the card walked out with.
+ *
+ * It sits here rather than the cuts number because it is the number the meter
+ * under it draws: the wide `--held` head on the left is this figure, and putting
+ * the small red total in this slot made the row's largest number the one its
+ * picture did NOT show. It is `--ink` and not `--held`: forty-eight teal numerals
+ * down a column would spend a hue on a whole column, and the hue's job is to mark
+ * the half of a BAR that survived, not to tint every number that measures it.
+ */
+.cell.health {
+  grid-area: health;
+  font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.02em;
   text-align: right;
-  padding-top: 1px;
+  padding-top: 0;
 }
-.cell.cuts .v {
+.cell.health .k {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-right: 6px;
+}
+.cell.health .v {
+  color: var(--ink);
+}
+/* Cuts joined the muted group; the connective word keeps its colour there. */
+.nums .cell .v.cut {
   color: var(--cut);
 }
 .nums {
@@ -781,6 +818,15 @@ div.brow {
 .nums .k {
   color: var(--faint);
   margin-right: 3px;
+}
+/*
+ * The other half of what `.pts` marks. `.pts` is what a juror took; `.held` is
+ * what the card kept. They are the system's only two coloured stops and they are
+ * two ends of one hundred-point bar, so they are declared beside each other.
+ */
+.held {
+  color: var(--held);
+  font-weight: 600;
 }
 .nums .cell .v.none {
   color: var(--dimmer);
@@ -927,7 +973,7 @@ details[open] > summary .chev {
   height: 100%;
 }
 .bar i.kept {
-  background: rgb(var(--ink-c) / 0.4);
+  background: rgb(var(--held-c) / 0.7);
 }
 .bar i.lost {
   background: var(--cut);
@@ -945,7 +991,7 @@ details[open] > summary .chev {
   box-shadow: inset 0 1px 2px rgb(var(--shade-c) / 0.55);
 }
 .jurorbar .kept {
-  background: rgb(var(--ink-c) / 0.4);
+  background: rgb(var(--held-c) / 0.7);
   height: 100%;
   flex: 0 0 auto;
 }
@@ -1155,6 +1201,56 @@ details[open] > summary .chev {
   color: var(--dimmer);
 }
 
+/* ---------- the stats row under the hero ---------- */
+/*
+ * Four numbers, hairline-divided, sitting directly under the hero slab as its
+ * plinth — no card, no border box, because the hero and this row are one object:
+ * the claim, then the four facts it rests on.
+ *
+ * The dividers are the only structure, which is what stops four large numerals
+ * from reading as four buttons. `lib/boards/home.ts`'s `boardStats` says where
+ * every figure comes from and why there is no fifth.
+ */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+  margin-top: 22px;
+}
+.stats > div {
+  padding: 18px 20px 20px;
+  border-left: 1px solid var(--hair);
+}
+.stats > div:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+.stats .n {
+  display: block;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+}
+/* The one figure on this row that has a hue is the one the hue is FOR: what
+   survived. The other three are counts, and a count is not a half of anything. */
+.stats .n.held {
+  color: var(--held);
+}
+.stats .k {
+  display: block;
+  margin-top: 9px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+}
+
 /* ---------- the strip of cuts ---------- */
 .tickwrap {
   margin-top: 34px;
@@ -1167,26 +1263,76 @@ details[open] > summary .chev {
   box-shadow: inset 0 2px 5px rgb(var(--shade-c) / 0.5);
   padding: 6px 16px;
 }
+/*
+ * One cut, in the shape the design canvas gives it: the deduction as a figure in
+ * its own left-hand column, the pairing that produced it as a mono label, the
+ * sentence quoted underneath, and the product it was taken off last.
+ *
+ * The old line ran all four of those together as one run-on sentence, which meant
+ * the number, the juror and the quote were the same size and the same weight and
+ * nothing led. Giving the figure a column is what makes a list of five cuts
+ * scannable — and it is the same gesture as the row's own meter, where the cut is
+ * a block against a boundary rather than a word in a sentence.
+ */
 .tick li {
-  font-size: 13.5px;
-  line-height: 1.5;
-  color: var(--dim);
-  padding: 9px 0;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 14px;
+  align-items: baseline;
+  padding: 13px 0;
   border-top: 1px solid var(--hair);
   overflow-wrap: anywhere;
 }
 .tick li:first-child {
   border-top: 0;
 }
-.tick li b {
-  color: var(--ink);
-  font-weight: 600;
-}
 .tick .d {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  font-size: 20px;
+  letter-spacing: -0.03em;
   color: var(--cut);
+  text-align: right;
+}
+.tick .t {
+  display: block;
+  min-width: 0;
+}
+.tick .who {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: normal;
+}
+.tick .q {
+  display: block;
+  margin-top: 5px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.tick .on {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--dim);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+.tick .on:hover {
+  color: var(--ink);
+  border-bottom-color: var(--line);
+}
+.tick .on i {
+  font-style: normal;
+  font-weight: 400;
+  color: var(--faint);
 }
 
 section {
@@ -1309,9 +1455,16 @@ section {
   font-weight: 600;
 }
 
+/*
+ * Seven cells since Median health joined them, which is why this is flex and no
+ * longer a fixed grid: seven does not divide by three or by two, and a grid
+ * whose gaps ARE the rules leaves an orphan slot on the last row as a bare strip
+ * of `--line` — a hairline to nowhere. Wrapping flex children that grow means the
+ * final row always fills, at any width and at any number of cells.
+ */
 .strip {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 1px;
   margin-top: 22px;
   /* The 1px gaps are the grid: a lit hairline between raised cells, which is the
@@ -1322,10 +1475,22 @@ section {
   box-shadow: var(--e1);
   overflow: hidden;
 }
+/* Column flex with the value pushed to the bottom, so a two-line label ("Ranked
+   on merit alone") does not drop its number below the row of numbers beside it.
+   The cells already stretch to equal height; this is what makes them agree. */
 .strip > div {
+  flex: 1 1 132px;
+  display: flex;
+  flex-direction: column;
   background: var(--card);
   padding: 13px 14px;
   min-width: 0;
+}
+.strip > div .v {
+  /* Wins on specificity over `.strip .v`'s 7px; the gap comes back as padding so
+     the label and the number never touch in a single-line cell. */
+  margin-top: auto;
+  padding-top: 7px;
 }
 .strip .k {
   display: block;
@@ -1484,9 +1649,6 @@ footer {
 
 /* ---------- responsive ---------- */
 @media (max-width: 900px) {
-  .strip {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
   .fgrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1527,8 +1689,15 @@ footer {
   }
 }
 @media (max-width: 480px) {
-  .strip {
+  .stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stats > div:nth-child(3) {
+    border-left: 0;
+    padding-left: 0;
+  }
+  .stats .n {
+    font-size: 26px;
   }
   .fgrid {
     grid-template-columns: 1fr;

@@ -51,6 +51,8 @@
 import { escapeHtml } from '@the-pit/auth';
 import { formatUsd, PURCHASE_TERMS, type PriceTier, type SubmissionRejection } from '@the-pit/payments';
 
+import { panelLabels } from '@/lib/boards/copy';
+import type { CategoryPanel } from '@/lib/checkout/panel';
 import { PITCH_LIMIT } from '@/lib/checkout/pitch';
 import { BASE, FONT_LINKS, TOKENS } from '@/lib/theme';
 
@@ -59,8 +61,52 @@ const FONTS = FONT_LINKS;
 
 const CSS = `${TOKENS}${BASE}
 .wrap{max-width:720px}
+/* The submit page, and only the submit page, runs two columns: the form, and the
+   jury it will be read by. The refusal page keeps the 720px measure — it has one
+   thing to say and no panel beside it. */
+.wrap.wide{max-width:1080px}
+.wrap.wide header.page{max-width:720px}
 
 header.page h1{margin-top:9px}
+
+/* ---------- the form, and the panel beside it ---------- */
+.pitchgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:34px;align-items:start}
+@media (min-width:1000px){
+  .pitchgrid:not(.alone){grid-template-columns:minmax(0,1fr) 340px;gap:40px}
+}
+/* Deliberately NOT sticky with its own scrollbar. Twelve entries is taller than
+   any viewport, so a pinned column would have become a nested scroll region
+   holding the one thing on this page a visitor most needs to read straight
+   through. It flows with the form and ends near it. */
+.formcol{min-width:0}
+
+/*
+ * The panel column is a RECESS, not a card.
+ *
+ * --sunk is the one surface below the ground, and putting the jury in it says
+ * the right thing about the jury: it is not a feature being sold beside the form,
+ * it is the floor the form drops into. A raised card here would have read as a
+ * third pricing tier.
+ */
+.panelcol{background:var(--sunk);border:1px solid var(--hair);border-radius:var(--r2);
+  padding:18px 18px 20px;box-shadow:inset 0 2px 5px rgb(var(--shade-c) / .5)}
+.pnote{font-size:12.5px;line-height:1.65;color:var(--dimmer);margin-top:9px}
+.pnote b{color:var(--ink);font-weight:600}
+.phead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  margin-top:22px;padding-bottom:8px;border-bottom:1px solid var(--line);
+  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dimmer)}
+.phead span:last-child{color:var(--faint);letter-spacing:.1em;text-align:right}
+.plist{list-style:none;margin:0;padding:0}
+.plist li{padding:12px 0;border-bottom:1px solid var(--hair)}
+.plist li:last-child{border-bottom:0}
+.plist b{display:block;font-size:13.5px;font-weight:600;letter-spacing:-.01em;color:var(--ink)}
+/* The weight, and the price sensitivity: a fact about the panel's configuration,
+   which is why it is mono and quiet rather than a claim about severity. */
+.plist .pw{display:block;margin-top:3px;font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-size:10.5px;letter-spacing:.02em;color:var(--faint)}
+.plist .pm{display:block;margin-top:6px;font-size:12px;line-height:1.6;color:var(--dim)}
+.pfoot{margin-top:14px;font-family:var(--mono);font-size:10.5px;line-height:1.7;color:var(--faint)}
 
 .tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-top:10px}
 .tier{display:block;background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
@@ -336,7 +382,32 @@ const AUTOFILL_SCRIPT = `(function(){
   url.addEventListener('change',settle);
 })();`;
 
-function document_(title: string, body: string): string {
+/**
+ * Swap the visible panel when the category changes.
+ *
+ * The panels for every offered category are all in the document already — this
+ * only flips the `hidden` attribute. With scripting off the page still shows the
+ * panel for the category the `<select>` has selected on arrival, which is the
+ * correct one and not a placeholder, and every other panel is present in the
+ * markup for ctrl-F and for a screen reader that walks the whole document.
+ */
+const PANEL_SCRIPT = `(function(){
+  var form=document.getElementById(${JSON.stringify(FORM_ID)});
+  if(!form)return;
+  var select=form.querySelector('select[name="category"]');
+  var groups=document.querySelectorAll('[data-panel]');
+  if(!select||!groups.length)return;
+  function show(){
+    for(var i=0;i<groups.length;i++){
+      var on=groups[i].getAttribute('data-panel')===select.value;
+      if(on)groups[i].removeAttribute('hidden');else groups[i].setAttribute('hidden','');
+    }
+  }
+  select.addEventListener('change',show);
+  show();
+})();`;
+
+function document_(title: string, body: string, wide = false): string {
   return [
     '<!doctype html>',
     '<html lang="en">',
@@ -348,14 +419,18 @@ function document_(title: string, body: string): string {
     FONTS,
     `<style>${CSS}</style>`,
     '</head>',
-    '<body><div class="wrap">',
+    `<body><div class="wrap${wide ? ' wide' : ''}">`,
     '<nav><a class="mark" href="/">THE P<i>I</i>T</a>',
     '<span class="navr"><a href="/boards">Boards</a><a href="/account">Account</a></span></nav>',
     body,
     '</div>',
-    // At the end of the body, so it binds to markup that already exists and so
-    // the form is on screen and usable before a byte of it has run.
+    // At the end of the body, so they bind to markup that already exists and so
+    // the form is on screen and usable before a byte of either has run.
     `<script>${AUTOFILL_SCRIPT}</script>`,
+    // Only where there is something to switch between. `wide` is set exactly when
+    // the panel column rendered, so the refusal page and a deployment with no
+    // reference files ship no dead script at all.
+    wide ? `<script>${PANEL_SCRIPT}</script>` : '',
     '</body>',
     '</html>',
   ].join('');
@@ -392,6 +467,13 @@ export const EMPTY_FORM: SubmitFormValues = {
 
 export interface SubmitPageView {
   readonly categories: readonly string[];
+  /**
+   * The installed panel for each offered category, from `lib/checkout/panel.ts`.
+   *
+   * Optional, and empty is a real value: a deployment whose reference files are
+   * not mounted renders the form on its own rather than a column of placeholders.
+   */
+  readonly panels?: readonly CategoryPanel[];
   readonly tiers: readonly PriceTier[];
   readonly values: SubmitFormValues;
   /** The description limit, printed rather than implied. `DECISIONS.md` S5: 300. */
@@ -442,6 +524,90 @@ function tierChoices(view: SubmitPageView): string {
     .join('');
 }
 
+/** A metric name, made readable. Mirrors `boards/view.ts`'s `metricLabel`. */
+function label(name: string): string {
+  const text = name.replaceAll('_', ' ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * "The panel you'll face" — the column the design canvas puts beside this form.
+ *
+ * Every line is read off the installed reference files by `lib/checkout/panel.ts`
+ * and printed verbatim; nothing here is written about a juror. That is the point:
+ * this is not a marketing panel describing a jury, it is *the jury*, shown before
+ * the charge instead of after it, on a product whose whole claim is that the
+ * judging is in the open.
+ *
+ * The weight line says "weighs X most", never "cuts X hardest". The canvas's
+ * roster card carries a median cut per agent across all runs, and that number
+ * does not exist here — there are two seeded categories and no run history — so
+ * what is shown is the configured weight, which does exist and which is what a
+ * submitter can act on.
+ *
+ * Every panel is rendered; all but the selected one carry `hidden`. `PANEL_SCRIPT`
+ * flips that on a category change, and with scripting off the selected category's
+ * panel is the one on screen.
+ */
+function panelColumn(view: SubmitPageView): string {
+  const panels = view.panels ?? [];
+  if (panels.length === 0) return '';
+
+  const groups = panels.map((panel) => {
+    const names = panelLabels(panel.type);
+    const jurors = panel.jurors
+      .map((juror) =>
+        [
+          '<li>',
+          `<b>${escapeHtml(juror.role)}</b>`,
+          juror.heaviest === undefined
+            ? ''
+            : `<span class="pw">weighs ${escapeHtml(label(juror.heaviest.metric))} most &middot; ${juror.heaviest.weight}/10</span>`,
+          `<span class="pm">${escapeHtml(juror.mandate)}</span>`,
+          '</li>',
+        ].join(''),
+      )
+      .join('');
+
+    const buyers = panel.personas
+      .map((persona) =>
+        [
+          '<li>',
+          `<b>${escapeHtml(persona.name)}</b>`,
+          `<span class="pw">price sensitivity ${escapeHtml(persona.priceSensitivity)}</span>`,
+          `<span class="pm">${escapeHtml(persona.who)}</span>`,
+          '</li>',
+        ].join(''),
+      )
+      .join('');
+
+    const selected = panel.slug === view.values.categorySlug;
+    return [
+      `<div data-panel="${escapeHtml(panel.slug)}"${selected ? '' : ' hidden'}>`,
+      `<div class="phead"><span>${escapeHtml(names.critics)} &middot; ${panel.jurors.length} mandates</span>`,
+      `<span>${panel.metrics.length} metrics</span></div>`,
+      `<ol class="plist">${jurors}</ol>`,
+      `<div class="phead"><span>${escapeHtml(names.buyers)} &middot; ${panel.personas.length}</span>`,
+      '<span>forced choice, no ties</span></div>',
+      `<ul class="plist">${buyers}</ul>`,
+      panel.metrics.length === 0
+        ? ''
+        : `<p class="pfoot">Scored on ${panel.metrics.map((metric) => escapeHtml(label(metric))).join(' &middot; ')}.</p>`,
+      '</div>',
+    ].join('');
+  });
+
+  return [
+    '<aside class="panelcol" aria-label="The panel you will face">',
+    '<div class="sh">The panel you&rsquo;ll face</div>',
+    '<p class="pnote">This is the jury installed for the category you picked, read off the same files ' +
+      'that will score you. Everyone walks in at <b>100</b>; every mandate below takes points off it, ' +
+      'with a reason, in public. Change the category and this column changes with it.</p>',
+    groups.join(''),
+    '</aside>',
+  ].join('');
+}
+
 /**
  * The form. Four fields, a price, and a button.
  *
@@ -452,6 +618,7 @@ function tierChoices(view: SubmitPageView): string {
  * gets the same answer — just a slower one.
  */
 export function renderSubmitPage(view: SubmitPageView): string {
+  const panel = panelColumn(view);
   const body = [
     '<header class="page">',
     '<div class="sh">Throw it in</div>',
@@ -468,6 +635,11 @@ export function renderSubmitPage(view: SubmitPageView): string {
       : `<div class="blk warn"><p><b>${escapeHtml(view.notice)}</b></p></div>`,
     '</header>',
 
+    // Two columns from 1000px: the form, and the jury it will be read by. Below
+    // that the panel falls under the form rather than beside it, which is the
+    // right order — you fill the fields, then you meet the people.
+    `<div class="pitchgrid${panel === '' ? ' alone' : ''}">`,
+    '<div class="formcol">',
     '<section>',
     `<form method="post" action="/api/checkout" id="${FORM_ID}">`,
 
@@ -516,12 +688,15 @@ export function renderSubmitPage(view: SubmitPageView): string {
     '<section><h2>The terms, in full</h2>',
     `<ul class="terms">${PURCHASE_TERMS.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`,
     '</section>',
+    '</div>',
+    panel,
+    '</div>',
 
     '<footer>Verdicts are public and permanent. Your balance and your history are not. ' +
       '<a href="/boards">Read the cuts</a>.</footer>',
   ].join('');
 
-  return document_('Throw it in', body);
+  return document_('Throw it in', body, panel !== '');
 }
 
 export interface RejectionView {

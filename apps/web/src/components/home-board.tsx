@@ -37,9 +37,9 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
-import { HOME_LEGEND } from '@/lib/boards/copy';
+import { HEALTH_NOTE, HOME_LEGEND } from '@/lib/boards/copy';
 import type { HomeBoard as HomeBoardData, TickerLine } from '@/lib/boards/home';
-import { depthOf, rank2, stampUtc } from '@/lib/boards/view';
+import { depthOf, metricLabel, rank2, stampUtc } from '@/lib/boards/view';
 import { BoardHead, CutMeter, RowLead, RowNumbers } from '@/components/board-parts';
 
 /** `brief` Part 6: "Categories auto-rotate every 7s". */
@@ -52,9 +52,11 @@ const TICK_ROWS = 5;
 export interface HomeBoardProps {
   boards: readonly HomeBoardData[];
   ticker: readonly TickerLine[];
+  /** The largest single deduction on any board, from `boardStats`. */
+  deepest: number;
 }
 
-export function HomeBoard({ boards, ticker }: HomeBoardProps): ReactNode {
+export function HomeBoard({ boards, ticker, deepest }: HomeBoardProps): ReactNode {
   const [current, setCurrent] = useState(0);
   // Bumped on every switch, manual or automatic, so the progress bar's CSS
   // animation restarts even when the category index happens to repeat.
@@ -163,14 +165,27 @@ export function HomeBoard({ boards, ticker }: HomeBoardProps): ReactNode {
           <a href={`/boards/${board.slug}`}>full board &middot; every cut ↗</a>
         </div>
         <p className="legend">
-          {HOME_LEGEND} Ranked {stampUtc(board.generatedAt)}.
+          {HOME_LEGEND} {HEALTH_NOTE} Ranked {stampUtc(board.generatedAt)}.
         </p>
       </div>
 
+      {/*
+        The canvas's LIVE CUTS panel, with the word LIVE taken off it.
+        `brief` Part 6 wants motion from "rotating categories and arriving
+        verdicts", and there are no arriving verdicts to show: checkout is wired
+        but nothing has landed, and a pulsing dot over a fabricated stream of
+        arrivals is the one dishonest thing available on a page whose whole claim
+        is that the board cannot be bought.
+        So the panel keeps the canvas's SHAPE — the deduction as a large figure in
+        its own column, the pairing as a mono label above, the sentence quoted
+        underneath — and fills it with cuts that were actually taken, by jurors
+        who are actually named, on products that are actually on the board one
+        click away. The heading says which of those two things it is.
+      */}
       <div className="tickwrap">
         <div className="railhead">
           <span className="sh">Cuts on the record</span>
-          <span className="sh">nothing here is a rank</span>
+          <span className="sh">nothing here is a rank &middot; deepest so far &minus;{deepest}</span>
         </div>
         <ul className="tick">
           {Array.from({ length: Math.min(TICK_ROWS, ticker.length) }, (_, offset) => {
@@ -178,8 +193,16 @@ export function HomeBoard({ boards, ticker }: HomeBoardProps): ReactNode {
             if (line === undefined) return null;
             return (
               <li key={`${tick + offset}`}>
-                <b>{line.product}</b> &middot; {line.category} &middot; <span className="d">&minus;{line.points}</span>{' '}
-                &middot; {line.reason} &mdash; {line.role}
+                <span className="d">&minus;{line.points}</span>
+                <span className="t">
+                  <span className="who">
+                    {line.role} &middot; {metricLabel(line.metric)}
+                  </span>
+                  <span className="q">{line.reason}</span>
+                  <a className="on" href={`/boards/${line.slug}`}>
+                    {line.product} <i>&middot; {line.category}</i>
+                  </a>
+                </span>
               </li>
             );
           })}

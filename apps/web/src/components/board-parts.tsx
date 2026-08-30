@@ -24,8 +24,17 @@
  *
  * `<CutMeter>` is the one element this design is remembered by, and it is the
  * mechanic drawn rather than a chart bolted onto it. Every product walks in at
- * 100. The track is that 100; the graphite head is what survived; each segment
- * after it is **one metric's** contribution to the loss.
+ * 100. The track is that 100; the teal head is the **health** that survived;
+ * each segment after it is **one metric's** contribution to the loss.
+ *
+ * The head used to be a neutral grey and the caption used to read "83 of 100
+ * left" — the meter has always drawn health, and never said so. It says so now:
+ * the head is `--held`, the caption leads with the figure, and `<RowNumbers>`
+ * puts that same figure at the end of the row as the loud number. `cuts` did not
+ * leave; `brief` Part 5 keeps it as the connective word and it is still on this
+ * row, in the column header, in the lead and in the caption. What changed is
+ * which of the two the eye lands on, and the bar and the number now agree: the
+ * wide teal block on the left IS the number on the right.
  *
  * The widths are exact, not illustrative. `cuts = 100 − mean(metric score)`, so a
  * metric contributes `metricCuts / metricCount` and the segments sum to the bar
@@ -148,7 +157,9 @@ function segmentTitle(metric: MetricView, share: number): string {
 export function CutMeter({ row }: { row: RowView }): ReactNode {
   const count = row.metrics.length;
   const cuts = Math.max(0, Math.min(100, row.cuts));
+  // The head's width and the health figure are the same quantity, clamped once.
   const kept = 100 - cuts;
+  const cutWord = row.deductionCount === 1 ? 'cut' : 'cuts';
   // `view.ts` sorts metrics heaviest-loss-first, so the first is the widest block.
   const heaviest = row.metrics.at(0);
 
@@ -167,11 +178,14 @@ export function CutMeter({ row }: { row: RowView }): ReactNode {
       </span>
       <span className="metercap">
         <span>
-          {count === 0
-            ? 'no metrics scored'
-            : `${Math.round(kept)} of 100 left · ${count} ${count === 1 ? 'metric' : 'metrics'} · ${row.deductionCount} ${
-                row.deductionCount === 1 ? 'reason' : 'reasons'
-              }`}
+          {count === 0 ? (
+            'no metrics scored'
+          ) : (
+            <>
+              <b className="held">{Math.round(kept)}</b> of 100 health left &middot; {count}{' '}
+              {count === 1 ? 'metric' : 'metrics'} &middot; {row.deductionCount} {cutWord}
+            </>
+          )}
         </span>
         {/*
           The widest block, named. A segmented bar whose blocks can only be
@@ -191,17 +205,34 @@ export function CutMeter({ row }: { row: RowView }): ReactNode {
 /**
  * The small mono numbers, to the right of the reason and after it in the DOM.
  *
- * `Cuts` is the one that is allowed to be loud, because it is the connective word
- * `brief` Part 5 keeps on every surface and it is a count of what came off rather
- * than a rating. Merit, demand and core are muted and drop out below 760px: a
- * phone gets the reason, the meter and the cuts, which is the whole point of the
- * surface.
+ * **Health** is the one that is allowed to be loud, and it is loud because it is
+ * the number the bar on this row is a picture of: the wide teal head at the left
+ * is this figure. It is still not a rating — `brief` Part 6's "numeric ratings
+ * stay small and secondary" is about merit, demand and core, and those are all
+ * still 11.5px, still muted, and still gone below 760px.
+ *
+ * `cuts` moved into that muted group rather than off the row. `brief` Part 5's
+ * connective word has to survive on every surface, and it does: it is the column
+ * header's `Cuts`, it is the number here, it is in the caption under the meter,
+ * and the whole lead is a cut with its juror. What changed is that the loud
+ * figure is now the one the drawing agrees with. `HEALTH_NOTE` rides on every
+ * surface that shows the column, because health is not the sort order.
  */
 export function RowNumbers({ row, set }: { row: RowView; set: NumberSet }): ReactNode {
   return (
     <>
-      <span className="cell cuts" title="100 minus the mean metric score — what came off this card">
-        <span className="v">&minus;{Math.round(row.cuts)}</span>
+      <span
+        className="cell health"
+        title="the mean metric score — what this card walked out with, of the 100 it walked in with"
+      >
+        {/*
+          Self-labelling, like every number in `.nums`. The board head's column
+          labels are `display:none` at every width — the row is two lines and a
+          header cannot align to both of them — so a number that carries its own
+          name is the only kind this row can afford.
+        */}
+        <span className="k">health</span>
+        <span className="v">{Math.round(row.health)}</span>
       </span>
       {/*
         Named, because three unlabelled grey decimals are a riddle rather than a
@@ -210,6 +241,10 @@ export function RowNumbers({ row, set }: { row: RowView; set: NumberSet }): Reac
         below 760px, where a phone gets the reason, the meter and the cuts.
       */}
       <span className="nums">
+        <span className="cell" title="100 minus the mean metric score — what came off this card">
+          <span className="k">cuts</span>
+          <span className="v cut">&minus;{Math.round(row.cuts)}</span>
+        </span>
         <span className="cell c-hide" title="pure merit composite, before the blend">
           <span className="k">merit</span>
           <span className="v">{n2(row.composite)}</span>
@@ -239,6 +274,7 @@ export function BoardHead({ set, trailing }: { set: NumberSet; trailing?: ReactN
     <div className="bhead">
       <span className="c-rk">#</span>
       <span className="c-nm">Product &middot; the cut that hurt most, and who took it</span>
+      <span className="c-x">Health</span>
       <span className="c-x">Cuts</span>
       <span className="c-x c-hide">Merit</span>
       <span className="c-x c-hide">Demand</span>
@@ -345,10 +381,16 @@ function MetricLedger({ metric }: { metric: MetricView }): ReactNode {
 export function RowLedger({ row }: { row: RowView }): ReactNode {
   return (
     <div className="detail">
+      {/*
+        `brief` Part 5's register for a score, kept word for word — "Runlet took
+        97 in cuts" — and then the same fact the other way up, which is the one
+        the board's column now shows.
+      */}
       <p className="took">
         <b>{row.name}</b> took {Math.round(row.cuts)} in cuts across {row.metrics.length}{' '}
         {row.metrics.length === 1 ? 'metric' : 'metrics'}, from {row.deductionCount}{' '}
-        {row.deductionCount === 1 ? 'reason' : 'reasons'}.{' '}
+        {row.deductionCount === 1 ? 'reason' : 'reasons'}, and walked out with{' '}
+        <b className="held">{Math.round(row.health)}</b> health.{' '}
         {row.href === undefined ? (
           <span className="who">{row.url}</span>
         ) : (

@@ -25,22 +25,17 @@
 
 import type { ReactNode } from 'react';
 
-import { BOARD_LEDE, STAMP_NOTE } from '@/lib/boards/copy';
+import { BOARD_LEDE, HEALTH_NOTE, panelLabels, STAMP_NOTE } from '@/lib/boards/copy';
+import { boardStats } from '@/lib/boards/home';
 import { depthOf, n1, n2, stampUtc, type BoardView } from '@/lib/boards/view';
 import { BoardHead, BoardRow } from '@/components/board-parts';
 
 /**
- * The panel labels for a category.
- *
- * `brief` Part 4: categories carry a `type`, and it drives panel labels — "B2B
- * boards can say 'The Panel' and 'The Buyers' where consumer boards say 'The Six'
- * and 'The Floor'. Same data, register that fits the room."
+ * Re-exported from `lib/boards/copy.ts`, which is where it moved when `/submit`
+ * started naming the panel too — see that module. Kept exported from here because
+ * this is where it has always been imported from.
  */
-export function panelLabels(type: string): { critics: string; buyers: string } {
-  return type === 'b2b'
-    ? { critics: 'The Panel', buyers: 'The Buyers' }
-    : { critics: 'The Six', buyers: 'The Floor' };
-}
+export { panelLabels } from '@/lib/boards/copy';
 
 function StatStrip({ board }: { board: BoardView }): ReactNode {
   return (
@@ -60,6 +55,15 @@ function StatStrip({ board }: { board: BoardView }): ReactNode {
         <span className="v tb">
           {board.tiebrokenCount} / {board.productCount}
         </span>
+      </div>
+      {/*
+        The canvas's headline stat, computed over THIS board's rows. The median
+        rather than the mean: the boards have a long tail of cards that lost most
+        of their hundred, and a mean would report the tail rather than the middle.
+      */}
+      <div>
+        <span className="k">Median health</span>
+        <span className="v held">{n1(boardStats([board]).medianHealth)}</span>
       </div>
       <div>
         <span className="k">Metrics</span>
@@ -157,9 +161,12 @@ export function CategoryBoard({ board }: { board: BoardView }): ReactNode {
       <StatStrip board={board} />
 
       <p className="legend">
-        <b>The bar under every row is the hundred points that product walked in with.</b> The grey head is
-        what survived; each block after it is one metric&rsquo;s share of the loss, heaviest first, and the
-        blocks add up to the number on the right. Open a row and the same bar splits again by juror.
+        <b>The bar under every row is the hundred points that product walked in with.</b> The teal head is
+        the <b>health</b> that survived &mdash; the figure at the end of the row &mdash; and each block
+        after it is one metric&rsquo;s share of the loss, heaviest first. Open a row and the same bar
+        splits again by juror.
+        <br />
+        {HEALTH_NOTE}
         <br />
         <b>Cuts</b> is 100 minus the mean metric score &mdash; every product walks in at 100 in front of{' '}
         {labels.critics}, and this is what came off. The points inside a ledger are each juror&rsquo;s own

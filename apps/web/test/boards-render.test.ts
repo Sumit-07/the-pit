@@ -17,8 +17,8 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { HOME_LEGEND, SOLO_NOTE, STAMP_NOTE } from '@/lib/boards/copy';
-import { toHomeBoard, tickerLines } from '@/lib/boards/home';
+import { HEALTH_NOTE, HOME_LEGEND, SOLO_NOTE, STAMP_NOTE } from '@/lib/boards/copy';
+import { boardStats, toHomeBoard, tickerLines } from '@/lib/boards/home';
 import { toBoardView, type BoardView } from '@/lib/boards/view';
 import { CategoryBoard, panelLabels } from '@/components/category-board';
 import { HomeBoard } from '@/components/home-board';
@@ -46,7 +46,11 @@ function boardHtml(view: BoardView = board()): string {
 
 function homeHtml(view: BoardView = board()): string {
   return renderToStaticMarkup(
-    createElement(HomeBoard, { boards: [toHomeBoard(view)], ticker: tickerLines([view]) }),
+    createElement(HomeBoard, {
+      boards: [toHomeBoard(view)],
+      ticker: tickerLines([view]),
+      deepest: boardStats([view]).deepest,
+    }),
   );
 }
 
@@ -235,9 +239,82 @@ describe('the homepage board', () => {
   });
 
   it('fills the strip with real cuts and their jurors, and calls them nothing else', () => {
-    const text = textOf(homeHtml());
+    const html = homeHtml();
+    const text = textOf(html);
     expect(text).toContain('Cuts on the record');
     expect(text).toContain('nothing here is a rank');
-    expect(text).toContain('Cron with a graph is a feature, not a product. — The Weekend Shipper');
+    // The line is now a figure, a pairing, a quote and the product it came off,
+    // rather than one run-on sentence. All four are still the real ones.
+    expect(text).toContain('Cron with a graph is a feature, not a product.');
+    expect(text).toContain('The Weekend Shipper · Problem Sharpness');
+    expect(text).toContain('Runlet · Developer Tools');
+    // And the quote is inside the same list item as the deduction that produced
+    // it, so no restyle can leave a number stranded from its reason.
+    const item = /<li[^>]*>([\s\S]*?)<\/li>/.exec(html)?.[1] ?? '';
+    expect(textOf(item)).toMatch(/−97.*Weekend Shipper.*Cron with a graph/s);
+  });
+
+  it('never claims a verdict has arrived, whatever the strip is called', () => {
+    // The canvas calls this panel LIVE CUTS with a pulsing dot. Nothing has
+    // landed — checkout is wired and no placement has run — so the panel keeps
+    // the shape and drops the claim. This is the one dishonest thing available
+    // on a page whose argument is that the board cannot be bought.
+    const text = textOf(homeHtml()).toLowerCase();
+    for (const lie of ['live', 'just now', 'arriving', 'in the pit now', 'runs live']) {
+      expect(text, `the strip must not say "${lie}"`).not.toContain(lie);
+    }
+  });
+});
+
+describe('the board leads with health, and says what health is not', () => {
+  it('prints the mean metric score at the end of every row, labelled', () => {
+    const html = boardHtml();
+    // Ashgrove kept 75 of 100, the hostile row 50, Runlet 3. The figures on the
+    // page are those, and they are the head of the bar drawn beside them.
+    const cells = [...html.matchAll(/class="cell health"[^>]*>(?:.*?)<span class="v">(\d+)<\/span>/g)].map(
+      (found) => found[1],
+    );
+    expect(cells).toEqual(['75', '50', '3']);
+    expect(textOf(html)).toContain('health 75');
+  });
+
+  it('keeps `cuts` on the surface, because Part 5 fixes the connective word', () => {
+    const text = textOf(boardHtml());
+    // Still the column header, still a number on the row, still the lead, still
+    // the caption. It moved off the loud slot; it did not leave.
+    expect(text).toContain('Cuts');
+    expect(text).toContain('cuts −25');
+    expect(text).toContain('Runlet took 97 in cuts');
+  });
+
+  it('draws the meter head as the health figure, exactly', () => {
+    // The claim the whole redesign rests on: the wide block on the left IS the
+    // number on the right. If the caption and the width ever disagree the bar is
+    // arguing with itself and nothing else in the suite would catch it.
+    const html = boardHtml();
+    const heads = (pattern: RegExp): number[] =>
+      [...html.matchAll(pattern)].map((found) => Math.round(Number(found[1])));
+
+    expect(heads(/class="meter"[^>]*><i class="kept" style="width:([\d.]+)%"/g)).toEqual([75, 50, 3]);
+    expect(textOf(html)).toContain('75 of 100 health left');
+
+    // One level down, the same head is the metric's own surviving score. Ashgrove
+    // scored 60 and 90 and its ledger opens on the heavier loss, so 60 leads.
+    expect(heads(/class="jurorbar"[^>]*><i class="kept" style="width:([\d.]+)%"/g)).toEqual([60, 90, 50, 3]);
+  });
+
+  it('states that health is not the sort order, on both surfaces', () => {
+    // The one place the canvas overreaches for this board: it ranks on health,
+    // and we rank on `core`. Showing a health column without saying so would be
+    // publishing a ranking rule the engine does not run.
+    for (const html of [boardHtml(), homeHtml()]) {
+      expect(textOf(html)).toContain(HEALTH_NOTE);
+    }
+    expect(HEALTH_NOTE).toContain('not the sort order');
+  });
+
+  it('publishes the board’s own median health, computed from its rows', () => {
+    // 75, 50, 3 -> 50. Not the mean (42.7), and not a number typed into the JSX.
+    expect(textOf(boardHtml())).toContain('Median health 50.0');
   });
 });
