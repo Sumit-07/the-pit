@@ -19,6 +19,7 @@ import { describe, expect, it } from 'vitest';
 
 import { assignPseudonyms, DESIGNATIONS, hash32, pseudonymFor } from '../src/pseudonym.js';
 import { anonIdentities, redactRanking } from '../src/redact.js';
+import { declaredAnonymousIds, seededAnonymousIds } from '../src/seeded.js';
 import { robotSpec, robotSvg } from '../src/robot.js';
 
 /**
@@ -208,6 +209,33 @@ describe('the redaction', () => {
     expect(JSON.stringify(out)).not.toContain('Ashgrove');
   });
 
+  it('scrubs the brand when a plain hyphen separates it from the tagline', () => {
+    // The second half of the same leak, found the same way. Eleven of the 48
+    // `developer-tools` names are `Brand - tagline` with an ASCII hyphen rather
+    // than an em dash, and the first separator list did not include it — so the
+    // board published "…but Capgo's open-source rival directly undercuts the
+    // moat" and "near-identical peer (BuildAI) in this set" beside a robot.
+    const input = ranking();
+    (input.ranking[0] as { name: string }).name = 'Ashgrove - the notes app for teams';
+    (input.ranking[1] as { scorecard: { deductions: { reason: string }[] }[] }).scorecard[0]!.deductions[0]!.reason =
+      "Ashgrove's open-source rival directly undercuts the moat.";
+
+    const out = redactRanking(input, [0], 'developer-tools');
+    expect(JSON.stringify(out)).not.toContain('Ashgrove');
+  });
+
+  it('does not split a name on a hyphen that is inside the brand', () => {
+    // ` - ` and never a bare `-`. "Hold-My-Lid" and "GLP-1 Journey Log App" are
+    // real seeded names; splitting on the bare character would scrub the
+    // fragment "Hold" out of every reason on the board.
+    const input = ranking();
+    (input.ranking[0] as { name: string }).name = 'Hold-My-Lid';
+    (input.ranking[1] as { cluster: { reason: string } }).cluster.reason = 'Hold the lid open and keep coding.';
+
+    const out = redactRanking(input, [0], 'developer-tools');
+    expect(out.ranking.find((row) => row.id === 1)?.cluster.reason).toBe('Hold the lid open and keep coding.');
+  });
+
   it('scrubs the bare host as well as the full URL', () => {
     // `https://ashgrove.example/` and `ashgrove.example` name the same company,
     // and a reason that mentions the second is not covered by a pattern built
@@ -264,5 +292,41 @@ describe('the redaction', () => {
     const out = redactRanking(ranking(), [0], 'developer-tools');
     const identities = anonIdentities('developer-tools', [0]);
     expect(out.ranking.find((row) => row.id === 0)?.name).toBe(identities.get(0)?.pseudonym);
+  });
+});
+
+// ------------------------------------------------- who a seeded board hides
+
+describe('a seeded board’s anonymous set', () => {
+  it('is every row when the document declares nothing', () => {
+    // The safe default, and the one the filesystem board did not have: its
+    // fallback asked whether a row was ALREADY redacted (`url === ''`), and a
+    // seeded row has a real address, so it answered "nobody is anonymous" for a
+    // document the database considers entirely anonymous.
+    const input = ranking();
+    expect(seededAnonymousIds(input)).toEqual([0, 1]);
+    expect(input.ranking.every((row) => row.url !== '')).toBe(true);
+  });
+
+  it('reads the declaration the document carries', () => {
+    const input = { ...ranking(), anonymous_ids: [0, 1] };
+    expect(seededAnonymousIds(input)).toEqual([0, 1]);
+    expect(declaredAnonymousIds(input)).toEqual([0, 1]);
+  });
+
+  it('lets a declaration add, and never subtract', () => {
+    // `products_seeded_is_anonymous` refuses a named seeded row, so a JSON file
+    // on disk is not where one gets opted back into being named.
+    expect(seededAnonymousIds({ ...ranking(), anonymous_ids: [] })).toEqual([0, 1]);
+    expect(seededAnonymousIds({ ...ranking(), anonymous_ids: [1] })).toEqual([0, 1]);
+  });
+
+  it('treats a malformed declaration as no declaration', () => {
+    // This reads a file the process did not write. A string or a `null` must not
+    // become an engine id that matches nothing.
+    expect(declaredAnonymousIds({ anonymous_ids: 'all' })).toBeUndefined();
+    expect(declaredAnonymousIds({ anonymous_ids: [1, null] })).toBeUndefined();
+    expect(declaredAnonymousIds({})).toBeUndefined();
+    expect(seededAnonymousIds({ ...ranking(), anonymous_ids: 'all' })).toEqual([0, 1]);
   });
 });

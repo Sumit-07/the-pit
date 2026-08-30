@@ -113,12 +113,30 @@ function escapeRegExp(value: string): string {
  * name is — case-sensitively and on word boundaries — because a head is short
  * enough to collide with ordinary English where a whole product name is not.
  *
+ * ## The separator list is data, and it was wrong
+ *
+ * The first version of this split on the typographic dashes and on `|` and `:`,
+ * and not on a plain hyphen. Eleven of the 48 `developer-tools` names and six of
+ * the 44 health names are `Brand - tagline` with an ASCII hyphen — "Capgo - Live
+ * Updates for Ionic and Capacitor Apps", "BuildAI - Build AI Apps In Minutes" —
+ * so for those rows `brandHead` returned `''` and the brand was never a pattern
+ * at all. The board then published, in prose, "…but Capgo's open-source rival
+ * directly undercuts the moat" and "near-identical peer (BuildAI) in this set"
+ * beside a robot and a designation. Rendering found it; reading the code did not,
+ * because the code was obviously correct for every name anyone had looked at.
+ *
+ * The hyphen is only accepted SPACED — ` - ` — and never bare. A bare hyphen is
+ * inside the brand as often as it is between the brand and its tagline
+ * ("Hold-My-Lid", "GLP-1"), and splitting on it would cut names in half and
+ * scrub a fragment. `|` and `:` keep their unspaced forms because neither occurs
+ * inside a brand.
+ *
  * Returns `''` when there is no head worth scrubbing, which is the same answer as
  * "the head is the whole name" (already covered) or "the head is too short to
  * match safely".
  */
 function brandHead(name: string): string {
-  const head = name.split(/\s[—–|:·]\s|[|:]/u)[0]?.trim() ?? '';
+  const head = name.split(/\s[—–|:·-]\s|[|:]/u)[0]?.trim() ?? '';
   if (head === '' || head === name.trim()) return '';
   return head.length >= MIN_SCRUBBABLE ? head : '';
 }

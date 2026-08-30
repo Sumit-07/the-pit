@@ -66,7 +66,7 @@ import type {
 import { categorySlug, digest } from '@the-pit/engine';
 
 import { verdictSlug } from '../identity.js';
-import { redactRanking } from '@the-pit/anon';
+import { redactRanking, seededAnonymousIds } from '@the-pit/anon';
 
 import { verdictPayload } from '../verdict-payload.js';
 import { normalizeUrl } from '../normalized-url.js';
@@ -390,12 +390,17 @@ export function buildSeedRows(input: SeedInput): SeedRows {
    * `products.name` and `products.url` keep the real values for the same reason:
    * they are what a founder claims, and claiming is what turns anonymity back
    * into a name.
+   *
+   * WHICH rows those are is not decided here. `seededAnonymousIds` is the one
+   * answer, in `@the-pit/anon`, and `apps/web/src/lib/boards/source.ts` reads the
+   * same function for the filesystem board — because this rule used to be written
+   * down in both files and they disagreed: the board's fallback treated a row as
+   * anonymous only if its `url` was already blank, so a seeded run with real URLs
+   * came out fully named while this builder was redacting all of it. Two
+   * documents, no error. `apps/web/test/anonymity-agreement.test.ts` fails if they
+   * part again.
    */
-  const publicRanking = redactRanking(
-    ranking,
-    ranking.ranking.map((row) => row.id),
-    slug,
-  );
+  const publicRanking = redactRanking(ranking, seededAnonymousIds(ranking), slug);
 
   const verdictRows: (typeof verdicts.$inferInsert)[] = publicRanking.ranking.map((row) => {
     const id = verdictId(row.id);

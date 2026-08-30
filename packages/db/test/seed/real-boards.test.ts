@@ -331,6 +331,12 @@ describe.skipIf(!hasRawRecords).each(BOARDS)('$slug recomputes from its raw rows
       flaggedInjections: input.ranking.flaggedInjections,
     });
 
-    expect(recomputed).toEqual(input.ranking);
+    // `anonymous_ids` is not compared, and cannot be: it is a PUBLISHING
+    // declaration written onto the stored document (`@the-pit/anon`'s
+    // `seededAnonymousIds`), not an engine output. `rankCategory` produces the
+    // scores and would have to invent it. Everything the engine does own is still
+    // compared byte for byte, which is what this test is for.
+    const { anonymous_ids: _declared, ...engineOutput } = input.ranking as Ranking & { anonymous_ids?: unknown };
+    expect(recomputed).toEqual(engineOutput);
   });
 });

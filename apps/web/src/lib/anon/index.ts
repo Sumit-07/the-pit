@@ -19,16 +19,20 @@
  */
 
 export {
+  ANONYMOUS_IDS_FIELD,
   anonIdentities,
   anonSeed,
   assignPseudonyms,
+  declaredAnonymousIds,
   DESIGNATIONS,
   hash32,
   pseudonymFor,
   redactRanking,
   robotSpec,
   robotSvg,
+  seededAnonymousIds,
   type AnonIdentity,
+  type RankingWithAnonymity,
   type RobotOptions,
   type RobotSpec,
 } from '@the-pit/anon';

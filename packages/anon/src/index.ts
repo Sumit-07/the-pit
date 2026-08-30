@@ -38,6 +38,9 @@
  *   painted only in the neutral surface and ink tokens.
  * - `redact.ts` — removing a listing's name and URL from a ranking document,
  *   including from other products' free text.
+ * - `seeded.ts` — the one answer to "which rows of a seeded board are anonymous",
+ *   shared by the seed builder and the filesystem board so the two origins cannot
+ *   disagree about it.
  *
  * ## The seam
  *
@@ -55,3 +58,9 @@
 export { anonSeed, assignPseudonyms, DESIGNATIONS, hash32, pseudonymFor } from './pseudonym.js';
 export { robotSpec, robotSvg, type RobotOptions, type RobotSpec } from './robot.js';
 export { anonIdentities, redactRanking, type AnonIdentity } from './redact.js';
+export {
+  ANONYMOUS_IDS_FIELD,
+  declaredAnonymousIds,
+  seededAnonymousIds,
+  type RankingWithAnonymity,
+} from './seeded.js';

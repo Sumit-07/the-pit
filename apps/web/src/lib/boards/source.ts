@@ -78,7 +78,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import type { Ranking } from '@the-pit/engine';
 
-import { redactRanking } from '@/lib/anon';
+import { redactRanking, seededAnonymousIds } from '@/lib/anon';
 import { defaultSnapshotSink } from '@/lib/pipeline/sink';
 import { FileSnapshotSink, type BoardSnapshot, type SnapshotSink } from '@/lib/pipeline/snapshot';
 
@@ -370,7 +370,8 @@ export class SnapshotBoardSource implements BoardSource {
     const caveat = results?.meta?.seeding?.caveat;
 
     /**
-     * EVERY row of a seeded run is anonymous.
+     * EVERY row of a seeded run is anonymous — and this file does not get to be
+     * the second opinion about that.
      *
      * `DECISIONS.md`'s resolution of S4-source: 913 of the 1028 seeded
      * descriptions were scraped from a third-party directory rather than written
@@ -381,16 +382,23 @@ export class SnapshotBoardSource implements BoardSource {
      * removes it at the root while the board still demonstrates the method on
      * real market data, with every cut and every reason intact.
      *
-     * The database says the same thing one layer down — `products_seeded_is_anonymous`
-     * refuses to store a named unclaimed seeded row — and this is the same rule
-     * for the cold-start boards, which are flat files that never went through it.
+     * `seededAnonymousIds` is the ONE place that answers this, in `@the-pit/anon`,
+     * and `packages/db/src/seed/build.ts` calls the same function before it
+     * freezes a verdict. That is not tidiness. The two paths already disagreed
+     * once: the fallback below (`anonymousIdsIn`) asks "was this row already
+     * redacted upstream", a seeded row's `url` is a real address, so it answered
+     * "nobody is anonymous" for a document the database considers entirely
+     * anonymous — and the filesystem board published 92 real product names beside
+     * robot markup that never activated. No error, two documents. The declaration
+     * on the file (`anonymous_ids`) and this shared function are what stop it
+     * happening again; `test/anonymity-agreement.test.ts` fails if they part.
      *
      * These documents were also SCORED with the real names, before any of this
      * existed, which is why `redactRanking` scrubs the prose as well as the
-     * fields: on `developer-tools` exactly one cluster reason names another
-     * product, and one is enough to break the promise.
+     * fields: on `developer-tools` a cluster reason names another product, and one
+     * is enough to break the promise.
      */
-    const anonymousIds = raw.ranking.map((row) => row.id);
+    const anonymousIds = seededAnonymousIds(raw);
 
     return {
       slug,
