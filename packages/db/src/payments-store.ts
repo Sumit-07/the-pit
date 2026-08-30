@@ -297,6 +297,16 @@ export interface SubmissionDraftRow {
   readonly normalizedUrl: string;
   readonly description: string;
   readonly descriptionHash: string;
+  /**
+   * What the founder claims, in their own words, or `null` when they said
+   * nothing.
+   *
+   * Separate from `description`, which is now the SITE's copy — pre-filled from
+   * the product's own page by `POST /api/site-metadata`. `null` and `''` are
+   * deliberately not the same thing here: one is a founder who left the field
+   * alone, the other would be a claim they never made.
+   */
+  readonly pitch: string | null;
   readonly cycleId: string;
   readonly tier: 'single' | 'triple';
   readonly attemptNumber: number;
@@ -334,6 +344,7 @@ export function createPostgresSubmissionStore(db: Database): PostgresSubmissionS
           normalizedUrl: draft.normalizedUrl,
           description: draft.description,
           descriptionHash: draft.descriptionHash,
+          pitch: draft.pitch,
           cycleId: draft.cycleId,
           tier: draft.tier,
           attemptNumber: draft.attemptNumber,
@@ -361,6 +372,7 @@ export function createPostgresSubmissionStore(db: Database): PostgresSubmissionS
           normalizedUrl: submissions.normalizedUrl,
           description: submissions.description,
           descriptionHash: submissions.descriptionHash,
+          pitch: submissions.pitch,
           cycleId: submissions.cycleId,
           tier: submissions.tier,
           attemptNumber: submissions.attemptNumber,

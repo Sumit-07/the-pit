@@ -4,10 +4,20 @@
  * ## Guest checkout, rendered literally
  *
  * `brief §2.1`: "No login at submission." So this page is a `<form method="post">`
- * with four fields and a price, and there is nothing else on the path between a
+ * with five fields and a price, and there is nothing else on the path between a
  * visitor and their purchase — no account step, no email confirmation, no
- * JavaScript. It works on a phone with a dead battery and a hostile network,
- * because the only thing it needs the browser to do is submit a form.
+ * sign-in wall.
+ *
+ * That sentence is about AUTHENTICATION, and it is worth being exact, because an
+ * earlier version of this comment read it as a ban on scripting and then got
+ * quoted back as if it were the founder's rule. It never was. What §2.1 forbids
+ * is a step between a visitor and their purchase; a `<script>` that fills two
+ * fields in for them is the opposite of a step.
+ *
+ * So the page does carry one now — `AUTOFILL_SCRIPT` below, which reads the
+ * product's own page through the guarded fetcher and offers what it finds. It is
+ * bound after the markup, touches nothing on the submit path, and fills only
+ * fields that are empty.
  *
  * GitHub sits BESIDE it, never in front of it. When a session happens to be
  * present the page says so — the submission will be attributed, and an ownership
@@ -41,6 +51,7 @@
 import { escapeHtml } from '@the-pit/auth';
 import { formatUsd, PURCHASE_TERMS, type PriceTier, type SubmissionRejection } from '@the-pit/payments';
 
+import { PITCH_LIMIT } from '@/lib/checkout/pitch';
 import { BASE, FONT_LINKS, TOKENS } from '@/lib/theme';
 
 /** One sans, one mono, from `lib/theme.ts` — the same two every surface loads. */
@@ -80,7 +91,127 @@ a.act{margin-top:16px}
   border:1px solid var(--line);border-radius:999px;padding:3px 9px;display:inline-block}
 .terms{margin-top:14px;font-size:14px;line-height:1.65;color:var(--dim);padding-left:1.2rem}
 .terms li{margin-top:6px}
+
+/* The URL field's autofill. Three new rules, all of them structural — the
+   surfaces, the type and the colours are the tokens the rest of the form uses.
+   The icon is absolutely positioned inside the field's own box so it reads as
+   part of the input rather than as a second control, and the left padding only
+   appears once there is actually an icon to make room for. */
+.urlrow{position:relative;display:block}
+.urlrow .icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);
+  width:16px;height:16px;border-radius:3px;background:var(--rise);object-fit:contain}
+.urlrow.lit input{padding-left:37px}
+/* The status line. Same mono hint type as every other hint, one shade up so it
+   reads as an answer rather than as more instructions. */
+.look{display:block;font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:6px}
+.look[hidden]{display:none}
 `;
+
+/**
+ * The ids the autofill binds to.
+ *
+ * Named once, used by both forms and by the script, so a renamed field cannot
+ * quietly detach the enhancement from the markup it enhances.
+ */
+const FORM_ID = 'pitch-form';
+const ROW_ID = 'url-row';
+const URL_ID = 'f-url';
+const NAME_ID = 'f-name';
+const DESC_ID = 'f-description';
+const ICON_ID = 'site-icon';
+const STATE_ID = 'site-state';
+
+/**
+ * The autofill: read the page the visitor pasted, and offer what it says.
+ *
+ * ## What it does, and the three rules it will not break
+ *
+ * On `blur` and on `change` of the URL field — the moment the visitor has
+ * finished with it and moved on — it POSTs the value to `/api/site-metadata`,
+ * which runs it through `@the-pit/fetch`'s guards and answers with a title, a
+ * description and a favicon. Then:
+ *
+ * 1. **It fills empty fields only.** `value.trim() === ''` is checked
+ *    immediately before every write, not when the request was sent, so a
+ *    visitor who typed their own name into the field WHILE the lookup was in
+ *    flight keeps it. An autofill that clobbers the sentence you just finished
+ *    is the single most annoying way to ship this, and the check is cheap.
+ * 2. **It says what is happening, and it always finishes saying it.** Looking,
+ *    found, nothing found — every path through `look()` ends in a `say()`,
+ *    including the network failure and the rate limit. A spinner that never
+ *    resolves is worse than no spinner at all.
+ * 3. **It never blocks the submission.** Nothing here touches `submit`, nothing
+ *    disables the button, and every failure is caught. The worst case is a form
+ *    with an empty description that the visitor fills in by hand, which is
+ *    exactly the form that shipped before this existed.
+ *
+ * ## Two smaller decisions
+ *
+ * A monotonic `seq` guards against out-of-order answers: paste one URL, correct
+ * it, and the slow first response must not overwrite the fast second one's
+ * fields or its status line. And `last` suppresses a re-fetch of an unchanged
+ * value — tabbing back and forth through a filled form should cost nothing, and
+ * the rate limit is only generous because of it. It is deliberately cleared on
+ * failure so that a retry after a dropped connection is still possible.
+ *
+ * The favicon is set through `img.src`, and the text through `.value` and
+ * `.textContent` — never `innerHTML`. The endpoint sanitizes on the way out;
+ * this is the second half of that, and it means hostile `<meta>` content is
+ * inert here by construction rather than by escaping.
+ */
+const AUTOFILL_SCRIPT = `(function(){
+  var form=document.getElementById(${JSON.stringify(FORM_ID)});
+  if(!form||typeof window.fetch!=='function')return;
+  var url=document.getElementById(${JSON.stringify(URL_ID)});
+  var state=document.getElementById(${JSON.stringify(STATE_ID)});
+  if(!url||!state)return;
+  var nameField=document.getElementById(${JSON.stringify(NAME_ID)});
+  var descField=document.getElementById(${JSON.stringify(DESC_ID)});
+  var icon=document.getElementById(${JSON.stringify(ICON_ID)});
+  var row=document.getElementById(${JSON.stringify(ROW_ID)});
+  var last='',seq=0;
+  function say(text){state.textContent=text;state.hidden=text==='';}
+  function host(value){try{return new URL(value).host;}catch(e){return 'that address';}}
+  function showIcon(href){
+    if(!icon||!row)return;
+    if(typeof href!=='string'||!/^https?:\\/\\//i.test(href)){hideIcon();return;}
+    icon.onerror=hideIcon;
+    icon.src=href;icon.hidden=false;row.className='urlrow lit';
+  }
+  function hideIcon(){if(icon)icon.hidden=true;if(row)row.className='urlrow';}
+  function fill(field,text){
+    if(!field||typeof text!=='string'||text==='')return false;
+    if(field.value.trim()!=='')return false;
+    field.value=text;return true;
+  }
+  function look(){
+    var value=url.value.trim();
+    if(value===''||value===last||!/^https?:\\/\\//i.test(value))return;
+    last=value;
+    var mine=++seq;
+    say('Reading '+host(value)+'…');
+    window.fetch('/api/site-metadata',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({url:value})
+    }).then(function(r){return r.ok?r.json():null;}).then(function(data){
+      if(mine!==seq)return;
+      if(!data||data.status!=='found'){hideIcon();say('Nothing we could read there — type it in yourself.');return;}
+      showIcon(data.faviconUrl);
+      var filled=[];
+      if(fill(nameField,data.title))filled.push('name');
+      if(fill(descField,data.description))filled.push('description');
+      say(filled.length===0
+        ? 'Read the page. Your own words were already there, so nothing was changed.'
+        : 'Read the page and filled in the '+filled.join(' and ')+'. Edit anything it got wrong.');
+    }).catch(function(){
+      if(mine!==seq)return;
+      last='';hideIcon();say('Nothing we could read there — type it in yourself.');
+    });
+  }
+  url.addEventListener('blur',look);
+  url.addEventListener('change',look);
+})();`;
 
 function document_(title: string, body: string): string {
   return [
@@ -98,7 +229,11 @@ function document_(title: string, body: string): string {
     '<nav><a class="mark" href="/">THE P<i>I</i>T</a>',
     '<span class="navr"><a href="/boards">Boards</a><a href="/account">Account</a></span></nav>',
     body,
-    '</div></body>',
+    '</div>',
+    // At the end of the body, so it binds to markup that already exists and so
+    // the form is on screen and usable before a byte of it has run.
+    `<script>${AUTOFILL_SCRIPT}</script>`,
+    '</body>',
     '</html>',
   ].join('');
 }
@@ -107,7 +242,18 @@ function document_(title: string, body: string): string {
 export interface SubmitFormValues {
   readonly url: string;
   readonly name: string;
+  /**
+   * What the SITE says.
+   *
+   * Still the field the panel reads and still capped at `SANITIZE_LIMIT`, but it
+   * is now pre-filled from the product's own `<meta name="description">` by
+   * `POST /api/site-metadata` when the URL field loses focus. Pre-filled, not
+   * locked: a founder whose meta description is stale edits it, and a founder
+   * who typed first is never overwritten.
+   */
   readonly description: string;
+  /** What they CLAIM, in their own words. `lib/checkout/pitch.ts`; up to `PITCH_LIMIT`. */
+  readonly pitch: string;
   readonly categorySlug: string;
   readonly tier: string;
 }
@@ -116,6 +262,7 @@ export const EMPTY_FORM: SubmitFormValues = {
   url: '',
   name: '',
   description: '',
+  pitch: '',
   categorySlug: '',
   tier: 'single',
 };
@@ -133,6 +280,16 @@ export interface SubmitPageView {
    * from a signed-out visitor, and there must never be one.
    */
   readonly signedIn: boolean;
+  /**
+   * One sentence about why this render is a re-render, when it is one.
+   *
+   * For the refusals that are OURS rather than `@the-pit/payments`' — an unknown
+   * tier, a pitch over the cap. Those are not `SubmissionRejection`s (no rule in
+   * that package has an opinion about either) and they do not deserve the whole
+   * refusal page, but a 422 that re-renders the form with no explanation is a
+   * form that appears to have silently ignored the button.
+   */
+  readonly notice?: string;
 }
 
 function categoryOptions(view: SubmitPageView): string {
@@ -183,22 +340,39 @@ export function renderSubmitPage(view: SubmitPageView): string {
       ? '<p class="lede"><span class="linked">Signed in</span> This pitch will be attached to your account, ' +
         'and if the product is already listed under someone else we will tell you now rather than after you pay.</p>'
       : '',
+    view.notice === undefined
+      ? ''
+      : `<div class="blk warn"><p><b>${escapeHtml(view.notice)}</b></p></div>`,
     '</header>',
 
     '<section>',
-    '<form method="post" action="/api/checkout">',
+    `<form method="post" action="/api/checkout" id="${FORM_ID}">`,
 
     '<label><span class="sh">Product URL</span>',
-    `<input type="url" name="url" required inputmode="url" autocomplete="url" placeholder="https://" value="${escapeHtml(view.values.url)}">`,
+    `<span class="urlrow" id="${ROW_ID}">`,
+    // `alt=""` and `hidden`: it is decoration until there is one, and a favicon
+    // is never information a screen reader needs to hear.
+    `<img class="icon" id="${ICON_ID}" alt="" width="16" height="16" hidden>`,
+    `<input type="url" name="url" id="${URL_ID}" required inputmode="url" autocomplete="url" placeholder="https://" value="${escapeHtml(view.values.url)}">`,
+    '</span>',
     '<span class="hint">We reduce this to an identity — no protocol, no www., no tracking parameters. ' +
-      'The same product under two spellings is the same product.</span></label>',
+      'The same product under two spellings is the same product. Tab away and we will read the page.</span>',
+    // `role="status"` + `aria-live="polite"`: the autofill announces itself to a
+    // screen reader without stealing focus from the field being left.
+    `<span class="look" id="${STATE_ID}" role="status" aria-live="polite" hidden></span></label>`,
 
     '<label><span class="sh">Name</span>',
-    `<input type="text" name="name" required maxlength="200" value="${escapeHtml(view.values.name)}"></label>`,
+    `<input type="text" name="name" id="${NAME_ID}" required maxlength="200" value="${escapeHtml(view.values.name)}"></label>`,
 
-    '<label><span class="sh">What it does</span>',
-    `<textarea name="description" required maxlength="${view.descriptionLimit}">${escapeHtml(view.values.description)}</textarea>`,
-    `<span class="hint">Up to ${view.descriptionLimit} characters. Everyone on the board gets the same room.</span></label>`,
+    '<label><span class="sh">What the site says</span>',
+    `<textarea name="description" id="${DESC_ID}" required maxlength="${view.descriptionLimit}">${escapeHtml(view.values.description)}</textarea>`,
+    `<span class="hint">Up to ${view.descriptionLimit} characters, pre-filled from your own page when we can read it. ` +
+      'This is the text the panel reads, so correct it if your site undersells you. Everyone on the board gets the same room.</span></label>',
+
+    '<label><span class="sh">Your pitch</span>',
+    `<textarea name="pitch" maxlength="${PITCH_LIMIT}" placeholder="What does it actually do, and for whom?">${escapeHtml(view.values.pitch)}</textarea>`,
+    `<span class="hint">Optional, up to ${PITCH_LIMIT} characters. Your words, not your website's — kept beside the line above, ` +
+      'never merged into it. Be specific: "turns an OpenAPI spec into a typed Python client" beats a paragraph of adjectives.</span></label>',
 
     '<label><span class="sh">Category</span>',
     `<select name="category" required>${categoryOptions(view)}</select>`,
@@ -286,16 +460,29 @@ export function renderRejectionPage(view: RejectionView): string {
   return document_(headingFor(rejection), body);
 }
 
-/** The same form, without the sales copy above it. Used on the refusal page. */
+/**
+ * The same form, without the sales copy above it. Used on the refusal page.
+ *
+ * It carries the same element ids as the full form, so `AUTOFILL_SCRIPT` binds
+ * to it too. That matters more here than on the first render: a visitor who has
+ * just been refused is editing, and every field already holds their text — which
+ * is exactly the case where the "empty fields only" rule earns its keep.
+ */
 function renderFormOnly(view: SubmitPageView): string {
   return [
-    '<form method="post" action="/api/checkout">',
+    `<form method="post" action="/api/checkout" id="${FORM_ID}">`,
     '<label><span class="sh">Product URL</span>',
-    `<input type="url" name="url" required value="${escapeHtml(view.values.url)}"></label>`,
+    `<span class="urlrow" id="${ROW_ID}">`,
+    `<img class="icon" id="${ICON_ID}" alt="" width="16" height="16" hidden>`,
+    `<input type="url" name="url" id="${URL_ID}" required value="${escapeHtml(view.values.url)}">`,
+    '</span>',
+    `<span class="look" id="${STATE_ID}" role="status" aria-live="polite" hidden></span></label>`,
     '<label><span class="sh">Name</span>',
-    `<input type="text" name="name" required maxlength="200" value="${escapeHtml(view.values.name)}"></label>`,
-    '<label><span class="sh">What it does</span>',
-    `<textarea name="description" required maxlength="${view.descriptionLimit}">${escapeHtml(view.values.description)}</textarea></label>`,
+    `<input type="text" name="name" id="${NAME_ID}" required maxlength="200" value="${escapeHtml(view.values.name)}"></label>`,
+    '<label><span class="sh">What the site says</span>',
+    `<textarea name="description" id="${DESC_ID}" required maxlength="${view.descriptionLimit}">${escapeHtml(view.values.description)}</textarea></label>`,
+    '<label><span class="sh">Your pitch</span>',
+    `<textarea name="pitch" maxlength="${PITCH_LIMIT}">${escapeHtml(view.values.pitch)}</textarea></label>`,
     '<label><span class="sh">Category</span>',
     `<select name="category" required>${categoryOptions(view)}</select></label>`,
     `<div class="tiers">${tierChoices(view)}</div>`,

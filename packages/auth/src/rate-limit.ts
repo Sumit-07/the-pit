@@ -115,7 +115,19 @@ export type RateLimitScope =
   | 'auth:verify:ip'
   | 'auth:capability:ip'
   | 'auth:oauth:ip'
-  | 'auth:handoff:ip';
+  | 'auth:handoff:ip'
+  /**
+   * `POST /api/site-metadata`, the submission form's autofill.
+   *
+   * Not an auth scope, and it lives here anyway because the limiter does. That
+   * endpoint is unauthenticated and makes an OUTBOUND request on demand, which
+   * is the one shape that is worth more to an attacker than to us: without a
+   * budget it is a free scanner pointed at whatever the guards in
+   * `@the-pit/fetch` have not already refused, paid for with our egress and our
+   * IP reputation. The budget itself is `apps/web`'s to choose — see
+   * `lib/ingest/site-metadata.ts` — because the cost being bounded is ours.
+   */
+  | 'submit:metadata:ip';
 
 /**
  * Namespace a subject into a bucket key.

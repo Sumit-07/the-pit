@@ -3,10 +3,23 @@
  *
  * A route handler rather than a `page.tsx`, for the reason `lib/verdict/page.ts`
  * and `lib/account/page.ts` already give: it is one self-contained HTML document
- * with inline CSS and no script, so it renders with no second request and works
- * with JavaScript disabled. That matters more here than anywhere else in the app
- * — this is the page that takes someone's money, and `brief §2.1` promises
- * nothing sits between a visitor and their purchase on any device.
+ * with inline CSS, so it renders with no second request and no client bundle.
+ * That matters more here than anywhere else in the app — this is the page that
+ * takes someone's money.
+ *
+ * ## What `brief §2.1` actually promises, and what it does not
+ *
+ * §2.1 is "no login at submission — nothing sits between a visitor and their
+ * purchase". That is a rule about AUTHENTICATION. This comment used to read it
+ * as a ban on scripting and say the page therefore had none, and that inference
+ * was then treated by later work as if it were the founder's requirement. It
+ * was not, and it has been retired: the page now carries one inline script,
+ * `AUTOFILL_SCRIPT` in `lib/checkout/page.ts`, which reads the pasted URL's own
+ * `<title>` and `<meta name="description">` through `@the-pit/fetch`'s guarded
+ * fetcher and pre-fills the empty fields with them.
+ *
+ * The promise §2.1 does make is still kept, and more cheaply than before: the
+ * autofill removes typing from the buying path rather than adding a step to it.
  *
  * ## And it renders with nothing wired
  *

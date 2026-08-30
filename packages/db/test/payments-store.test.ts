@@ -271,6 +271,9 @@ describe('the submission draft', () => {
     normalizedUrl: 'runlet.dev',
     description: 'Runs your jobs.',
     descriptionHash: 'a'.repeat(64),
+    // The founder's own words, beside the site's. Nullable, and null here so the
+    // round trip below proves the column survives "they said nothing" too.
+    pitch: null,
     cycleId: '2026-06-01',
     tier: 'single' as const,
     attemptNumber: 1,
@@ -291,11 +294,28 @@ describe('the submission draft', () => {
       normalizedUrl: 'runlet.dev',
       description: 'Runs your jobs.',
       descriptionHash: 'a'.repeat(64),
+      pitch: null,
       cycleId: '2026-06-01',
       tier: 'single',
       attemptNumber: 1,
       repitchOf: null,
     });
+  });
+
+  it('round-trips a pitch that WAS written, kept apart from the description', async () => {
+    // The two fields are stored separately and read back separately. A schema
+    // that merged them would pass the test above and fail this one.
+    const store = createPostgresSubmissionStore(db);
+    const id = await store.create({
+      ...draft,
+      normalizedUrl: 'runlet.dev/pitched',
+      pitch: 'Turns an OpenAPI spec into a typed Python client, in one command.',
+    });
+
+    const read = await store.find(id);
+
+    expect(read?.pitch).toBe('Turns an OpenAPI spec into a typed Python client, in one command.');
+    expect(read?.description).toBe('Runs your jobs.');
   });
 
   it('answers null for an id that is not a uuid, rather than raising 22P02', async () => {

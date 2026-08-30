@@ -196,11 +196,35 @@ describe('GET /submit renders with no DATABASE_URL', () => {
     expect(page.body).toContain('$15.00');
   });
 
-  it('posts to the checkout route, with no script anywhere on the page', async () => {
+  it('posts to the checkout route, and nothing on the page intercepts that', async () => {
+    // This assertion used to be `not.toContain('<script')`, on the strength of a
+    // doc comment that read `brief §2.1` — "no login at submission; nothing sits
+    // between a visitor and their purchase" — as a ban on scripting. §2.1 is
+    // about AUTHENTICATION. The inference was somebody's, not the founder's, and
+    // it has been retired: the page now carries one inline script that fills the
+    // name and description in from the product's own page.
+    //
+    // What replaces it is the property that was actually worth protecting. The
+    // form posts itself: no handler intercepts the submit, no script disables
+    // the button, and nothing is loaded from another origin before it can.
     const page = await renderSubmit();
 
-    expect(page.body).toContain('<form method="post" action="/api/checkout">');
-    expect(page.body).not.toContain('<script');
+    expect(page.body).toContain('method="post" action="/api/checkout"');
+    expect(page.body).toContain('<button class="act" type="submit">');
+    expect(page.body).not.toContain('onsubmit');
+    expect(page.body).not.toContain('preventDefault');
+    expect(page.body).not.toMatch(/<script[^>]*\ssrc=/);
+  });
+
+  it('carries the pitch field beside the description, labelled differently', async () => {
+    const page = await renderSubmit();
+
+    expect(page.body).toContain('name="pitch"');
+    // Two fields, two labels. "What the site says" is fetched; the pitch is
+    // theirs. A form that called both of them the same thing would be the one
+    // field this change exists to stop being.
+    expect(page.body).toContain('What the site says');
+    expect(page.body).toContain('Your pitch');
   });
 
   it('prefills from the query string without needing anything wired', async () => {

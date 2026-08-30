@@ -76,6 +76,7 @@ import {
   runSubmissionGuards,
   type SubmissionGuardDeps,
 } from '@/lib/checkout/guards';
+import { PITCH_LIMIT, readPitch } from '@/lib/checkout/pitch';
 import {
   renderRejectionPage,
   renderSubmitPage,
@@ -98,6 +99,18 @@ export interface SubmissionWriter {
     readonly normalizedUrl: string;
     readonly description: string;
     readonly descriptionHash: string;
+    /**
+     * The founder's own words, or `null`. Separate from `description`, which is
+     * now the site's — see `lib/checkout/pitch.ts`.
+     *
+     * It rides on the DRAFT and not on the clearance, and that placement is the
+     * decision. `SubmissionClearance` is what `checkSubmission` produced, and
+     * nothing in `@the-pit/payments` has an opinion about the pitch: it is not
+     * part of the cap key, not part of `descriptionHash`, and not part of the
+     * material-change measure. Putting it on the clearance would imply a rule
+     * had been run over it. None has.
+     */
+    readonly pitch: string | null;
     readonly cycleId: string;
     readonly tier: PriceTierId;
     readonly attemptNumber: number;
@@ -227,6 +240,7 @@ async function readValues(request: Request): Promise<SubmitFormValues> {
       url: str(body['url']),
       name: str(body['name']),
       description: str(body['description']),
+      pitch: str(body['pitch']),
       categorySlug: str(body['category'] ?? body['categorySlug']),
       tier: str(body['tier']) === '' ? 'single' : str(body['tier']),
     };
@@ -241,6 +255,7 @@ async function readValues(request: Request): Promise<SubmitFormValues> {
     url: field('url'),
     name: field('name'),
     description: field('description'),
+    pitch: field('pitch'),
     categorySlug: field('category') === '' ? field('categorySlug') : field('category'),
     tier: tier === '' ? 'single' : tier,
   };
@@ -276,6 +291,7 @@ async function pageView(
   candidateCategories: () => Promise<readonly string[]>,
   values: SubmitFormValues,
   signedIn: boolean,
+  notice?: string,
 ): Promise<SubmitPageView> {
   return {
     categories: await candidateCategories(),
@@ -283,6 +299,7 @@ async function pageView(
     values,
     descriptionLimit: SANITIZE_LIMIT,
     signedIn,
+    ...(notice === undefined ? {} : { notice }),
   };
 }
 
@@ -340,6 +357,7 @@ function emptyFormFrom(request: Request): SubmitFormValues {
     url: params.get('url') ?? '',
     name: params.get('name') ?? '',
     description: '',
+    pitch: '',
     categorySlug: params.get('category') ?? '',
     tier: params.get('tier') === 'triple' ? 'triple' : 'single',
   };
@@ -369,6 +387,31 @@ export async function handleCheckoutCreate(request: Request, deps: CheckoutHandl
     values,
     accountId !== null,
   );
+
+  /**
+   * The pitch cap, server-side.
+   *
+   * Before the guards and before the tier check, because it is the cheapest
+   * refusal available and because it is the one that is purely about what was
+   * typed: no listing lookup, no classifier, no network. Refusing here costs the
+   * visitor an edit; `maxlength` on the `<textarea>` is what usually means they
+   * never see it, and is not what enforces it.
+   */
+  const pitch = readPitch(values.pitch);
+  if (!pitch.ok) {
+    console.info(`[checkout] refused before payment — pitch_too_long: ${pitch.length} characters`);
+    return wantsJson(request)
+      ? json(
+          { status: 'rejected', code: 'pitch_too_long', message: pitch.message, limit: PITCH_LIMIT, charged: false },
+          422,
+        )
+      : html(
+          renderSubmitPage(
+            await pageView(() => deps.guards.candidateCategories(), values, accountId !== null, pitch.message),
+          ),
+          422,
+        );
+  }
 
   const tier = tierFor(values.tier);
   if (tier === null) {
@@ -408,6 +451,10 @@ export async function handleCheckoutCreate(request: Request, deps: CheckoutHandl
     normalizedUrl: clearance.normalizedUrl,
     description: clearance.draft.description,
     descriptionHash: clearance.descriptionHash,
+    // From the checked FORM value and not from the clearance, because the
+    // clearance does not carry it — no rule in `@the-pit/payments` reads the
+    // pitch, so there is nothing there for it to have been derived from.
+    pitch: pitch.pitch,
     cycleId: clearance.cycle.id,
     tier: tier.id,
     attemptNumber: clearance.attemptNumber,

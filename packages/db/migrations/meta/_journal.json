@@ -57,6 +57,13 @@
       "when": 1788035046635,
       "tag": "0007_normalized_url_is_derived",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788035047635,
+      "tag": "0008_submission_pitch",
+      "breakpoints": true
     }
   ]
 }

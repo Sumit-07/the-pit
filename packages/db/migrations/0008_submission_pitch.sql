@@ -1,0 +1,47 @@
+-- The pitch, beside the site's own description — a second column, not a wider one.
+--
+-- `submissions.description` is now filled from the product's OWN page. The
+-- submit form fetches `<title>` and `<meta name="description">` through
+-- `@the-pit/fetch`'s guarded fetcher and pre-fills the field with what the site
+-- says about itself, which fixes a real defect in what the board is scoring:
+-- 913 of the 1028 seeded descriptions were scraped from a third-party directory
+-- rather than written by the companies, so the jury has been partly grading a
+-- directory's house style. Paid rows got 300 characters against a seeded median
+-- of 141, so the two populations were not comparable either. Fetching both ends
+-- makes them symmetric.
+--
+-- That leaves nowhere for the founder's own words, and merging them into
+-- `description` would destroy the distinction that makes either one worth
+-- reading. So this is a SEPARATE, LABELLED column: what the site says, and what
+-- they claim, side by side.
+--
+-- WHY 800 AND NOT 300, AND NOT 3000
+--
+-- The cap is a scoring-cost decision. The recalibration prompt carries every
+-- product in a category and recalibration already runs 16-21x over its inference
+-- budget, so a character here is paid for once per row per rebuild. Against that,
+-- `Capability Substance`'s anchors reward a SPECIFIC claim rather than a long
+-- one — "turns an OpenAPI spec into a typed Python client" scores 100 in nine
+-- words. 800 characters is roughly 130 words: enough for a claim with a number
+-- and a named user in it, far short of a landing page.
+--
+-- ADDITIVE ONLY
+--
+-- A nullable column and one CHECK. Nothing is rewritten, nothing is backfilled,
+-- and no existing migration is touched. NULL is the correct value for every row
+-- that predates the field: the alternative — an empty string — would record a
+-- claim that nobody made, and `materialChange` and the review queue both read
+-- "said nothing" and "said ''" as different facts.
+--
+-- NOTHING SCORES IT YET. `pit/placement.requested` still carries the same
+-- `Product` — a name and a description — and the juror prompts are unchanged.
+-- Wiring this into scoring is an engine change with its own calibration
+-- consequences and its own report; this migration exists so that when that
+-- change lands there is a corpus to calibrate against rather than an empty
+-- column and a six-week wait.
+ALTER TABLE "submissions" ADD COLUMN IF NOT EXISTS "pitch" text;
+--> statement-breakpoint
+ALTER TABLE "submissions" DROP CONSTRAINT IF EXISTS "submissions_pitch_limit";
+--> statement-breakpoint
+ALTER TABLE "submissions" ADD CONSTRAINT "submissions_pitch_limit"
+  CHECK ("pitch" IS NULL OR char_length("pitch") BETWEEN 1 AND 800);

@@ -108,6 +108,15 @@ export interface PendingSubmission {
   readonly normalizedUrl: string;
   readonly description: string;
   readonly descriptionHash: string;
+  /**
+   * The founder's own words, when they wrote any.
+   *
+   * Read back so a follow-up has it, and deliberately UNUSED here: the placement
+   * event still carries the same `Product` — a name and a description — and the
+   * juror prompts are unchanged. Wiring the pitch into scoring is an engine
+   * change with its own calibration cost; see the phase report.
+   */
+  readonly pitch?: string | null;
   readonly cycleId: string;
   readonly tier: 'single' | 'triple';
   readonly attemptNumber: number;

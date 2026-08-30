@@ -84,6 +84,31 @@ export const submissions = pgTable(
     descriptionHash: text('description_hash').notNull(),
 
     /**
+     * What the founder claims, in their own words — kept apart from what their
+     * site says.
+     *
+     * `description` above is the SITE's copy: pre-filled from the product's own
+     * `<meta name="description">` by `POST /api/site-metadata`, and for 913 of
+     * the 1028 seeded rows it was scraped from a third-party directory rather
+     * than written by anybody at the company. Scoring that alone means partly
+     * scoring a directory's house style. This column is the other signal, and
+     * its value comes from being SEPARATE: a juror comparing "what the site
+     * says" against "what they claim" is doing something a single merged blob
+     * cannot express.
+     *
+     * Nullable, because it is optional on the form and because every row written
+     * before this column existed has no answer — a backfilled empty string would
+     * be a claim nobody made. `submissions_pitch_limit` below allows NULL and
+     * bounds anything that is not.
+     *
+     * **Nothing reads it into a juror prompt yet.** Wiring it into scoring is an
+     * engine change with its own calibration cost; see the phase report. It is
+     * stored now so that when that change lands there is a corpus to calibrate
+     * against instead of an empty column.
+     */
+    pitch: text('pitch'),
+
+    /**
      * The recalibration cycle the pre-payment check ran in. `brief §2.4` ties the
      * per-product cap to the rebuild, and `jobIdempotencyKey` includes this value
      * — which is what makes an identical re-pitch after the next rebuild a
@@ -113,6 +138,24 @@ export const submissions = pgTable(
     check('submissions_description_limit', sql`char_length(${t.description}) between 1 and 300`),
     check('submissions_name_present', sql`char_length(${t.name}) between 1 and 200`),
     check('submissions_description_hash_shape', sql`${t.descriptionHash} ~ '^[0-9a-f]{64}$'`),
+
+    /**
+     * The pitch cap, in the database and not only in the browser.
+     *
+     * 800 characters — roughly 130 words. The number is a scoring-cost decision
+     * before it is a UX one: the recalibration prompt carries every product in a
+     * category, and recalibration already runs 16–21× over its inference budget,
+     * so every character here is multiplied by the roster. It is also what
+     * `Capability Substance`'s own anchors reward — "turns an OpenAPI spec into
+     * a typed Python client" scores 100 in nine words — so a longer field would
+     * buy noise rather than signal.
+     *
+     * NULL passes: the field is optional, and rows written before it existed
+     * have no answer. `apps/web`'s `lib/checkout/pitch.ts` holds the same number
+     * for the form and refuses a longer one before the buyer is charged; this is
+     * the floor under that, for every writer that is not that handler.
+     */
+    check('submissions_pitch_limit', sql`${t.pitch} is null or char_length(${t.pitch}) between 1 and 800`),
     check(
       'submissions_normalized_url_shape',
       sql`${t.normalizedUrl} = lower(${t.normalizedUrl}) and ${t.normalizedUrl} !~ '^[a-z][a-z0-9+.-]*:'`,
