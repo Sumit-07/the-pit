@@ -324,9 +324,12 @@ describe('products', () => {
 
   it('refuses a seeded product with a submitter, and a paid one without', async () => {
     const categoryId = await insertCategory(database.pg, freshSlug('source'));
+    // `anonymous` tracks `source` so that a seeded row clears
+    // `products_seeded_is_anonymous` and the rejection under test is the one this
+    // case is about.
     const base = `INSERT INTO products (category_id, engine_id, name, url, normalized_url, description,
-                                        description_hash, source, status, submitted_by_email)
-                  VALUES ($1, $2, 'n', 'https://x.com', 'x.com', 'd', $3, $4, 'pending', $5)`;
+                                        description_hash, source, status, anonymous, submitted_by_email)
+                  VALUES ($1, $2, 'n', 'https://x.com', 'x.com', 'd', $3, $4::product_source, 'pending', $4::product_source = 'seeded', $5)`;
 
     expect(
       await expectRejection(database.pg, base, [categoryId, 0, '0'.repeat(64), 'seeded', 'a@example.com']),

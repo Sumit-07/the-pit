@@ -231,6 +231,8 @@ describe('a board renders with the database rigged to explode', () => {
           generatedAt: '2026-08-29T14:05:00.000Z',
           productCount: 3,
           categoryVersion: 'v2',
+          // Named products: this fixture is about the projection, not about anonymity.
+          anonymousIds: [],
           origin: 'seeded-run',
           ranking: sampleRanking(),
         }),

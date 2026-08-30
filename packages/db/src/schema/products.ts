@@ -21,6 +21,7 @@
 import { sql } from 'drizzle-orm';
 import { boolean, check, index, integer, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
+import { accounts } from './accounts.js';
 import { categories } from './categories.js';
 import { productSource, productStatus } from './enums.js';
 
@@ -112,6 +113,57 @@ export const products = pgTable(
      */
     optedOutAt: timestamp('opted_out_at', { withTimezone: true }),
 
+    /**
+     * Published without its name or its URL, as a robot and a designation.
+     *
+     * **Chosen at submission, before the panel scores anything, and frozen there**
+     * by `products_anonymity_immutable` in `0009_anonymous_listings.sql`. The
+     * timing is the design: going anonymous AFTER reading a verdict would let good
+     * scores stay named and bad ones hide, so the named half of every board would
+     * drift toward the flattering — `brief §2.4`'s never-keep-the-best rule in a
+     * different currency. Buying an anonymous evaluation up front has no selection
+     * effect, because the choice is made before the result exists.
+     *
+     * It withholds the name and the URL and NOTHING else. Every cut, every reason
+     * and the juror who took it, the per-metric scores, the cluster and the demand
+     * picture stay public — only the identity is private, because a verdict nobody
+     * can check is the thing this product exists to replace.
+     *
+     * TRUE on every seeded row, by `products_seeded_is_anonymous`. That is
+     * `DECISIONS.md`'s resolution of S4-source: 913 of the 1028 seeded
+     * descriptions were scraped rather than written by the companies, and
+     * publishing AI criticism of copy a NAMED company never wrote was the largest
+     * exposure in the project. Seeding anonymously removes it without costing the
+     * board anything a reader uses.
+     *
+     * The one legal transition is TRUE -> FALSE on a CLAIMED row: an owner who has
+     * proved the listing is theirs choosing to be named. It is prospective only —
+     * `verdicts.payload` froze the name the listing was delivered under, and
+     * `verdicts` is append-only, so a shared link never starts naming a product
+     * later.
+     */
+    anonymous: boolean('anonymous').notNull().default(false),
+
+    /**
+     * When ownership was verified. NULL on an unclaimed listing.
+     *
+     * Distinct from `submitted_by_email`, which is the PAYER and is null on every
+     * seeded row: claiming is about who owns the product, not who paid for the
+     * run, and `brief` Part 7's seeded listings have an owner and no payer. The
+     * verification itself is `packages/auth`'s GitHub path, which matches only
+     * addresses the provider reports as verified (`DECISIONS.md` S15).
+     *
+     * Append-only, by the same trigger: a claim is the record that authorizes a
+     * listing to be named, so it cannot be established, used, and then withdrawn.
+     */
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+
+    /** The account that proved ownership. Set with `claimedAt` or not at all. */
+    claimedByAccountId: uuid('claimed_by_account_id').references(() => accounts.id, {
+      onDelete: 'restrict',
+      onUpdate: 'cascade',
+    }),
+
     /** When the product entered the real ranking. Null while pending or held. */
     placedAt: timestamp('placed_at', { withTimezone: true }),
 
@@ -145,6 +197,10 @@ export const products = pgTable(
     // products, by the only identity we hold.
     index('products_submitted_by_email_idx').on(t.submittedByEmail),
 
+    // Which rows in a category are published without their identity. Read once
+    // per board build, to hand the renderer the set it must redact.
+    index('products_category_anonymous_idx').on(t.categoryId, t.anonymous),
+
     check('products_engine_id_non_negative', sql`${t.engineId} >= 0`),
 
     // `01 §5.1` and the sanitize step: descriptions are truncated to 300 before
@@ -171,5 +227,26 @@ export const products = pgTable(
     // `placed_at` is the fact the board reads; `status` is the label. They cannot
     // disagree, or a product appears on a board with no placement time.
     check('products_placed_at_matches_status', sql`(${t.status} = 'placed') = (${t.placedAt} is not null)`),
+
+    // A claim is an instant and an account together, or neither. Half a claim
+    // says ownership was verified without saying whose — and the reveal rule
+    // reads exactly that state to decide whether a listing may be named.
+    check('products_claim_is_whole', sql`(${t.claimedAt} is null) = (${t.claimedByAccountId} is null)`),
+
+    /**
+     * A seeded listing is anonymous until somebody claims it.
+     *
+     * `DECISIONS.md`'s resolution of S4-source, as a constraint rather than as a
+     * default: 913 of the 1028 seeded descriptions were scraped from a
+     * third-party directory rather than written by the companies they describe,
+     * and publishing AI criticism of copy a NAMED company never wrote is the
+     * project's largest legal and reputational exposure. A default would be
+     * advice that a fixture or an admin script could quietly step around. This
+     * is the rule: there is no way to insert a named seeded row.
+     */
+    check(
+      'products_seeded_is_anonymous',
+      sql`${t.source} <> 'seeded' or ${t.anonymous} or ${t.claimedAt} is not null`,
+    ),
   ],
 );

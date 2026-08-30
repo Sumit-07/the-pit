@@ -44,6 +44,11 @@ export type HomeRow = Pick<
   | 'tiebroken'
   | 'headline'
   | 'soloNote'
+  // The identity slot. `RowLead` draws the robot from these, and the homepage
+  // shows the same eight rows the category board does — an anonymous listing that
+  // arrived named on the front page would be the leak in its most public place.
+  | 'anonymous'
+  | 'robot'
 > & {
   /** `RowView` fields the homepage never renders, present so the shared row components typecheck. */
   url: string;
@@ -189,6 +194,8 @@ function toHomeRow(row: RowView): HomeRow {
     tiebroken: row.tiebroken,
     headline: row.headline,
     ...(row.soloNote === undefined ? {} : { soloNote: row.soloNote }),
+    anonymous: row.anonymous,
+    ...(row.robot === undefined ? {} : { robot: row.robot }),
     url: row.url,
     deductionCount: row.deductionCount,
     metrics: row.metrics.map(toMeterMetric),

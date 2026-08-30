@@ -89,6 +89,21 @@ export function verdictPayload(
   return {
     category: ranking.category,
     category_type: ranking.type,
+    /**
+     * Delivered without a name or a URL.
+     *
+     * Derived from the row rather than passed in, because the row IS the answer:
+     * an anonymous listing reaches this function already wearing its designation
+     * and with its address blanked, and `products.url` is `NOT NULL` while the
+     * engine's `Product.url` is required — so an empty address in a delivered row
+     * can only have come from a redaction.
+     *
+     * It is frozen here with everything else, and that is what stops a shared
+     * link from ever starting to name a product: `verdicts` is append-only, so
+     * an owner who later claims their listing and chooses to be named changes
+     * FUTURE boards and cannot reach back into a verdict issued anonymously.
+     */
+    anonymous: row.url === '',
     product_count: ranking.ranking.length,
     issued_at: issuedAt.toISOString(),
     category_snapshot_version: categorySnapshotVersion,

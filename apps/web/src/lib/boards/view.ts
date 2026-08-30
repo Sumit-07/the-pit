@@ -47,6 +47,8 @@
 
 import type { FlaggedInjection, Ranking, RankedProduct } from '@the-pit/engine';
 
+import { robotSvg } from '@/lib/anon';
+
 import { SOLO_NOTE } from './copy';
 import type { BoardDocument } from './source';
 
@@ -96,8 +98,36 @@ export interface DemandView {
 /** One row of a board. */
 export interface RowView {
   rank: number;
+  /**
+   * What the row is called.
+   *
+   * On an anonymous listing this is the DESIGNATION — `Unit Kilo-427` — and the
+   * real name is not present anywhere on this object, because `source.ts`
+   * redacted the document before it was projected. There is no second field
+   * holding the true name that a careless surface could reach for.
+   */
   name: string;
+  /** The submitted address, or `''` on an anonymous listing, which withholds it. */
   url: string;
+  /**
+   * Published without its name or its URL (`DECISIONS.md`, anonymous listings).
+   *
+   * **This is the flag that decides the identity slot.** A favicon is fetched and
+   * drawn for a row if and only if this is `false`; when it is `true` the row
+   * shows `robot` instead. An anonymous row also has no `url` and no `href` to
+   * derive a favicon from, so the rule is structural rather than remembered —
+   * there is nothing to leak even if a surface forgot to check.
+   */
+  anonymous: boolean;
+  /**
+   * The robot, as a finished inline `<svg>` string. Present iff `anonymous`.
+   *
+   * Deterministic from the designation, offline, and built out of the neutral
+   * surface and ink tokens only — never `--cut` or `--held`, because an avatar
+   * painted in either would make an identity read as a score. `lib/anon/robot.ts`
+   * owns it; nothing else should draw one.
+   */
+  robot?: string;
   /**
    * This row's own verdict page, as a path that RESOLVES to one rather than a
    * path that is one.
@@ -204,6 +234,7 @@ function projectRow(
   row: RankedProduct,
   flagsById: Map<number, FlaggedInjection[]>,
   categorySlug: string,
+  anonymousIds: ReadonlySet<number>,
 ): RowView {
   const metrics: MetricView[] = row.scorecard.map((entry) => ({
     metric: entry.metric,
@@ -227,13 +258,20 @@ function projectRow(
   // The heaviest cut anywhere on the card, chosen before the ledger is re-sorted.
   const headline = [...allDeductions].sort((a, b) => b.points - a.points).at(0) ?? null;
   const soloCluster = row.demand_status === 'solo_cluster';
-  const href = safeHref(row.url);
+  const anonymous = anonymousIds.has(row.id);
+  // An anonymous listing has no address to link to, and `row.url` is already `''`
+  // by the time this runs. `safeHref` is skipped rather than relied on: the rule
+  // is that an anonymous row NEVER produces an href, and stating it here means it
+  // does not depend on the redaction upstream having been thorough.
+  const href = anonymous ? undefined : safeHref(row.url);
   const cuts = 100 - mean(row.scorecard.map((entry) => entry.score));
 
   return {
     rank: row.rank,
     name: row.name,
-    url: row.url,
+    url: anonymous ? '' : row.url,
+    anonymous,
+    ...(anonymous ? { robot: robotSvg(row.name, { size: 18, label: `${row.name}, an anonymous listing` }) } : {}),
     ...(categorySlug === ''
       ? {}
       : { verdictHref: `/v/of/${encodeURIComponent(categorySlug)}/${encodeURIComponent(String(row.id))}` }),
@@ -296,7 +334,8 @@ export function toBoardView(document_: BoardDocument): BoardView {
     else bucket.push(flag);
   }
 
-  const rows = ranking.ranking.map((row) => projectRow(row, flagsById, document_.slug));
+  const anonymousIds = new Set(document_.anonymousIds);
+  const rows = ranking.ranking.map((row) => projectRow(row, flagsById, document_.slug, anonymousIds));
 
   return {
     slug: document_.slug,

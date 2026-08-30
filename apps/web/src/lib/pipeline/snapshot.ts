@@ -79,7 +79,27 @@ export interface BoardSnapshot {
   engine_version: string;
   /** The category snapshot the ranking was computed over (`brief §1.3`'s cache key component). */
   category_version: string;
-  /** The engine's `ranking.json`, verbatim. */
+  /**
+   * The engine ids published without a name or a URL.
+   *
+   * The `ranking` below has ALREADY had those identities removed — `buildSnapshot`
+   * redacts before it wraps, so the name never reaches the bucket, the CDN or
+   * `/api/boards/<slug>`, which serves this document verbatim. A reader of the
+   * published snapshot cannot recover a name that was never written into it, which
+   * is a stronger guarantee than redacting on the way out to HTML.
+   *
+   * This field is therefore not the redaction; it is the record of WHICH rows were
+   * redacted, which the renderer needs in order to draw a robot rather than a
+   * favicon in the identity slot. Without it the surfaces would have to infer
+   * anonymity from a blank `url`, and inferring a privacy rule from a sentinel is
+   * how a named product eventually renders as anonymous or the reverse.
+   *
+   * Optional only for documents written before anonymous listings existed; a
+   * reader falls back to the blank-`url` sentinel for those. Every publish since
+   * writes it, possibly as `[]`.
+   */
+  anonymous_ids?: number[];
+  /** The engine's `ranking.json`, with any anonymous listing's identity already removed. */
   ranking: Ranking;
 }
 

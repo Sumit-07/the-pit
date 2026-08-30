@@ -70,6 +70,8 @@ import {
 import { categories, juryVersions, personaVersions, products, type Database } from '@the-pit/db';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 
+import { assignPseudonyms } from '@/lib/anon';
+
 import { CategoryNotRunnableError, type CategorySource } from './catalog';
 import type { PipelineInput } from './types';
 
@@ -111,7 +113,7 @@ export class PgCategorySource implements CategorySource {
     const [jury, personas, population] = await Promise.all([
       this.jury(slug, category.id, category.type, category.promptVersion),
       this.personas(slug, category.id, category.personaVersion),
-      this.products(category.id),
+      this.products(category.id, slug),
     ]);
 
     return {
@@ -177,8 +179,35 @@ export class PgCategorySource implements CategorySource {
     return result.value;
   }
 
-  /** The category's population, in `engine_id` order. */
-  private async products(categoryId: string): Promise<readonly Product[]> {
+  /**
+   * The category's population, in `engine_id` order.
+   *
+   * ## An anonymous listing never shows the model its real name
+   *
+   * This is the FIRST of the two defences behind an anonymous listing, and it is
+   * the one that matters. `lib/anon/redact.ts` can take a name out of a document
+   * after the fact; only this can stop a juror putting it there in the first
+   * place.
+   *
+   * Names reach three prompts — `panels/prompts/score.ts`, `uniqueness.ts` and
+   * `choice.ts` all render a `name` field into their data block — and every one
+   * of those passes produces FREE TEXT that is published in full. An anonymous
+   * listing withholds its name and publishes every deduction, every reason and
+   * every persona pick, so a juror who had been shown the real name could put it
+   * into a reason and the page would print it. There is no filter that reliably
+   * catches that afterwards, because the juror is writing prose about the thing.
+   *
+   * So the row is marshalled into the engine already wearing its designation, and
+   * with its address blanked. The panel scores `Unit Kilo-427`, cannot mention a
+   * name it was never given, and the anonymity holds no matter what the six
+   * choose to write.
+   *
+   * **This is what makes the timing structural rather than procedural.** The
+   * choice has to be made at submission because it has to be made before the
+   * prompt is built — the alternative is not "a later choice" but "a choice that
+   * cannot be honoured".
+   */
+  private async products(categoryId: string, slug: string): Promise<readonly Product[]> {
     const rows = await this.db
       .select({
         engineId: products.engineId,
@@ -186,17 +215,30 @@ export class PgCategorySource implements CategorySource {
         description: products.description,
         url: products.url,
         normalizedUrl: products.normalizedUrl,
+        anonymous: products.anonymous,
       })
       .from(products)
       .where(and(eq(products.categoryId, categoryId), inArray(products.status, [...RUNNABLE_STATUSES])))
       .orderBy(asc(products.engineId));
 
+    // Assigned across the whole anonymous population of the category at once,
+    // because uniqueness is a property of the set — `assignPseudonyms` resolves
+    // collisions in ascending engine-id order, which is why a placement can never
+    // rename a listing that was already on the board.
+    const pseudonyms = assignPseudonyms(
+      slug,
+      rows.filter((row) => row.anonymous).map((row) => row.engineId),
+    );
+
     return rows.map((row) => ({
       id: row.engineId,
-      name: row.name,
+      name: pseudonyms.get(row.engineId) ?? row.name,
       description: row.description,
-      url: row.url,
-      normalized_url: row.normalizedUrl,
+      // Blank, and blank is the sentinel every downstream surface reads. No
+      // prompt renders a URL today (`panels/data-block.ts` says why), so this is
+      // about what reaches the RANKING document rather than what reaches a model.
+      url: row.anonymous ? '' : row.url,
+      normalized_url: row.anonymous ? '' : row.normalizedUrl,
       // The source sheet's own position is not stored — `packages/db/src/seed/
       // rehydrate.ts` says why, and reaches the same reconstruction: nothing in
       // `01 §6` reads `orig_rank`, and `engine_id` is already the ingest order it

@@ -85,8 +85,8 @@ async function seedProduct(input: {
   const row = await one<{ id: string }>(
     `insert into products
        (category_id, engine_id, name, url, normalized_url, description, description_hash,
-        source, status, submitted_by_email, placed_at)
-     values ($1, $2, $3, $4, $5, 'Does a thing.', $6, $7, 'placed', $8, now())
+        source, status, anonymous, submitted_by_email, placed_at)
+     values ($1, $2, $3, $4, $5, 'Does a thing.', $6, $7::product_source, 'placed', $7::product_source = 'seeded', $8, now())
      returning id`,
     [
       input.categoryId,

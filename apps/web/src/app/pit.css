@@ -607,6 +607,35 @@ div.brow {
 }
 
 /*
+ * The identity slot: the robot an anonymous listing wears.
+ *
+ * `align-self: center` rather than the baseline the rest of `.nm > b` sits on —
+ * a square block aligned on a text baseline hangs below the line and reads as a
+ * broken image, which is the one thing this element must never look like.
+ *
+ * It carries a hairline and the recess behind it so that it reads as a SLOT that
+ * is filled rather than as a picture that floated in. That is what makes an 18px
+ * robot look deliberate at row scale: the frame says "something belongs here and
+ * this is it", where a bare glyph on the row background says "something is
+ * missing".
+ *
+ * No hue. `--cut` means taken and `--held` means survived (`lib/theme.ts`), and
+ * an avatar in either would make an identity read as a score before a reader had
+ * looked at a number.
+ */
+.avatar {
+  display: inline-flex;
+  align-self: center;
+  flex: 0 0 auto;
+  background: var(--sunk);
+  border: 1px solid var(--hair);
+  box-shadow: inset 0 1px 2px rgb(var(--shade-c) / 0.5);
+}
+.avatar svg {
+  display: block;
+}
+
+/*
  * The lead: the heaviest cut on the card, its reason, and the juror who took it.
  *
  * `brief` Part 6 — "Lead with deductions and reasons, not composites" — is DOM
@@ -891,6 +920,14 @@ details[open] > summary .chev {
 .tag.tb {
   background: rgb(var(--ink-c) / 0.86);
   color: var(--pit);
+}
+/* Withholding a name is a property of the listing, not a deduction and not
+   health, so it takes neither hue — the same reasoning as .tag.solo, and a
+   hairline chip for the same reason. */
+.tag.anon {
+  border: 1px solid var(--line);
+  color: var(--dim);
+  background: transparent;
 }
 /* The accent means taken, so a flag borrows it at an alpha rather than filling
    with it. .06 vanished on dark; .16 is a visible tint that is still not a block

@@ -69,6 +69,8 @@ import { decideAttempt, type AttemptDecision } from '@the-pit/payments';
 import { NoModelClient, PhaseFailedError } from './errors';
 import { reusableStoredPhase } from './resume';
 import type { PublishedSnapshot } from './snapshot';
+import { redactRanking } from '@/lib/anon';
+
 import { buildSnapshot } from './snapshot-build';
 import {
   PHASE_OF_STEP,
@@ -303,8 +305,8 @@ export async function deliverStep(
   deps: PipelineDeps,
   afterPublish?: () => Promise<void>,
 ): Promise<DeliverReport> {
-  const ranking = await deps.store.readRanking();
-  if (ranking === undefined) {
+  const stored = await deps.store.readRanking();
+  if (stored === undefined) {
     throw new PhaseFailedError('deliver', [
       {
         code: 'internal',
@@ -315,12 +317,31 @@ export async function deliverStep(
     ]);
   }
 
+  /**
+   * ONE redaction, for both artifacts this step produces.
+   *
+   * The board snapshot and the frozen verdict are two views of the same delivery,
+   * and they are published seconds apart. Redacting them separately would be two
+   * chances to disagree — a board showing `Unit Kilo-427` beside a verdict page
+   * still carrying the real name is not a cosmetic mismatch but the leak itself.
+   * So the document is redacted once, here, and everything downstream is handed
+   * the redacted one.
+   *
+   * The anonymous rows are the ones that already arrive with a blank address:
+   * `lib/pipeline/pg-catalog.ts` marshals them into the engine that way, before
+   * the panel is asked anything, so a juror never saw the name it could have
+   * written into a reason.
+   */
+  const anonymousIds = stored.ranking.filter((row) => row.url === '').map((row) => row.id);
+  const ranking = redactRanking(stored, anonymousIds, deps.store.slug);
+
   const generatedAt = (deps.now ?? (() => new Date()))();
   const snapshot = buildSnapshot({
     slug: deps.store.slug,
     ranking,
     categoryVersion,
     generatedAt,
+    anonymousIds,
   });
 
   const published = deps.snapshots === undefined ? undefined : await deps.snapshots.publish(snapshot);

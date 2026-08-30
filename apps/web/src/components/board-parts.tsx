@@ -88,9 +88,23 @@ function segClass(index: number): string {
  * and a solo cluster took nothing from anyone.
  */
 function RowTags({ row }: { row: RowView }): ReactNode {
-  if (!row.soloCluster && !row.tiebroken && row.flagged.length === 0) return null;
+  if (!row.anonymous && !row.soloCluster && !row.tiebroken && row.flagged.length === 0) return null;
   return (
     <span className="tags">
+      {/*
+       * First, because it explains the two things a reader has already noticed
+       * about the row — the robot and the designation — before they wonder
+       * whether something failed to load. The tag is a plain state chip and takes
+       * neither hue: withholding a name is not a deduction and not health.
+       */}
+      {row.anonymous ? (
+        <span
+          className="tag anon"
+          title="Published without its name or URL, by a choice made at submission and frozen before scoring. Every cut, reason, score and cluster below is unchanged."
+        >
+          anonymous
+        </span>
+      ) : null}
       {row.soloCluster ? (
         <span className="tag solo" title={row.soloNote ?? SOLO_NOTE}>
           solo cluster
@@ -117,10 +131,30 @@ function RowTags({ row }: { row: RowView }): ReactNode {
  * a card lost nothing at all the row says so in words rather than showing an
  * empty space, because a blank there reads as missing data.
  */
+/**
+ * The identity slot: a robot for an anonymous listing, nothing for anybody else.
+ *
+ * The SVG is injected as markup because it is generated end to end by
+ * `lib/anon/robot.ts` from a closed vocabulary of rects and theme tokens — no
+ * product name, URL or juror reason is ever interpolated into it, and the two
+ * attributes that can carry a string are escaped there. That is what makes this
+ * the safe kind of `dangerouslySetInnerHTML`: the alternative is a second JSX
+ * renderer for the same shapes, which is a second thing to keep in step with the
+ * HTML surfaces that cannot use JSX at all.
+ *
+ * A named row renders nothing here. The favicon that belongs in this slot is
+ * another agent's, and it hangs off `row.anonymous === false`.
+ */
+export function RowAvatar({ row }: { row: RowView }): ReactNode {
+  if (!row.anonymous || row.robot === undefined) return null;
+  return <span className="avatar" dangerouslySetInnerHTML={{ __html: row.robot }} />;
+}
+
 export function RowLead({ row }: { row: RowView }): ReactNode {
   return (
     <span className="nm">
       <b>
+        <RowAvatar row={row} />
         <span className="pname">{row.name}</span>
         <RowTags row={row} />
       </b>
@@ -391,7 +425,14 @@ export function RowLedger({ row }: { row: RowView }): ReactNode {
         {row.metrics.length === 1 ? 'metric' : 'metrics'}, from {row.deductionCount}{' '}
         {row.deductionCount === 1 ? 'reason' : 'reasons'}, and walked out with{' '}
         <b className="held">{Math.round(row.health)}</b> health.{' '}
-        {row.href === undefined ? (
+        {/*
+         * An anonymous listing withholds its address, and says so rather than
+         * leaving a blank where a link goes — a gap there reads as data that
+         * failed to load, and this is a choice the listing made.
+         */}
+        {row.anonymous ? (
+          <span className="who">address withheld</span>
+        ) : row.href === undefined ? (
           <span className="who">{row.url}</span>
         ) : (
           <a href={row.href} target="_blank" rel="noopener noreferrer nofollow">

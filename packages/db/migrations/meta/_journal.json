@@ -64,6 +64,13 @@
       "when": 1788035047635,
       "tag": "0008_submission_pitch",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788035048635,
+      "tag": "0009_anonymous_listings",
+      "breakpoints": true
     }
   ]
 }

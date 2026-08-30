@@ -78,8 +78,20 @@ import { dirname, join, resolve } from 'node:path';
 
 import type { Ranking } from '@the-pit/engine';
 
+import { redactRanking } from '@/lib/anon';
 import { defaultSnapshotSink } from '@/lib/pipeline/sink';
 import { FileSnapshotSink, type BoardSnapshot, type SnapshotSink } from '@/lib/pipeline/snapshot';
+
+/**
+ * The rows a stored ranking already presents anonymously.
+ *
+ * The fallback for a published snapshot written before `anonymous_ids` existed. A
+ * blank `url` is a safe sentinel: `products.url` is `NOT NULL` and the engine's
+ * `Product.url` is required, so no named row can reach a ranking without one.
+ */
+function anonymousIdsIn(ranking: Ranking): number[] {
+  return ranking.ranking.filter((row) => row.url === '').map((row) => row.id);
+}
 
 /**
  * One board's stored document, however it was found.
@@ -102,7 +114,17 @@ export interface BoardDocument {
   caveat?: string;
   /** Where this came from, so the footer can be honest about it. */
   origin: 'snapshot' | 'seeded-run';
-  /** The engine's ranking document, verbatim. Never re-derived here. */
+  /**
+   * The engine ids published without a name or a URL.
+   *
+   * `ranking` below has already had those identities removed, so this is the
+   * record of WHICH rows were redacted rather than the redaction itself — the
+   * renderer needs it to put a robot in the identity slot instead of a favicon.
+   *
+   * Every row of a seeded run is in here. See `readSeededRun`.
+   */
+  anonymousIds: readonly number[];
+  /** The engine's ranking document, with anonymous listings' identities removed. */
   ranking: Ranking;
 }
 
@@ -278,6 +300,13 @@ export class SnapshotBoardSource implements BoardSource {
       throw error;
     }
     if (!isSnapshot(raw)) return undefined;
+
+    // `buildSnapshot` redacted before publishing, so this is normally a no-op —
+    // and it is run anyway, because "the document in the bucket is already clean"
+    // is an assumption about a file this process did not write. `redactRanking`
+    // is idempotent, so the cost of being wrong is nothing and the cost of
+    // trusting it would be a name on a page that paid not to have one.
+    const anonymousIds = raw.anonymous_ids ?? anonymousIdsIn(raw.ranking);
     return {
       slug,
       category: raw.category,
@@ -286,7 +315,8 @@ export class SnapshotBoardSource implements BoardSource {
       categoryVersion: raw.category_version,
       engineVersion: raw.engine_version,
       origin: 'snapshot',
-      ranking: raw.ranking,
+      anonymousIds,
+      ranking: redactRanking(raw.ranking, anonymousIds, slug),
     };
   }
 
@@ -314,6 +344,29 @@ export class SnapshotBoardSource implements BoardSource {
     const categoryVersion = results?.meta?.category_version;
     const caveat = results?.meta?.seeding?.caveat;
 
+    /**
+     * EVERY row of a seeded run is anonymous.
+     *
+     * `DECISIONS.md`'s resolution of S4-source: 913 of the 1028 seeded
+     * descriptions were scraped from a third-party directory rather than written
+     * by the companies they describe, so a NAMED seeded row is AI criticism of
+     * copy that company never wrote — the largest legal and reputational exposure
+     * in the project, and one that `brief` Part 7's opt-out only ever mitigated
+     * for the companies who happened to find out. Publishing them anonymously
+     * removes it at the root while the board still demonstrates the method on
+     * real market data, with every cut and every reason intact.
+     *
+     * The database says the same thing one layer down — `products_seeded_is_anonymous`
+     * refuses to store a named unclaimed seeded row — and this is the same rule
+     * for the cold-start boards, which are flat files that never went through it.
+     *
+     * These documents were also SCORED with the real names, before any of this
+     * existed, which is why `redactRanking` scrubs the prose as well as the
+     * fields: on `developer-tools` exactly one cluster reason names another
+     * product, and one is enough to break the promise.
+     */
+    const anonymousIds = raw.ranking.map((row) => row.id);
+
     return {
       slug,
       category: raw.category,
@@ -323,7 +376,8 @@ export class SnapshotBoardSource implements BoardSource {
       ...(typeof engineVersion === 'string' ? { engineVersion } : {}),
       ...(typeof caveat === 'string' ? { caveat } : {}),
       origin: 'seeded-run',
-      ranking: raw,
+      anonymousIds,
+      ranking: redactRanking(raw, anonymousIds, slug),
     };
   }
 }

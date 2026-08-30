@@ -119,9 +119,9 @@ async function oldRow(input: {
   const result = await pg.query<{ id: string }>(
     `insert into products
        (category_id, engine_id, name, url, normalized_url, description, description_hash,
-        source, status, submitted_by_email, placed_at, created_at)
+        source, status, anonymous, submitted_by_email, placed_at, created_at)
      values ($1, $2, 'Ledger', $3, $4, 'Reconciles invoices against the bank feed.', $5,
-             $6, 'placed', $7, now(), $8)
+             $6::product_source, 'placed', $6::product_source = 'seeded', $7, now(), $8)
      returning id`,
     [
       categoryId,

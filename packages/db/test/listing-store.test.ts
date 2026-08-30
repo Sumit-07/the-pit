@@ -100,8 +100,8 @@ async function seedProduct(input: SeedProduct): Promise<string> {
   const row = await one<{ id: string }>(
     `insert into products
        (category_id, engine_id, name, url, normalized_url, description, description_hash,
-        source, status, submitted_by_email, placed_at, created_at)
-     values ($1, $2, 'Margin', $3, $4, $5, $6, $7, 'placed', $8, now(), $9)
+        source, status, anonymous, submitted_by_email, placed_at, created_at)
+     values ($1, $2, 'Margin', $3, $4, $5, $6, $7::product_source, 'placed', $7::product_source = 'seeded', $8, now(), $9)
      returning id`,
     [
       input.categoryId,

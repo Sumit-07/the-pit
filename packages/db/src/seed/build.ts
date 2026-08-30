@@ -243,6 +243,19 @@ export function buildSeedRows(input: SeedInput): SeedRows {
     source: 'seeded',
     status: 'placed',
     submittedByEmail: null,
+    /**
+     * And published without a name or a URL, per `DECISIONS.md`'s resolution of
+     * S4-source. 913 of the 1028 seeded descriptions were scraped from a
+     * third-party directory rather than written by the companies they describe,
+     * so a named seeded row is AI criticism of copy the named company never
+     * wrote. `products_seeded_is_anonymous` refuses the alternative outright, so
+     * this is not a policy this builder is choosing — it is the only insert the
+     * table accepts for an unclaimed seeded listing.
+     *
+     * The board loses nothing a reader uses: every cut, every reason, the juror
+     * who took it, the cluster and the demand picture are all still published.
+     */
+    anonymous: true,
     placedAt: seededAt,
   }));
 

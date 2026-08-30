@@ -118,8 +118,8 @@ export async function installProducts(
     await pg.query(
       `INSERT INTO products
          (category_id, engine_id, name, url, normalized_url, description, description_hash,
-          source, status, placed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'seeded', $8, $9)`,
+          source, status, anonymous, placed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'seeded', $8, true, $9)`,
       [
         categoryId,
         product.id,
