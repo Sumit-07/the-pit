@@ -16,6 +16,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { parseVerdict } from '@/lib/verdict/model';
+import { TOKENS } from '@/lib/theme';
 import { renderVerdictNotFound, renderVerdictPage, stampedRank, stampTime } from '@/lib/verdict/page';
 
 import { handBuiltVerdict, seededVerdictNamed } from './helpers/verdict.js';
@@ -264,11 +265,23 @@ describe('the downloadable artifact', () => {
     expect(html).not.toContain('<img');
     expect(html).not.toContain('<iframe');
 
-    // The palette is `lib/theme.ts`'s five values, inline — the same theme every
+    // The palette is `lib/theme.ts`'s own values, inline — the same theme every
     // other surface renders, so a saved copy is not a different product.
-    expect(html).toContain('--paper:#EDEFF3');
-    expect(html).toContain('--ink:#101317');
-    expect(html).toContain('--cut:#9C1B2F');
+    //
+    // Asserted against the theme module rather than against literals. The rule was
+    // always "the saved page carries THE theme", and pinning hexes here tested a
+    // weaker thing: that it carried the theme as of the day the test was written.
+    // A re-theme then fails this test for the one reason that is not a bug.
+    // `theme-drift.test.ts` is what holds the values themselves in place.
+    for (const token of ['--sunk', '--pit', '--card', '--rise', '--ink', '--cut'] as const) {
+      const declared = new RegExp(`${token}:(#[0-9A-Fa-f]{6})`).exec(TOKENS)?.[1];
+      expect(declared, `${token} is declared in the theme`).toBeDefined();
+      expect(html, `the saved page carries ${token}`).toContain(`${token}:${String(declared)}`);
+    }
+    // The theme commits: a saved copy is dark wherever it is opened, and does not
+    // change under the reader's system preference.
+    expect(html.replace(/\s+/g, '')).toContain('color-scheme:dark');
+    expect(html).not.toContain('prefers-color-scheme');
 
     // The only external reference is the site's typeface, and every family
     // declares a real local fallback — so a copy saved and opened offline loses

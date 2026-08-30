@@ -38,11 +38,13 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   // `brief` Part 6: the board occupies most of the page, above the fold on
   // mobile. Everything that renders it starts from a correctly scaled viewport.
-  // `themeColor` is `--paper`, the page's real ground, so a mobile browser's
-  // chrome matches the surface under it instead of a colour nothing else uses.
+  // `themeColor` is `--pit`, the page's real ground, so a mobile browser's chrome
+  // matches the surface under it instead of a colour nothing else uses. One value
+  // and no `media` variants: the pit is dark, and that is an identity rather than
+  // a preference, so there is no `prefers-color-scheme` branch to answer.
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#EDEFF3',
+  themeColor: '#1A1610',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

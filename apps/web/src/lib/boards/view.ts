@@ -238,7 +238,7 @@ function projectRow(row: RankedProduct, flagsById: Map<number, FlaggedInjection[
       matched: flag.matched,
     })),
     // The mark and the explanation are one field, so no surface can render the
-    // gold edge without the sentence that says what it means.
+    // solo mark without the sentence that says what it means.
     ...(soloCluster ? { soloNote: `${row.cluster.label} is a cluster of one — ${SOLO_NOTE}.` } : {}),
   };
 }

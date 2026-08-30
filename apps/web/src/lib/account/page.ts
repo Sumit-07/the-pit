@@ -76,7 +76,7 @@ header.page .who{font-family:var(--mono);font-size:11.5px;color:var(--dim);
 
 /* ---------- rows ---------- */
 .rows{margin-top:16px;background:var(--card);border:1px solid var(--line);
-  border-radius:var(--r2);box-shadow:var(--e1);overflow:hidden}
+  border-radius:var(--r2);box-shadow:var(--lip),var(--e1);overflow:hidden}
 .row{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;
   padding:14px 18px;border-top:1px solid var(--hair)}
 .row:first-child{border-top:0}
@@ -89,10 +89,10 @@ header.page .who{font-family:var(--mono);font-size:11.5px;color:var(--dim);
   font-weight:600;white-space:nowrap;min-width:70px;text-align:right}
 .pitch,.pending{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.1em;
   text-transform:uppercase;border-radius:999px;padding:3px 8px;white-space:nowrap}
-.pitch{background:rgb(var(--ink-c) / .86);color:var(--card)}
+.pitch{background:rgb(var(--ink-c) / .86);color:var(--pit)}
 .pending{border:1px solid var(--line);color:var(--dim)}
 .empty{font-size:14px;line-height:1.7;color:var(--dim);background:var(--card);
-  border:1px solid var(--line);border-radius:var(--r2);box-shadow:var(--e1);
+  border:1px solid var(--line);border-radius:var(--r2);box-shadow:var(--lip),var(--e1);
   padding:20px;margin-top:16px}
 
 .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;align-items:center}

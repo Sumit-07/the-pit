@@ -7,22 +7,34 @@
  *
  * ## Where the design comes from
  *
- * `apps/web/src/lib/theme.ts`, restated. Five values — `--paper`, `--card`,
- * `--sunk`, `--ink` and one hue, `--cut` — with every rule, shadow and muted tone
- * derived from `--ink` at an alpha. One sans and one mono, declared with local
- * fallbacks and loaded from nowhere, because this page must render with the
- * machine offline. `--cut` is the only colour in the system and it means exactly
- * one thing: this was taken.
+ * `apps/web/src/lib/theme.ts`, restated. Six values — the surface stack `--sunk`,
+ * `--pit`, `--card`, `--rise`, plus `--ink` for text and one hue, `--cut` — with
+ * every rule and muted tone derived from `--ink` at an alpha and every shadow from
+ * `--shade-c`. One sans and one mono, declared with local fallbacks and loaded
+ * from nowhere, because this page must render with the machine offline. `--cut` is
+ * the only colour in the system and it means exactly one thing: this was taken.
  *
  * The copy is deliberate, not an oversight. `PHASE-0.md §3` forbids the engine
  * importing from `apps/web`, so the preview board and the public board are kept in
  * step by hand — as they have been since this file was written. The two are meant
- * to look like one product, because they publish the same verdict.
+ * to look like one product, because they publish the same verdict. What used to
+ * hold them together was care; `apps/web/test/theme-drift.test.ts` now reads this
+ * file's `:root` block directly and fails if a token here disagrees with
+ * `theme.ts`, because three hand-kept copies with nothing testing them is how a
+ * connection-pool bug got in one layer up.
  *
- * `brief` Part 6's "rows darken as they descend (the pit is literal)" is read as
- * depth in the surface stack rather than as mud in the palette: `--depth` runs 0
- * at rank 1 to 1 at the last row, and the row's ground sinks from `--card` toward
- * `--sunk` as it goes. Hovering lifts it back out.
+ * The theme commits and answers no `prefers-color-scheme` query: the pit is dark,
+ * and that is the identity rather than a setting. `color-scheme:dark` is declared
+ * all the same, which is not a branch — it is how the browser is told to paint its
+ * own scrollbars and controls to match.
+ *
+ * On dark, `brief` Part 6's "rows darken as they descend (the pit is literal)" is
+ * both literal and structural at once: `--depth` runs 0 at rank 1 to 1 at the last
+ * row, the row's ground sinks from `--card` to `--pit` — so the last row is
+ * exactly the page floor — and its lit top edge fades out with it, so the rows
+ * flatten as they darken. Hovering lifts it back out, but never past `--card`,
+ * because `--cut` sets 12px mono in a row and `--rise` is the one surface it does
+ * not clear 4.5:1 against.
  *
  * The signature is the **cut meter**: every product walked in at 100, the graphite
  * head is what survived, and each segment after it is one metric's exact share of
@@ -62,22 +74,27 @@ function embedJson(value: unknown): string {
 
 const CSS = `
 :root{
-  --paper:#EDEFF3; --card:#FFFFFF; --sunk:#DCE0E7; --ink:#101317; --cut:#9C1B2F;
-  --ink-c:16 19 23; --cut-c:156 27 47;
-  --dim:rgb(var(--ink-c) / .58); --dimmer:rgb(var(--ink-c) / .40);
-  --line:rgb(var(--ink-c) / .11); --hair:rgb(var(--ink-c) / .06); --wash:rgb(var(--ink-c) / .035);
-  --e1:0 1px 2px rgb(var(--ink-c) / .05), 0 1px 1px rgb(var(--ink-c) / .04);
-  --e2:0 2px 4px rgb(var(--ink-c) / .05), 0 8px 20px rgb(var(--ink-c) / .07);
-  --e3:0 2px 6px rgb(var(--ink-c) / .06), 0 14px 40px rgb(var(--ink-c) / .12);
+  /* One committed scheme, declared so the UA paints its own chrome to match. */
+  color-scheme:dark;
+  --sunk:#0F0A06; --pit:#1A1610; --card:#29241C; --rise:#353129; --ink:#EDE6DE; --cut:#F45C33;
+  --ink-c:237 230 222; --cut-c:244 92 51; --pit-c:26 22 16; --shade-c:0 0 0;
+  --dim:rgb(var(--ink-c) / .78); --dimmer:rgb(var(--ink-c) / .66);
+  --faint:rgb(var(--ink-c) / .60); --on-lit:rgb(var(--pit-c) / .70);
+  --line:rgb(var(--ink-c) / .17); --hair:rgb(var(--ink-c) / .09); --wash:rgb(var(--shade-c) / .32);
+  --lip:inset 0 1px 0 rgb(var(--ink-c) / .07);
+  --e1:0 1px 2px rgb(var(--shade-c) / .45);
+  --e2:0 2px 6px rgb(var(--shade-c) / .40), 0 10px 26px rgb(var(--shade-c) / .42);
+  --e3:0 3px 10px rgb(var(--shade-c) / .45), 0 24px 64px rgb(var(--shade-c) / .55);
   --r1:6px; --r2:10px; --r3:16px;
   --sans:"Archivo","Helvetica Neue",Helvetica,Arial,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html{background:var(--paper);-webkit-text-size-adjust:100%}
-body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;
+html{background:var(--pit);-webkit-text-size-adjust:100%}
+body{background:var(--pit);color:var(--ink);font-family:var(--sans);font-size:15px;
   line-height:1.55;-webkit-font-smoothing:antialiased;font-synthesis-weight:none;overflow-x:hidden}
-:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:3px}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:3px;
+  box-shadow:0 0 0 4px rgb(var(--shade-c) / .55)}
 .wrap{max-width:1080px;margin:0 auto;padding:0 18px}
 
 nav{display:flex;justify-content:space-between;align-items:center;padding:20px 0 18px}
@@ -104,7 +121,7 @@ h1 em{font-style:normal;color:var(--dim)}
   cursor:pointer;background:transparent;border:1px solid var(--line);color:var(--dim);
   padding:8px 13px;border-radius:var(--r1);transition:color .16s,background .16s,box-shadow .16s}
 .cat:hover{color:var(--ink);background:var(--card)}
-.cat.on{background:var(--ink);border-color:var(--ink);color:var(--paper);box-shadow:var(--e1)}
+.cat.on{background:var(--ink);border-color:var(--ink);color:var(--pit);box-shadow:var(--e2)}
 
 /* ---------- stat strip ---------- */
 .strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;
@@ -116,15 +133,17 @@ h1 em{font-style:normal;color:var(--dim)}
 .strip .v{display:block;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:19px;
   font-weight:600;letter-spacing:-.02em;margin-top:7px}
 .legend{font-size:13px;line-height:1.7;color:var(--dim);margin-top:16px;background:var(--sunk);
-  border:1px solid var(--line);border-radius:var(--r2);padding:14px 16px;
-  box-shadow:inset 0 1px 2px rgb(var(--ink-c) / .05)}
+  border:1px solid var(--hair);border-radius:var(--r2);padding:14px 16px;
+  box-shadow:inset 0 2px 5px rgb(var(--shade-c) / .5)}
 .legend b{color:var(--ink);font-weight:600}
 
 /* ---------- the board ---------- */
+/* The rim of the hole: --rise at the top, then rows descending to --pit. */
 .board{margin-top:18px;background:var(--card);border:1px solid var(--line);
   border-radius:var(--r3);box-shadow:var(--e3);overflow:hidden}
 .bhead{display:grid;grid-template-columns:38px 1fr auto;gap:14px;align-items:center;
-  padding:12px 18px;background:var(--wash);border-bottom:1px solid var(--line);
+  padding:12px 18px;background:var(--rise);position:relative;z-index:1;
+  box-shadow:var(--lip),0 2px 6px rgb(var(--shade-c) / .4);
   font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.14em;
   text-transform:uppercase;color:var(--dimmer)}
 .bhead .c-x{display:none}
@@ -133,29 +152,34 @@ h1 em{font-style:normal;color:var(--dim)}
 @media(min-width:760px){.c-hide{display:block}}
 .allbtn{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.1em;
   text-transform:uppercase;background:var(--card);border:1px solid var(--line);color:var(--dim);
-  padding:5px 10px;cursor:pointer;border-radius:var(--r1);box-shadow:var(--e1)}
-.allbtn:hover{color:var(--ink)}
+  padding:5px 10px;cursor:pointer;border-radius:var(--r1);box-shadow:var(--lip),var(--e1)}
+.allbtn:hover{color:var(--ink);background:var(--rise)}
 
-.brow{border-top:1px solid var(--line);animation:rise .34s cubic-bezier(.2,.7,.3,1) backwards}
-.brow:first-of-type{border-top:0}
+.brow{border-top:0;animation:rise .34s cubic-bezier(.2,.7,.3,1) backwards}
 @keyframes rise{from{opacity:0;transform:translateY(7px)}}
 
 /*
- * The pit is literal, and on paper it is depth rather than darkness: --depth runs
- * 0 at rank 1 to 1 at the last row, and the row's ground sinks from the raised
- * white card toward the recessed floor. Hovering lifts it back out.
+ * The pit is literal, and on dark it is darkness AND depth at once — which is the
+ * point of the re-theme. --depth runs 0 at rank 1 to 1 at the last row; the row's
+ * ground sinks from --card to --pit, so the last row is exactly the page floor,
+ * and its lit top edge fades out as it goes, so the rows flatten as they darken.
+ * That lip is also the separator, which is why there is no border. Hover lifts the
+ * row back out, but never past --card: --cut sets 12px mono here and --rise is the
+ * one surface it does not clear 4.5:1 against.
  */
 .rowhead{--depth:0;position:relative;display:grid;
   grid-template-columns:38px minmax(0,1fr) auto;
   grid-template-areas:"rank name cuts" "rank lead nums" "rank meter meter";
   column-gap:16px;row-gap:2px;align-items:start;width:100%;padding:15px 18px 14px;
   border:0;text-align:left;font-family:inherit;color:inherit;cursor:pointer;
-  background:color-mix(in srgb, var(--card) calc(100% - var(--depth) * 62%), var(--sunk));
-  transition:background .16s ease}
-.rowhead:hover{background:color-mix(in srgb, var(--card) calc(100% - var(--depth) * 40%), var(--sunk))}
+  background:color-mix(in srgb, var(--card) calc(100% - var(--depth) * 100%), var(--pit));
+  box-shadow:inset 0 1px 0 rgb(var(--ink-c) / calc(.15 * (1 - var(--depth))));
+  transition:background .16s ease,box-shadow .16s ease}
+.rowhead:hover{background:color-mix(in srgb, var(--card) calc(100% - var(--depth) * 45%), var(--pit));
+  box-shadow:inset 0 1px 0 rgb(var(--ink-c) / .15)}
 .rowhead:focus-visible{outline:2px solid var(--ink);outline-offset:-2px}
 .flag{position:absolute;left:0;top:10px;bottom:10px;width:2px;border-radius:0 2px 2px 0;
-  background:rgb(var(--ink-c) / .22)}
+  background:rgb(var(--ink-c) / .30)}
 .rk{grid-area:rank;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px;
   font-weight:600;color:var(--dim);letter-spacing:-.02em;padding-top:1px}
 .nm{grid-area:name;min-width:0}
@@ -170,20 +194,27 @@ h1 em{font-style:normal;color:var(--dim)}
 .tag{font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.1em;
   text-transform:uppercase;padding:3px 8px;border-radius:999px;white-space:nowrap}
 .tag.solo{border:1px solid var(--line);color:var(--dim)}
-.tag.tb{background:rgb(var(--ink-c) / .86);color:var(--card)}
-.tag.fl{border:1px solid rgb(var(--cut-c) / .40);color:var(--cut);background:rgb(var(--cut-c) / .06)}
+.tag.tb{background:rgb(var(--ink-c) / .86);color:var(--pit)}
+.tag.fl{border:1px solid rgb(var(--cut-c) / .45);color:var(--cut);background:rgb(var(--cut-c) / .16)}
 
 /* ---------- the signature: the cut meter ---------- */
+/*
+ * The track is --sunk, the one surface below everything, so the hundred points
+ * are a groove in the row and stay one even on the last row. The kept head is a
+ * quiet L* 43 neutral; the segment ramp is FLOORED at .58 because fading the
+ * accent toward a near-black track by alpha runs it into mud, and the smallest
+ * metric's block has to still read as red rather than as empty track.
+ */
 .meterwrap{grid-area:meter;min-width:0;margin-top:9px}
 .meter{display:flex;height:10px;border-radius:999px;background:var(--sunk);overflow:hidden;
-  box-shadow:inset 0 1px 1px rgb(var(--ink-c) / .07)}
-.meter .kept{background:rgb(var(--ink-c) / .24);height:100%;flex:0 0 auto}
-.meter .seg{background:var(--cut);height:100%;flex:0 0 auto;box-shadow:-1px 0 0 var(--card)}
-.meter .seg.s2{background:rgb(var(--cut-c) / .82)}
-.meter .seg.s3{background:rgb(var(--cut-c) / .66)}
-.meter .seg.s4{background:rgb(var(--cut-c) / .52)}
-.meter .seg.s5{background:rgb(var(--cut-c) / .40)}
-.meter .seg.s6{background:rgb(var(--cut-c) / .30)}
+  box-shadow:inset 0 1px 2px rgb(var(--shade-c) / .55)}
+.meter .kept{background:rgb(var(--ink-c) / .40);height:100%;flex:0 0 auto}
+.meter .seg{background:var(--cut);height:100%;flex:0 0 auto;box-shadow:-1px 0 0 rgb(var(--shade-c) / .55)}
+.meter .seg.s2{background:rgb(var(--cut-c) / .90)}
+.meter .seg.s3{background:rgb(var(--cut-c) / .80)}
+.meter .seg.s4{background:rgb(var(--cut-c) / .71)}
+.meter .seg.s5{background:rgb(var(--cut-c) / .64)}
+.meter .seg.s6{background:rgb(var(--cut-c) / .58)}
 .metercap{display:flex;justify-content:space-between;gap:14px;margin-top:7px;
   font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:10.5px;
   letter-spacing:.02em;color:var(--dimmer)}
@@ -197,13 +228,16 @@ h1 em{font-style:normal;color:var(--dim)}
 .cell.cuts .v{color:var(--cut)}
 .nums{grid-area:nums;display:flex;gap:11px;align-items:baseline;justify-content:flex-end;
   align-self:start;padding-top:4px}
-.nums .k{color:rgb(var(--ink-c) / .30);margin-right:3px}
+.nums .k{color:var(--faint);margin-right:3px}
 .chev{position:absolute;left:20px;top:38px;font-size:10px;line-height:1;color:var(--dimmer);
   transition:transform .16s}
 .brow.open .chev{transform:rotate(90deg)}
 
 /* ---------- the ledger ---------- */
-.detail{display:none;background:var(--wash);border-top:1px solid var(--hair);padding:4px 18px 22px}
+/* --wash is black at an alpha, so the open ledger drops BELOW the row it belongs
+   to and the .ledger cards rise back out of it. */
+.detail{display:none;background:var(--wash);box-shadow:inset 0 2px 6px rgb(var(--shade-c) / .35);
+  padding:4px 18px 22px}
 .brow.open .detail{display:block}
 .took{font-size:14px;line-height:1.6;color:var(--dim);padding:12px 0 4px}
 .took b{color:var(--ink);font-weight:600}
@@ -211,22 +245,22 @@ h1 em{font-style:normal;color:var(--dim)}
 .sect{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.16em;
   text-transform:uppercase;color:var(--dimmer);margin-bottom:9px}
 .ledger{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
-  box-shadow:var(--e1);padding:14px 16px 12px;margin-top:12px}
+  box-shadow:var(--lip),var(--e1);padding:14px 16px 12px;margin-top:12px}
 .ledger-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
 .ledger-h .mt{font-size:14px;font-weight:600;letter-spacing:-.008em}
 .ledger-h .sc{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11px;
   color:var(--dimmer);white-space:nowrap}
 .bar{display:flex;height:10px;border-radius:999px;background:var(--sunk);overflow:hidden;
-  margin-top:10px;box-shadow:inset 0 1px 1px rgb(var(--ink-c) / .07)}
+  margin-top:10px;box-shadow:inset 0 1px 2px rgb(var(--shade-c) / .55)}
 .bar i{display:block;height:100%}
-.bar i.kept{background:rgb(var(--ink-c) / .24)}
+.bar i.kept{background:rgb(var(--ink-c) / .40)}
 .bar i.lost{background:var(--cut)}
-.bar i.j{background:var(--cut);box-shadow:-1px 0 0 var(--card)}
-.bar i.j.s2{background:rgb(var(--cut-c) / .82)}
-.bar i.j.s3{background:rgb(var(--cut-c) / .66)}
-.bar i.j.s4{background:rgb(var(--cut-c) / .52)}
-.bar i.j.s5{background:rgb(var(--cut-c) / .40)}
-.bar i.j.s6{background:rgb(var(--cut-c) / .30)}
+.bar i.j{background:var(--cut);box-shadow:-1px 0 0 rgb(var(--shade-c) / .55)}
+.bar i.j.s2{background:rgb(var(--cut-c) / .90)}
+.bar i.j.s3{background:rgb(var(--cut-c) / .80)}
+.bar i.j.s4{background:rgb(var(--cut-c) / .71)}
+.bar i.j.s5{background:rgb(var(--cut-c) / .64)}
+.bar i.j.s6{background:rgb(var(--cut-c) / .58)}
 .barcap{display:block;margin-top:7px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer)}
 .ded{display:grid;grid-template-columns:42px minmax(0,1fr);gap:12px;font-size:14px;line-height:1.5;
   color:var(--dim);margin-top:10px;padding-top:10px;border-top:1px solid var(--hair)}
@@ -235,16 +269,16 @@ h1 em{font-style:normal;color:var(--dim)}
   font-weight:600;text-align:right;padding-top:1px}
 .ded .who{font-family:var(--mono);font-size:11px;color:var(--dimmer);white-space:nowrap}
 .sub{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:12px;padding:8px 10px;
-  background:var(--sunk);border-radius:var(--r1)}
+  background:var(--sunk);border-radius:var(--r1);box-shadow:inset 0 1px 3px rgb(var(--shade-c) / .45)}
 
 .blk{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
-  box-shadow:var(--e1);padding:15px 16px;margin-top:12px}
+  box-shadow:var(--lip),var(--e1);padding:15px 16px;margin-top:12px}
 .blk p{font-size:14px;line-height:1.6;color:var(--dim)}
 .blk p b{color:var(--ink);font-weight:600}
 .pick{display:grid;grid-template-columns:auto minmax(0,1fr);gap:11px;font-size:14px;line-height:1.5;
   color:var(--dim);margin-top:11px}
 .pick .p{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.08em;
-  text-transform:uppercase;color:var(--card);background:rgb(var(--ink-c) / .86);
+  text-transform:uppercase;color:var(--pit);background:rgb(var(--ink-c) / .86);
   border-radius:999px;padding:3px 8px;white-space:nowrap;align-self:start}
 .pick .p.second{background:transparent;color:var(--dim);border:1px solid var(--line)}
 .pick .who{font-family:var(--mono);font-size:11px;color:var(--dimmer)}
@@ -263,13 +297,14 @@ footer{margin-top:34px;padding:0 0 56px}
   text-transform:uppercase;color:var(--dimmer)}
 .fgrid .v{display:block;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:16px;
   font-weight:600;margin-top:6px}
-.caveat{background:var(--sunk);border-radius:var(--r2);padding:15px 16px;margin-top:16px}
+.caveat{background:var(--sunk);border:1px solid var(--hair);border-radius:var(--r2);
+  padding:15px 16px;margin-top:16px;box-shadow:inset 0 2px 5px rgb(var(--shade-c) / .5)}
 .caveat p{font-size:13.5px;line-height:1.65;color:var(--dim)}
 .stamp{font-family:var(--mono);font-size:11px;line-height:1.85;color:var(--dimmer);margin-top:18px;
   overflow-wrap:anywhere}
 .stamp b{color:var(--dim);font-weight:500}
 .empty{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
-  box-shadow:var(--e1);padding:28px;margin-top:24px;font-size:14px;line-height:1.7;color:var(--dim)}
+  box-shadow:var(--lip),var(--e1);padding:28px;margin-top:24px;font-size:14px;line-height:1.7;color:var(--dim)}
 
 @media (max-width:760px){
   .wrap{padding:0 14px}
@@ -628,7 +663,7 @@ This page re-reads the files on every refresh, so a re-rank shows up without res
   <b>Cuts</b> is 100 minus the mean metric score &mdash; everyone walks in at 100, this is what came off.
   The points inside a ledger are each juror's own deduction off their own 100, so six jurors cutting 20 for
   the same omission is one 20-point cut on the board, not 120.<br>
-  <b>Solo cluster</b> (gold edge) means no buyers were ever shown this product beside a substitute, so its
+  <b>Solo cluster</b> means no buyers were ever shown this product beside a substitute, so its
   rank is merit only. <b>Moved</b> means demand and scarcity pulled the row off its pure-merit position.
 </p>
 
