@@ -50,6 +50,7 @@ import {
   PROMPT_VERSION,
 } from './helpers/panel.js';
 import { installCategory, migratedDatabase, type TestDatabase } from './helpers/pg.js';
+import { passthroughUrlResolver } from './helpers/url-resolver.js';
 
 let database: TestDatabase;
 let categoryId: string;
@@ -170,6 +171,7 @@ async function deliveredVerdict(input: {
 function guards(): SubmissionGuardDeps {
   return {
     listings: createPostgresListingStore(database.db),
+    resolveUrl: passthroughUrlResolver(),
     candidateCategories: () => Promise.resolve([CATEGORY]),
     schedule: NIGHTLY_REBUILD,
   };

@@ -22,6 +22,8 @@
  * | §2.4 materially changed text | `materialChange` |
  * | §2.4 one pitch per product per cycle | `checkSubmissionLocal` + `cycleAt` |
  * | §2.5 normalized URL | `normalizeSubmissionUrl`, wrapping the engine's `normalizeUrl` |
+ * | §2.5 shorteners resolved to their target | `LocalCheckInput.resolvedUrl`, from `@the-pit/fetch` via `SubmissionUrlResolver` |
+ * | §2.5 flag for review, do not hard-block | `url_redirected` / `url_unresolved` on `SubmissionClearance.flags` |
  * | `DECISIONS.md` S12 category, pre-payment | `checkSubmission` + the `SubmissionClearance` brand |
  * | `DECISIONS.md` S12 obvious mismatches blocked | `seededCategoryClassifier`, offline, no model call |
  * | `DECISIONS.md` S8 | left OPEN as `RepitchPolicy`, a required argument with no default |

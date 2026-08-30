@@ -40,7 +40,7 @@ import {
 import { FixtureDodoTransport, seededCategoryClassifier, type DodoTransport } from '@the-pit/payments';
 
 import { capabilityDeps, secureCookies, sessionKeyring } from '@/lib/auth/config';
-import { candidateCategories, listingLookup } from '@/lib/checkout/bindings';
+import { candidateCategories, listingLookup, submissionUrlResolver } from '@/lib/checkout/bindings';
 import { submitPageDepsFrom, type CheckoutHandlerDeps, type SubmitPageDeps } from '@/lib/checkout/handlers';
 import { HttpDodoTransport } from '@/lib/checkout/transport';
 import { dodoConfig, PaymentsNotWiredError } from '@/lib/payments/config';
@@ -154,6 +154,9 @@ export function checkoutDeps(): CheckoutHandlerDeps {
     },
     guards: {
       listings: listingLookup(db),
+      // `brief §2.5`: the URL a visitor typed becomes the cap key only after it
+      // has been followed to where it points.
+      resolveUrl: submissionUrlResolver,
       // `DECISIONS.md` S12's classifier. Nearest centroid over the 1028 labelled
       // products, not a model call: this runs pre-payment on an unauthenticated
       // route, so it must cost nothing to invoke and must not need a key.

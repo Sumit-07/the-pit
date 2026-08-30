@@ -29,16 +29,37 @@
  * branded and can only be produced by an accepted check, and
  * `createCheckoutSession` will not open a checkout without one.
  *
+ * ## The cap key is handed in, not derived here
+ *
+ * `brief §2.5`'s last rule — resolve link shorteners to their target and store
+ * that — needs a network, and nothing in this package performs I/O. So the
+ * resolution happens in the caller (`@the-pit/fetch`'s `resolveProductUrl`,
+ * reached through `apps/web/src/lib/ingest/product-url.ts`) and the resolved key
+ * arrives here as `LocalCheckInput.resolvedUrl`.
+ *
+ * It has to arrive that way rather than being re-derived, and that is the whole
+ * point of the field. `normalizeSubmissionUrl` is the OFFLINE key: exactly right
+ * for the browser's fast feedback on a typo, and wrong as the cap key the moment
+ * a shortener is involved. If this function re-normalized `draft.url` while the
+ * caller looked the listing up under the resolved target, the guard would consult
+ * one identity and the clearance — and with it the Dodo metadata, the job
+ * idempotency key and `products.normalized_url` — would record another. A system
+ * that disagrees with itself about which product this is would be worse than one
+ * that is merely evadable, so there is exactly one key and it is computed once,
+ * upstream of the listing lookup, because the listing is an input to this check.
+ *
+ * `urlFlags` rides along with it. `brief §2.5` says evasion via a genuinely
+ * different URL is flagged for review and not hard-blocked, so `url_redirected`
+ * (the submitted URL pointed at another host, and that host's key was adopted)
+ * and `url_unresolved` (the site could not be reached, so the offline key was
+ * used) land on the clearance's existing review flags rather than in a rejection.
+ * A refusal that IS a rejection — a private address, a scheme that is not
+ * http(s), a shortener that cannot be followed — arrives as `url_unfetchable`
+ * from the caller and never reaches this function.
+ *
  * ## What this deliberately does not do
  *
- * It does not resolve link shorteners. `brief §2.5` asks for it and
- * `packages/engine/src/ingest/normalize-url.ts` explains the deferral: it needs
- * an SSRF-guarded fetcher (redirect cap, timeout, private-address blocking) and
- * nothing here performs I/O. Until that lands, `bit.ly/x` and the URL it points
- * at are two different products to this code. That is an evasion route for the
- * per-product cap and it is open; see the Phase 3 report.
- *
- * It also does not hard-block a URL that merely resembles another
+ * It does not hard-block a URL that merely resembles another
  * (`example.com` vs `example.io`). `brief §2.5` is explicit: flag for review, do
  * not hard-block, because a false rejection on a paying customer is worse than
  * an extra run.
@@ -108,6 +129,22 @@ export interface ListingSnapshot {
 
 export type SubmissionRejection =
   | { readonly code: 'invalid_url'; readonly message: string }
+  /**
+   * The URL parses but could not be dereferenced, and falling back to its own
+   * spelling as the cap key is not safe.
+   *
+   * Two disjoint causes, both of which mean "this is not a product website":
+   * a SECURITY refusal (a private or link-local address, a scheme or port that
+   * is not a website, a redirect loop) under any host; or a KNOWN SHORTENER that
+   * could not be followed, where accepting `bit.ly/x` as its own key because
+   * bit.ly was slow is the evasion route reopening itself.
+   *
+   * An ordinary site that is merely unreachable is NOT this. It falls back to
+   * the offline key and raises `url_unresolved` on the clearance flags, because
+   * `brief §2.5` is explicit that a false rejection on a paying customer is
+   * worse than an extra run.
+   */
+  | { readonly code: 'url_unfetchable'; readonly message: string; readonly reason: string }
   | { readonly code: 'name_empty'; readonly message: string }
   | { readonly code: 'description_empty'; readonly message: string }
   | { readonly code: 'description_too_long'; readonly message: string; readonly limit: number }
@@ -149,6 +186,13 @@ declare const clearanceBrand: unique symbol;
 export interface SubmissionClearance {
   readonly [clearanceBrand]: true;
   readonly draft: SubmissionDraft;
+  /**
+   * The cap key: `LocalCheckInput.resolvedUrl` when the caller resolved one, the
+   * offline key otherwise. Everything downstream reads it from HERE and never
+   * re-derives it from `draft.url` — `createCheckoutSession`'s idempotency hash
+   * and Dodo metadata, the `submissions` row, `jobIdempotencyKey`, and the
+   * `products.normalized_url` the placement writes.
+   */
   readonly normalizedUrl: string;
   readonly descriptionHash: string;
   readonly cycle: RecalibrationCycle;
@@ -181,13 +225,32 @@ export type SubmissionCheck =
 export interface LocalCheckInput {
   readonly draft: SubmissionDraft;
   /**
-   * The listing at this draft's normalized URL, or `null`.
+   * The listing at this draft's cap key, or `null`.
    *
-   * The caller looks it up, which means the caller normalizes first —
-   * `normalizeSubmissionUrl` exists for exactly that, and this function
-   * re-normalizes rather than trusting the caller to have used it.
+   * The caller looks it up, which means the caller has already computed the key.
+   * `resolvedUrl` is how it says which key it used, and passing the listing
+   * without the key it was found under is the bug this field exists to make
+   * impossible to write by accident.
    */
   readonly existing: ListingSnapshot | null;
+  /**
+   * The cap key, already resolved — `resolveProductUrl`'s `normalizedUrl`, which
+   * is the SUBMITTED URL's target when it points at another host.
+   *
+   * Omitted only by a caller that has no network: the browser's fast-feedback
+   * check, and the tests of rules that have nothing to do with the URL. When it
+   * is omitted the offline key is used, which is right for a typo check and
+   * wrong for the cap — see the module header. Whatever value ends up here is the
+   * one the clearance carries, so it is also the one the Dodo metadata, the job
+   * idempotency key and `products.normalized_url` will carry.
+   */
+  readonly resolvedUrl?: string;
+  /**
+   * Non-blocking observations from that resolution — `url_redirected`,
+   * `url_unresolved`. Appended to the clearance's flags, per `brief §2.5`'s
+   * "flag for review, do not hard-block".
+   */
+  readonly urlFlags?: readonly string[];
   readonly now: Date;
   /**
    * Who is submitting, when we know. `null` before payment — `brief §2.1` is
@@ -220,6 +283,29 @@ export type NormalizeResult =
  * same function the seed data was keyed with, which is the only reason a paid
  * submission and a seeded row can be recognised as the same product.
  */
+/**
+ * What a resolution produced: the key to enforce the cap on, and whatever the
+ * review queue should know about how it was arrived at.
+ */
+export interface ResolvedSubmissionUrl {
+  readonly normalizedUrl: string;
+  readonly flags: readonly string[];
+}
+
+export type SubmissionUrlResolution =
+  | { readonly ok: true; readonly resolved: ResolvedSubmissionUrl }
+  | { readonly ok: false; readonly rejection: SubmissionRejection };
+
+/**
+ * The seam the network hangs off.
+ *
+ * Declared here and implemented in `apps/web` (over `@the-pit/fetch`) so this
+ * package keeps performing no I/O while the RULE — which refusals reject and
+ * which merely flag — stays next to the rules it belongs with. A test supplies a
+ * function over a `Map` and never opens a socket.
+ */
+export type SubmissionUrlResolver = (url: string) => Promise<SubmissionUrlResolution>;
+
 export function normalizeSubmissionUrl(url: string): NormalizeResult {
   try {
     return { ok: true, normalizedUrl: normalizeUrl(url) };
@@ -250,10 +336,19 @@ function rejected(rejection: SubmissionRejection): SubmissionCheck {
 export function checkSubmissionLocal(input: LocalCheckInput): SubmissionCheck {
   const { draft } = input;
 
+  // The typo gate runs on what was typed, for every caller: a resolver is not
+  // required to have been consulted, and "that is not a web address" is the
+  // sentence a browser check exists to produce.
   const normalized = normalizeSubmissionUrl(draft.url);
   if (!normalized.ok) {
     return rejected(normalized.rejection);
   }
+
+  // The KEY, though, is the caller's resolved one whenever there is one. This
+  // single line is why the clearance, the checkout metadata, the job idempotency
+  // key and `products.normalized_url` all name the same product as the listing
+  // lookup did. Re-deriving it here is the partial wiring the header warns about.
+  const capKey = input.resolvedUrl !== undefined && input.resolvedUrl !== '' ? input.resolvedUrl : normalized.normalizedUrl;
 
   if (draft.name.trim() === '') {
     return rejected({ code: 'name_empty', message: 'Give the product a name.' });
@@ -274,7 +369,7 @@ export function checkSubmissionLocal(input: LocalCheckInput): SubmissionCheck {
   const schedule = input.schedule ?? NIGHTLY_REBUILD;
   const cycle = cycleAt(input.now, schedule);
   const existing = input.existing;
-  const flags: string[] = [];
+  const flags: string[] = [...(input.urlFlags ?? [])];
 
   if (existing !== null) {
     const accountId = input.accountId ?? null;
@@ -329,7 +424,7 @@ export function checkSubmissionLocal(input: LocalCheckInput): SubmissionCheck {
     status: 'accepted',
     clearance: mintClearance({
       draft: { ...draft, description },
-      normalizedUrl: normalized.normalizedUrl,
+      normalizedUrl: capKey,
       descriptionHash: hashDescription(description, normalizeDescription),
       cycle,
       checkedAt: input.now,

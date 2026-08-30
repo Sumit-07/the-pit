@@ -72,6 +72,19 @@
  * they submitted: `handleCheckoutCreate` passes their account id, the conflict is
  * refused before the charge, and this hold never fires for them.
  *
+ * **The product's identity is NOT re-derived here.** `submission.normalizedUrl`
+ * is the resolved cap key — `brief §2.5`'s shortener resolution, run once before
+ * the buyer left for Dodo — and it is passed back into the re-check as
+ * `resolvedUrl` rather than being recomputed from `submission.url`. Two reasons,
+ * and both are about the money having already moved. Re-resolving would put a
+ * network call between a settled payment and the run it bought, so a shortener
+ * being slow at settlement could refuse a paid submission outright. And a
+ * resolution that came back DIFFERENTLY — the destination moved in the minutes
+ * the card took to authorise — would silently re-key the product, so the guard
+ * would read one board row while `jobIdempotencyKey` and the placement wrote
+ * another. The re-check is authoritative about the board, not about which product
+ * this is; that was settled, and paid for, before it got here.
+ *
  * **No attempt is consumed by any of this.** `brief §2.3` spends an attempt only
  * when a verdict is delivered, inside the delivery transaction. A refusal here
  * costs the customer their money's worth of attempts sitting on their balance,
@@ -211,6 +224,10 @@ export async function enqueuePlacementForPayment(
         // The identity Dodo verified. This is the first point in a guest checkout
         // at which the ownership rule can be evaluated at all.
         accountId: input.accountId,
+        // The cap key banked at checkout — the same string that goes into
+        // `jobIdempotencyKey` and `products.normalized_url` twenty lines below.
+        // No resolver runs on this path. See the module header.
+        resolvedUrl: submission.normalizedUrl,
       },
       deps.guards,
     );

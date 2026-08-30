@@ -78,11 +78,106 @@ describe('URL normalization (brief §2.5) keys the per-product cap', () => {
     expect(result.status === 'rejected' ? result.rejection.code : '').toBe('invalid_url');
   });
 
-  it('does not resolve link shorteners — deferred, and an open evasion route', () => {
+  it('is the OFFLINE key and does not follow a shortener — that is the caller\'s job', () => {
+    // `normalizeSubmissionUrl` performs no I/O and never will: it is the typo
+    // gate and the browser's fast feedback. A shortener resolves to its target
+    // upstream, in `@the-pit/fetch`, and arrives as `resolvedUrl` — see the
+    // describe below. Asserting the offline behaviour here is what pins the two
+    // apart, so nobody "fixes" this function by giving it a network.
     const short = normalizeSubmissionUrl('https://bit.ly/3xYz');
     const target = normalizeSubmissionUrl('https://runlet.dev');
     expect(short.ok ? short.normalizedUrl : '').toBe('bit.ly/3xYz'.toLowerCase());
     expect(short.ok ? short.normalizedUrl : '').not.toBe(target.ok ? target.normalizedUrl : '');
+  });
+});
+
+describe('brief §2.5: the resolved key is HANDED IN, and it is the one that is banked', () => {
+  it('mints the clearance from the resolved key, not from what was typed', () => {
+    // The line the whole shortener wiring turns on. `runSubmissionGuards` looked
+    // the listing up under `runlet.dev`; if this minted `bit.ly/3xyz` instead,
+    // the Dodo metadata, the job idempotency key and `products.normalized_url`
+    // would all name a different product than the cap was enforced on.
+    const result = checkSubmissionLocal({
+      draft: draft({ url: 'https://bit.ly/3xYz' }),
+      resolvedUrl: 'runlet.dev',
+      existing: null,
+      now: NOW,
+    });
+
+    expect(result.status).toBe('accepted');
+    expect(result.status === 'accepted' ? result.clearance.normalizedUrl : '').toBe('runlet.dev');
+    // And not the offline key, which is what it would have been before.
+    expect(result.status === 'accepted' ? result.clearance.normalizedUrl : '').not.toBe('bit.ly/3xyz');
+  });
+
+  it('falls back to the offline key when no caller resolved one', () => {
+    // The browser's check, and every rule-level test in this file. Omitting the
+    // field must not mean "no key".
+    const result = checkSubmissionLocal({ draft: draft(), existing: null, now: NOW });
+    expect(result.status === 'accepted' ? result.clearance.normalizedUrl : '').toBe('runlet.dev');
+  });
+
+  it('still refuses a typo, even when a caller hands it a perfectly good key', () => {
+    // The typo gate runs on what was TYPED. A resolver that somehow produced a
+    // key for `htp:/runlet` must not launder it into an accepted submission.
+    const result = checkSubmissionLocal({
+      draft: draft({ url: 'htp:/runlet' }),
+      resolvedUrl: 'runlet.dev',
+      existing: null,
+      now: NOW,
+    });
+    expect(result.status === 'rejected' ? result.rejection.code : '').toBe('invalid_url');
+  });
+
+  it('carries url_redirected and url_unresolved onto the review flags, and blocks on neither', () => {
+    // `brief §2.5`: "flag for review, do not hard-block. A false rejection on a
+    // paying customer is worse than an extra run."
+    const result = checkSubmissionLocal({
+      draft: draft({ url: 'https://bit.ly/3xYz' }),
+      resolvedUrl: 'runlet.dev',
+      urlFlags: ['url_redirected'],
+      existing: null,
+      now: NOW,
+    });
+
+    expect(result.status).toBe('accepted');
+    expect(result.status === 'accepted' ? result.clearance.flags : []).toEqual(['url_redirected']);
+  });
+
+  it('keeps the url flags alongside the ones the rules raise, rather than replacing them', () => {
+    // A seeded listing being claimed AND a redirected URL are two independent
+    // observations, and the review queue needs both.
+    const result = checkSubmissionLocal({
+      draft: draft({ url: 'https://bit.ly/3xYz', description: 'A wholly different sentence about edge deployment tooling' }),
+      resolvedUrl: 'runlet.dev',
+      urlFlags: ['url_redirected'],
+      existing: listing({ accountId: null, lastPitchedAt: null }),
+      now: NOW,
+    });
+
+    expect(result.status).toBe('accepted');
+    expect(result.status === 'accepted' ? [...result.clearance.flags].sort() : []).toEqual([
+      'claims_seeded_listing',
+      'url_redirected',
+    ]);
+  });
+
+  it('makes a shortener and its target ONE product to the cycle lock', async () => {
+    // Two submissions, two different strings, one resolved key — and the second
+    // is locked out by the first. This is the rule the cap exists to enforce,
+    // stated at the level the rules live at.
+    const existing = listing({ lastPitchedAt: THIS_CYCLE });
+
+    const viaShortener = await checkSubmission({
+      draft: draft({ url: 'https://bit.ly/3xYz' }),
+      resolvedUrl: existing.normalizedUrl,
+      existing,
+      now: NOW,
+      classifier: acceptAllClassifier,
+      candidateCategories: CATEGORIES,
+    });
+
+    expect(viaShortener.status === 'rejected' ? viaShortener.rejection.code : '').toBe('cycle_locked');
   });
 });
 

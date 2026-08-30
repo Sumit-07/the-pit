@@ -16,33 +16,34 @@
  * that is not an http(s) URL throws rather than normalizing to something
  * misleading.
  *
- * ## Shortener resolution is deferred, deliberately
+ * ## Shortener resolution happens above this function, not inside it
  *
  * `brief §2.5`'s remaining rule — "Resolve link shorteners to their target and
- * store that" — is NOT implemented here or in the engine, and the column stores
- * the shortener's own identity until it is. This is a known, accepted gap:
- * `bit.ly/abc` and the page it points at are two different values of
- * `normalized_url`, so a submitter who shortens their URL evades the per-product
- * cap.
+ * store that" — is implemented, in `@the-pit/fetch`'s `resolveProductUrl`. It is
+ * not implemented here and it never will be: it needs a network, and this
+ * function's whole value is that it is offline, deterministic, and the same one
+ * the seeded boards were keyed with.
  *
- * The reason it is deferred rather than added is that resolving it means our
- * server issuing an HTTP request to an address an untrusted user chose, which is
- * a server-side request forgery primitive unless it is built with:
+ * What `resolveProductUrl` does is follow the submitted URL behind an SSRF guard
+ * (scheme allow-list, every DNS answer checked against the private ranges and
+ * re-checked on every redirect hop, a redirect cap, a wall-clock budget, a body
+ * cap) and then apply THIS function to whichever URL won — the destination when
+ * it landed on a different host, the submitted URL when it did not. That is why a
+ * resolved shortener and a directly-typed URL produce the same string, and why
+ * only the value written into `products.normalized_url` changed: not its type,
+ * its index, or anything that reads it.
  *
- *   - a scheme allow-list (http/https only, no `file:`, `gopher:`, `data:`);
- *   - DNS resolution checked against the private ranges — 127/8, 10/8, 172.16/12,
- *     192.168/16, 169.254/16 (cloud metadata), ::1, fc00::/7 — and re-checked
- *     after every redirect, because the first hop can be public and the second
- *     internal;
- *   - a redirect cap and a total timeout;
- *   - a response size cap, since the body is never read but a slow one still
- *     holds a connection.
+ * Two consequences for anyone writing this column:
  *
- * None of that is Phase 2 work, and half of it is worse than none. `brief §2.5`
- * also softens the consequence: evasion "flag for review, do not hard-block. A
- * false rejection on a paying customer is worse than an extra run." Phase 3 owns
- * the guarded fetcher; when it lands, only the value written into this column
- * changes — not its type, its index, or anything that reads it.
+ * - On the submission path the value comes from the resolution, carried on the
+ *   `SubmissionClearance`. Calling this function on the raw URL and storing THAT
+ *   is the bug the whole wiring exists to prevent.
+ * - Rows written before the wiring hold unresolved keys.
+ *   `src/backfill/normalized-url.ts` re-resolves them; until it has run, the cap
+ *   joins only rows written after the change.
+ *
+ * Seeding is the exception and stays offline: a workbook row has no submitter to
+ * evade a cap, and `loadCategory` must not become network-bound.
  */
 
 export { normalizeUrl } from '@the-pit/engine';

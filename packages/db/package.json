@@ -20,10 +20,12 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node dist/cli/migrate.js",
-    "db:seed": "node dist/cli/seed.js"
+    "db:seed": "node dist/cli/seed.js",
+    "db:backfill-urls": "node dist/cli/backfill-urls.js"
   },
   "dependencies": {
     "@the-pit/engine": "workspace:*",
+    "@the-pit/fetch": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.9"
   },

@@ -93,6 +93,14 @@ export { MIGRATIONS_DIR, readMigrations } from './migrations.js';
 
 export { normalizeUrl } from './normalized-url.js';
 
+export type {
+  BackfillOptions,
+  BackfillReport,
+  BackfillUrlResolver,
+  NormalizedUrlChange,
+} from './backfill/normalized-url.js';
+export { backfillNormalizedUrls } from './backfill/normalized-url.js';
+
 export type { SeedInput, SeedRows, SeedSource } from './seed/build.js';
 export { buildSeedRows, SEED_APPROVER } from './seed/build.js';
 export { deterministicUuid } from './seed/ids.js';

@@ -50,13 +50,28 @@
  * would reject a founder for being too close to a description somebody else wrote
  * about them.
  *
- * ## What this does NOT do
+ * ## The argument is the RESOLVED key, and that is a contract
  *
- * It does not resolve link shorteners. `normalizeUrl` performs no I/O by design
- * (`schema/products.ts` and `packages/engine/src/ingest/normalize-url.ts` both
- * say why: it needs an SSRF-guarded fetcher), so `bit.ly/x` and the address it
- * points at are two different products to this lookup, and the per-product cap
- * does not catch that. It is the largest known evasion route and it is open.
+ * `brief §2.5`'s shortener resolution is closed, and it is closed UPSTREAM of
+ * this query — in `@the-pit/fetch`'s `resolveProductUrl`, which follows a
+ * submitted URL to its destination behind an SSRF guard and adopts that
+ * destination when it lands on a different host. `apps/web`'s
+ * `runSubmissionGuards` computes that key once and uses it for this lookup, for
+ * the `SubmissionClearance`, for `jobIdempotencyKey` and for the
+ * `products.normalized_url` the placement writes.
+ *
+ * So nothing changed here — the query still takes a normalized URL and returns
+ * the row — but what a caller may pass did. **This takes the resolved key. It
+ * must never be given `normalizeUrl(raw)`.** A caller that passes the offline key
+ * looks the product up under `bit.ly/x` while the rest of the path records the
+ * target, and a system that disagrees with itself about which product a
+ * submission is would be worse than the evadable one this replaced.
+ *
+ * Rows written before that wiring hold unresolved keys, which is why
+ * `src/backfill/normalized-url.ts` exists and must be run: until it has,
+ * `bit.ly/x` from last month and a resolved submission tonight are still two
+ * products and the cap still misses. `products_normalized_url_idx` is unchanged
+ * and still correct, and the backfill deliberately relies on it not being unique.
  */
 
 import { sql } from 'drizzle-orm';

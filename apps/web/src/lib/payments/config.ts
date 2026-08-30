@@ -37,7 +37,7 @@ import {
 } from '@the-pit/db';
 import { AttemptsLedger, seededCategoryClassifier, type DodoConfig } from '@the-pit/payments';
 
-import { candidateCategories, listingLookup } from '@/lib/checkout/bindings';
+import { candidateCategories, listingLookup, submissionUrlResolver } from '@/lib/checkout/bindings';
 import type { DodoWebhookDeps } from '@/lib/payments/webhook-handlers';
 import type { PendingSubmission, PlacementEnqueueDeps, PlacementQueue } from '@/lib/payments/enqueue';
 import { inngest, PLACEMENT_REQUESTED } from '@/lib/pipeline/inngest';
@@ -149,6 +149,9 @@ export function placementDeps(): PlacementEnqueueDeps | null {
       // the pre-payment and pre-enqueue checks start disagreeing.
       guards: {
         listings: listingLookup(db),
+        // Held, not used: this path passes the key banked at checkout. See
+        // `lib/checkout/bindings.ts`.
+        resolveUrl: submissionUrlResolver,
         classifier: seededCategoryClassifier,
         candidateCategories,
       },

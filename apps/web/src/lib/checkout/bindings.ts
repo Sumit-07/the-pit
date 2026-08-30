@@ -1,5 +1,5 @@
 /**
- * The two dependencies `brief §2.4`'s guards need that the rules themselves
+ * The three dependencies `brief §2.4`'s guards need that the rules themselves
  * cannot supply, resolved once for BOTH of the places the guards run.
  *
  * `handleCheckoutCreate` runs the guards before payment and
@@ -16,9 +16,23 @@
  */
 
 import { createPostgresListingStore, type Database } from '@the-pit/db';
+import type { SubmissionUrlResolver } from '@the-pit/payments';
 
 import { defaultBoardSource } from '@/lib/boards/source';
 import type { ListingLookup } from '@/lib/checkout/guards';
+import { resolveSubmissionUrl } from '@/lib/ingest/product-url';
+
+/**
+ * `brief §2.5`'s shortener resolution, as the guards' dependency.
+ *
+ * Pointed at here rather than imported at each config for the reason the header
+ * gives: the pre-payment check and the pre-enqueue check must ask the same
+ * question. The pre-enqueue check does not in fact call it — it passes the key
+ * banked at checkout instead, see `lib/payments/enqueue.ts` — but it holds the
+ * same binding, so a future caller that stops passing that key degrades into
+ * re-resolving rather than into a crash on a settled payment.
+ */
+export const submissionUrlResolver: SubmissionUrlResolver = resolveSubmissionUrl;
 
 /** The listing lookup, mapped onto the shape `@the-pit/payments` declares. */
 export function listingLookup(db: Database): ListingLookup {

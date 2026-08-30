@@ -59,15 +59,24 @@ export const products = pgTable(
      * URL while one is superseded. A unique index would turn both of those into
      * a 500 on the money path.
      *
-     * SHORTENER RESOLUTION IS DEFERRED. `brief §2.5` also asks for link
-     * shorteners to be resolved to their target and the target stored. Nothing in
-     * this package does that, and `normalizeUrl` performs no I/O by design: doing
-     * it needs an SSRF-guarded fetcher (redirect cap, timeout, private-address
-     * and link-local blocking, scheme allow-list) because the input is an
-     * attacker-supplied URL fetched by our server. Until that exists, a shortened
-     * URL normalizes to the shortener's own host and the cap does not catch it.
-     * Tracked as Phase 3 work; the column type and index do not change when it
-     * lands, only the value written into them.
+     * SHORTENER-RESOLVED, on the submission path. `brief §2.5` also asks for link
+     * shorteners to be resolved to their target and the target stored, and
+     * `@the-pit/fetch`'s `resolveProductUrl` does it behind an SSRF guard before
+     * `normalizeUrl` is applied — so a paid row for `bit.ly/x` holds the key of
+     * the page `bit.ly/x` points at. The column type and the index did not change
+     * when that landed; only the value written into them did.
+     *
+     * SEEDED rows are the exception and are keyed offline, from the workbook URL:
+     * a seed row has no submitter and no cap to evade, and the ingest must not
+     * become network-bound. `src/backfill/normalized-url.ts` re-resolves any row
+     * — seeded or paid — that was written before the resolution existed.
+     *
+     * MUTABLE, alone among the columns `0002_append_only_guards.sql` froze.
+     * `0007_normalized_url_is_derived.sql` took it back out of the scored
+     * identity and argues why at length: no juror sees it, nothing joins on it,
+     * and it is a FUNCTION of `url` — which stays frozen, so a rewrite can only
+     * ever re-derive the key from the same submitted address, never re-point the
+     * product at a different site.
      */
     normalizedUrl: text('normalized_url').notNull(),
 

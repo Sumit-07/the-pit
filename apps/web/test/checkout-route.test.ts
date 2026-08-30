@@ -66,6 +66,7 @@ import type { PlacementRequestedData } from '@/lib/pipeline/inngest';
 
 import { CATEGORY, CATEGORY_SLUG, CATEGORY_VERSION, makeJury, makePanel, makeProducts } from './helpers/panel.js';
 import { SEED_SIZE } from './helpers/place.js';
+import { passthroughUrlResolver } from './helpers/url-resolver.js';
 
 const ORIGIN = 'https://thepit.show';
 const PAYER = 'payer@example.com';
@@ -228,6 +229,7 @@ beforeEach(() => {
     submissions,
     guards: {
       listings,
+      resolveUrl: passthroughUrlResolver(),
       candidateCategories: () => Promise.resolve(CATEGORIES),
     },
     keyring: KEYRING,
@@ -781,7 +783,7 @@ describe('the funnel, end to end', () => {
           },
         ]),
         queue,
-        guards: { listings, candidateCategories: () => Promise.resolve(CATEGORIES) },
+        guards: { listings, resolveUrl: passthroughUrlResolver(), candidateCategories: () => Promise.resolve(CATEGORIES) },
         now: () => NOW,
       },
     };

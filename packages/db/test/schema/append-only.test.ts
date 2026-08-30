@@ -226,6 +226,45 @@ describe('the pitch that was scored is frozen', () => {
     );
   });
 
+  it('refuses to re-point the product at a different URL', async () => {
+    // `url` is what the visitor actually pitched. It is the address the audit
+    // trail is argued from, and `0007` deliberately kept it frozen while letting
+    // the DERIVED key beside it move — so a re-derivation can never become a
+    // re-pointing.
+    const categoryId = await insertCategory(database.pg, freshSlug('url'));
+    const productId = await insertProduct(database.pg, categoryId, 0);
+
+    expect(
+      await expectRejection(database.pg, `UPDATE products SET url = 'https://somewhere.else' WHERE id = $1`, [
+        productId,
+      ]),
+    ).toMatch(/is frozen/);
+  });
+
+  it('lets the DERIVED normalized_url move, because it is an index and not evidence', async () => {
+    // `0007_normalized_url_is_derived.sql` narrowed the freeze, and this is the
+    // narrowing. No juror sees this column; nothing joins on it; it is read by
+    // one query, the per-product cap's. `brief §2.5` changed the function that
+    // produces it — shorteners now resolve to their target — and a derived column
+    // frozen at a value its rule no longer produces is a stale index, not
+    // evidence. `src/backfill/normalized-url.ts` is what needs this.
+    const categoryId = await insertCategory(database.pg, freshSlug('derived'));
+    const productId = await insertProduct(database.pg, categoryId, 0, 'bit.ly/3xyzabc');
+
+    await database.pg.query(`UPDATE products SET normalized_url = $2 WHERE id = $1`, [
+      productId,
+      'ledger.example/pricing',
+    ]);
+
+    const result = await database.pg.query<{ normalized_url: string; url: string }>(
+      `SELECT normalized_url, url FROM products WHERE id = $1`,
+      [productId],
+    );
+    expect(result.rows[0]?.normalized_url).toBe('ledger.example/pricing');
+    // And the address that was pitched did not move with it.
+    expect(result.rows[0]?.url).toBe('https://example.com');
+  });
+
   it('still allows the lifecycle to move', async () => {
     // Status, placement and the seeded-listing opt-out (`brief` Part 7) describe
     // what happened to the listing, not what was judged.
