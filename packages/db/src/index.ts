@@ -64,6 +64,24 @@ export type { RankedRow } from './verdict-payload.js';
 export { verdictPayload, verdictPayloadFor, VerdictRowMissingError } from './verdict-payload.js';
 
 export type {
+  FrozenComparison,
+  FrozenMedian,
+  FrozenPeer,
+  PeerIdentity,
+  PeerIdentityResolver,
+} from './verdict-comparison.js';
+export {
+  freezeComparison,
+  jurorCut,
+  juryRoster,
+  median,
+  personaConviction,
+  personaPick,
+  withheldIdentity,
+  PEER_LIMIT,
+} from './verdict-comparison.js';
+
+export type {
   AppendOutcome,
   AttemptsStoreOptions,
   PaymentsStoreOptions,

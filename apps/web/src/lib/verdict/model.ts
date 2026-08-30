@@ -122,6 +122,70 @@ export type VerdictFloor =
       readonly clusterSize: number;
     };
 
+/**
+ * One cluster peer, as the frozen payload carries it.
+ *
+ * A figure and a label, never a scorecard: the page draws peers as recessive
+ * outlines and never quotes their jurors, so `packages/db/src/verdict-comparison.ts`
+ * freezes the arithmetic and not the sentences.
+ *
+ * `label` is a pseudonym when `anonymous` and the product's own name when not.
+ * The two are never both present — a payload carrying the real name beside the
+ * pseudonym would be an anonymity that one `JSON.parse` undoes — so this page has
+ * no way to name an anonymous peer even by accident. Both are user- or
+ * generator-written text and both are escaped at render.
+ */
+export interface VerdictPeer {
+  readonly label: string;
+  /** Chosen at submission, immutable, and frozen: a shared page never changes its mind. */
+  readonly anonymous: boolean;
+  /** The peer's own public verdict page. `null` for an anonymous peer, always. */
+  readonly slug: string | null;
+  /** Stable seed for the deterministic robot avatar. The generator is another module's. */
+  readonly avatarSeed: string;
+  readonly rank: number;
+  /** Mean points taken per answered metric, one per juror, in `jurors` order. */
+  readonly jurors: readonly (number | null)[];
+  /** First-choice conviction, one per persona, in `personas` order. */
+  readonly personas: readonly number[];
+}
+
+/**
+ * The comparison a verdict page may draw, frozen at delivery.
+ *
+ * ## Why a frozen comparison breaks no rule
+ *
+ * The rule this module opens with forbids READING a live baseline: every z-score
+ * moves on the next placement (`DECISIONS.md §1.2`), so a category median fetched
+ * at render time would make a shared link change under its reader. A baseline
+ * frozen at delivery is the opposite — it is one more permanent fact about the
+ * board that was delivered, in the same document as the rank and the timestamp,
+ * and it can no more drift than they can.
+ *
+ * ## `null` is a real answer and the page must handle it
+ *
+ * `verdicts` refuses UPDATE and is never backfilled, so every verdict delivered
+ * before this key existed carries no comparison and never will. Those pages draw
+ * no overlay. They do not draw an invented one.
+ */
+export interface VerdictComparison {
+  /** Axis order for every juror figure. The installed panel's order. */
+  readonly jurors: readonly string[];
+  /** Axis order for every persona figure. The run's own frozen roster. */
+  readonly personas: readonly string[];
+  /** The other products in this cluster. Empty for a solo cluster — 32 of 48 rows. */
+  readonly peers: readonly VerdictPeer[];
+  readonly median: {
+    readonly jurors: readonly (number | null)[];
+    readonly personas: readonly (number | null)[];
+    readonly metrics: readonly { readonly metric: string; readonly cuts: number }[];
+  };
+  /** Products the medians were taken over. A median of 3 is not a category. */
+  readonly boardSize: number;
+  /** Of those, how many faced a forced choice — the denominator of `median.personas`. */
+  readonly votedSize: number;
+}
+
 /** The cluster the product was judged inside. */
 export interface VerdictCluster {
   readonly id: string;
@@ -177,6 +241,14 @@ export interface Verdict {
   readonly metrics: readonly VerdictMetric[];
   readonly cluster: VerdictCluster;
   readonly floor: VerdictFloor;
+  /**
+   * The frozen comparison, or `null` when this verdict has none to draw.
+   *
+   * `null` in two cases, and the page must not tell them apart by inventing
+   * something: a verdict delivered before the key existed, and a comparison the
+   * payload carries in a shape this parser cannot read.
+   */
+  readonly comparison: VerdictComparison | null;
 
   readonly weights: RankingWeights;
   readonly versions: {
@@ -354,6 +426,121 @@ function parseFloor(
   };
 }
 
+// --- the frozen comparison ------------------------------------------------------
+
+/**
+ * A finite number, or `null`. Used where the frozen figure is legitimately absent
+ * — a juror who answered no metric, a median over an empty sample.
+ */
+function optionalNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function stringList(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const out: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'string' || entry === '') return null;
+    out.push(entry);
+  }
+  return out;
+}
+
+/** A fixed-length row of optional numbers. `null` when the length is wrong. */
+function numberRow(value: unknown, length: number): (number | null)[] | null {
+  if (!Array.isArray(value) || value.length !== length) return null;
+  return value.map(optionalNumber);
+}
+
+/**
+ * Read the comparison, or decide there is not one.
+ *
+ * ## Why this returns `null` where the rest of this module throws
+ *
+ * Everything else here throws on a malformed payload, because a verdict page with
+ * a missing rank or an unreadable scorecard is not a verdict and must fail loudly
+ * — it is the record a dispute is argued from.
+ *
+ * The comparison is not that. It is an overlay on two figures, and the page it
+ * sits on is a permanent public URL somebody paid for. A comparison whose shape
+ * this parser cannot read is a bug in the freezer, and the right response to it is
+ * to draw no overlay — not to take down every delivered verdict in the category
+ * until the bug is fixed. So a comparison that is absent and a comparison that is
+ * unreadable produce the same page, which is the page without an overlay, and
+ * neither produces an invented one.
+ *
+ * The length checks are the ones that matter: a peer's figures are positional
+ * against the roster, so a row of the wrong length would silently plot one juror's
+ * number on another juror's axis.
+ */
+export function parseComparison(raw: unknown): VerdictComparison | null {
+  if (!isRecord(raw)) return null;
+
+  const jurors = stringList(raw['jurors']);
+  const personas = stringList(raw['personas']);
+  if (jurors === null || personas === null) return null;
+
+  const medianRaw = raw['median'];
+  if (!isRecord(medianRaw)) return null;
+  const medianJurors = numberRow(medianRaw['jurors'], jurors.length);
+  const medianPersonas = numberRow(medianRaw['personas'], personas.length);
+  if (medianJurors === null || medianPersonas === null) return null;
+
+  if (!Array.isArray(medianRaw['metrics'])) return null;
+  const medianMetrics: { metric: string; cuts: number }[] = [];
+  for (const entry of medianRaw['metrics']) {
+    if (!isRecord(entry)) return null;
+    const metric = entry['metric'];
+    const cuts = optionalNumber(entry['cuts']);
+    if (typeof metric !== 'string' || metric === '' || cuts === null) return null;
+    medianMetrics.push({ metric, cuts });
+  }
+
+  if (!Array.isArray(raw['peers'])) return null;
+  const peers: VerdictPeer[] = [];
+  for (const entry of raw['peers']) {
+    if (!isRecord(entry)) return null;
+    const label = entry['label'];
+    const rank = optionalNumber(entry['rank']);
+    const anonymous = entry['anonymous'];
+    const slug = entry['slug'];
+    const avatarSeed = entry['avatarSeed'];
+    const peerJurors = numberRow(entry['jurors'], jurors.length);
+    const peerPersonas = numberRow(entry['personas'], personas.length);
+    if (typeof label !== 'string' || label === '' || rank === null) return null;
+    if (typeof anonymous !== 'boolean' || typeof avatarSeed !== 'string') return null;
+    if (slug !== null && (typeof slug !== 'string' || slug === '')) return null;
+    if (peerJurors === null || peerPersonas === null) return null;
+    // A peer's conviction is never absent: `personaConviction` returns 0 for a
+    // buyer who did not name it, which is a fact and not a gap.
+    if (peerPersonas.some((value) => value === null)) return null;
+    peers.push({
+      label,
+      anonymous,
+      // The last line of defence: an anonymous peer never gets a link out of this
+      // parser, whatever the payload says. A link to its verdict page is its name.
+      slug: anonymous ? null : slug,
+      avatarSeed,
+      rank,
+      jurors: peerJurors,
+      personas: peerPersonas as number[],
+    });
+  }
+
+  const boardSize = optionalNumber(raw['boardSize']);
+  const votedSize = optionalNumber(raw['votedSize']);
+  if (boardSize === null || votedSize === null) return null;
+
+  return {
+    jurors,
+    personas,
+    peers,
+    median: { jurors: medianJurors, personas: medianPersonas, metrics: medianMetrics },
+    boardSize,
+    votedSize,
+  };
+}
+
 /**
  * Read one frozen verdict.
  *
@@ -430,6 +617,7 @@ export function parseVerdict(row: StoredVerdict): Verdict {
     metrics,
     cluster,
     floor: parseFloor(slug, verdict, cluster, payload),
+    comparison: parseComparison(payload['comparison']),
 
     weights: {
       merit: requireNumber(slug, weights['merit'], 'weights.merit'),

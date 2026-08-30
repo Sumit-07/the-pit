@@ -20,26 +20,36 @@
  * ## What is on it, and why each figure is the figure it is
  *
  * `brief` Part 6: "lead with deductions and reasons, not composites". A founder
- * paying for this wants four answers — *who cut me, where, how badly, did the
- * panel agree, did any buyer want this* — so the page is those four answers in
- * that order, and every mark on it is a deduction somebody wrote a reason for.
- * `charts.ts` derives every plotted number and carries the form argument for each
- * (including why the radar the founder asked for lost to a sorted bar). In short:
+ * paying for this wants to know *who hurt me, who wanted me, where exactly, how
+ * badly, and did the panel agree* — so the page is those answers in that order,
+ * and every mark on it is a deduction somebody wrote a reason for. `charts.ts`
+ * derives every plotted number and carries the form argument for each.
  *
  * - **The health meter**, on the card. Part-to-whole: the hundred points this
  *   product walked in with, the `--held` head it walked out with, and each
  *   metric's exact `--cut` share of what came off.
+ * - **Two radials, side by side.** Six jurors and six buyers on fixed axes, this
+ *   product's shape against its frozen cluster peers and the category median.
+ *   They answer *who hurt me* and *who wanted me* as a shape comparison, which is
+ *   the one question six bars answer worse.
  * - **The juror × metric heatmap.** Magnitude across two categorical dimensions,
- *   so a sequential ramp on the one hue the theme has. It answers "who cut me and
- *   where" in one glance and every cell carries the juror's own sentence.
- * - **Loss per metric with the cross-juror spread**, on one shared 0–100 axis.
- *   Whether the six AGREED you were weak is different information from being
- *   weak, and it is the most actionable line on the page.
+ *   so a sequential ramp on the one hue the theme has. It answers *where*, and
+ *   every cell carries the juror's own sentence.
+ * - **Loss per metric with the cross-juror spread**, on one shared 0–100 axis,
+ *   now with the frozen category median as a tick on the same axis.
  * - **The Floor**, as a conviction bar per buyer who named you — or, for the
  *   majority of products, the stated fact that no buyer was ever shown it.
  *
- * The composites — merit, demand, the blended core — stay where `brief` Part 6
- * puts them: five small lines on the card, in mono, at 14px.
+ * ## Charts lead; the prose sits under them
+ *
+ * The founder's note was "too much text on the verdict page… we can always show
+ * the texts below that". So the figures come first and the reading matter follows
+ * them: the full ledger — every deduction, its sentence and the juror who wrote
+ * it — is now the LAST section rather than the middle one. It is not shortened
+ * and nothing is hidden behind a control. `brief` Part 6's rule that deductions
+ * lead over composites is satisfied by what the charts are ABOUT: a radial of who
+ * cut you, a heatmap cell carrying its reason. The composites stay where Part 6
+ * puts them — small lines on the card, in mono, at 14px.
  *
  * ## Where the design comes from
  *
@@ -87,13 +97,17 @@ import { HEALTH_NOTE } from '@/lib/boards/copy';
 import { BASE, FONT_LINKS, TOKENS } from '@/lib/theme';
 
 import {
+  buyerRadial,
   CUT_RAMP,
   cutMatrix,
   demandChart,
+  juryRadial,
   lossBars,
   rampLabel,
   type CutMatrix,
   type MatrixCell,
+  type Radial,
+  type RadialSeries,
 } from './charts';
 import type { Verdict, VerdictDeduction, VerdictMetric } from './model';
 
@@ -383,6 +397,122 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
 .mxkey i.k0{background:rgb(var(--ink-c) / .05)}
 .mxkey i.ksub{background:transparent;border:1px dashed rgb(var(--ink-c) / .30)}
 
+/* ---------- the two radials ---------- */
+/*
+ * Emphasis, not a categorical palette. choosing-a-form.md: "one series is the
+ * point, the rest are context -> highlight one, gray the rest -> 1 hue + gray".
+ * So there is exactly ONE hue per chart — --cut on the jury, --held on the buyers
+ * — and every context shape is the same de-emphasis grey, told apart by line
+ * style, by the legend, and by the table twin underneath.
+ *
+ * The grey is rgb(--ink-c / .36), which composites to #5F5954 over the --sunk
+ * well. Run through the data-viz skill's validator against #1a1610 it separates
+ * from both hues on every check that governs an emphasis chart: --cut at dE 27.3
+ * normal / 14.0 CVD, --held at dE 19.1 / 16.0, both far above the 8 target. Its
+ * contrast against the surface is 2.61:1, a WARN whose stated obligation is
+ * "visible labels or a table view" — this chart ships both. It fails the
+ * categorical lightness band and the chroma floor on purpose: those checks are
+ * scoped to categorical palettes, and a de-emphasis grey that passed the chroma
+ * floor would be a fifth colour rather than context.
+ */
+.rgrid{display:grid;gap:14px;grid-template-columns:1fr}
+@media (min-width:760px){.rgrid{grid-template-columns:1fr 1fr}}
+.rfig{margin:0}
+.rtitle{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--dimmer);margin-bottom:9px}
+.rwrap{display:block;width:100%}
+.rwrap svg{display:block;width:100%;height:auto}
+/* Gridlines: solid hairlines one step off the surface, never dashed. */
+.rring{fill:none;stroke:rgb(var(--ink-c) / .13);stroke-width:1}
+.rring.rout{stroke:rgb(var(--ink-c) / .22)}
+/*
+ * The spokes are fainter than the rings, and that is not taste. A buyer series is
+ * mostly zeros with one or two spikes, so its polygon runs from the centre out
+ * along a single axis and back — the same line a spoke draws. At equal weight the
+ * reader cannot tell a conviction of 90 from the grid. The chart's own marks win.
+ */
+.rspoke{fill:none;stroke:rgb(var(--ink-c) / .07);stroke-width:1}
+.rax{font-family:var(--mono);font-size:8.4px;letter-spacing:.05em;text-transform:uppercase;
+  fill:var(--dimmer)}
+/* Ring numbers cross the shapes, so they are painted stroke-first in the well's
+   own colour: a halo of the surface rather than a box drawn around a label. */
+.rtick{font-family:var(--mono);font-size:7.6px;fill:var(--faint);
+  stroke:var(--sunk);stroke-width:2.6;paint-order:stroke;stroke-linejoin:round}
+.rax .rv{fill:var(--ink);font-weight:600}
+.rax.rmk .rv{fill:var(--dimmer);font-weight:500}
+/* The context shapes: one grey, three line styles. No fill — the filled polygon
+   is the emphasis series and nothing else on the chart may claim that weight. */
+.rp{fill:none;stroke:rgb(var(--ink-c) / .36);stroke-width:1.6;
+  stroke-linejoin:round;vector-effect:non-scaling-stroke}
+/* A context vertex, drawn only where the value is above zero: it is what tells a
+   spike apart from a spoke. Hollow, so it never competes with the filled self. */
+.rpdot{fill:var(--sunk);stroke:rgb(var(--ink-c) / .36);stroke-width:1.4}
+.rp.rp2{stroke-dasharray:6 3}
+.rp.rp3{stroke-dasharray:2 3}
+.rp.rp4{stroke-dasharray:8 3 2 3}
+.rp.rmed{stroke-dasharray:1 3;stroke-linecap:round;stroke-width:1.6}
+.rself{stroke-width:2;stroke-linejoin:round}
+.rdot{stroke:var(--sunk);stroke-width:2}
+.rj .rself{fill:rgb(var(--cut-c) / .17);stroke:var(--cut)}
+.rj .rdot{fill:var(--cut)}
+.rb .rself{fill:rgb(var(--held-c) / .17);stroke:var(--held)}
+.rb .rdot{fill:var(--held)}
+.rkey{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;
+  font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.02em}
+.rkey span{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.rkey em{font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:19ch}
+.rkey i{display:inline-block;width:14px;height:0;flex:0 0 auto;
+  border-top:2px solid rgb(var(--ink-c) / .36)}
+.rkey i.rp2{border-top-style:dashed}
+.rkey i.rp3{border-top-style:dotted}
+.rkey i.rp4{border-top-style:double;height:3px}
+.rkey i.rmed{border-top-style:dotted}
+/*
+ * Who each outline is, revealed only if the reader asks for it. A shape is a
+ * summary; a name beside it is a second product's verdict leaking onto this page,
+ * so the default labelling is positional and the identities sit behind a control.
+ */
+.rwho{margin-top:9px}
+.rwho summary{font-family:var(--mono);font-size:10px;color:var(--dimmer);cursor:pointer;
+  padding:4px 0;list-style:none;display:inline-flex;align-items:center;gap:6px}
+.rwho summary::-webkit-details-marker{display:none}
+.rwho summary::before{content:"+";font-weight:600}
+.rwho[open] summary::before{content:"\\2212"}
+.rwho summary:hover{color:var(--ink)}
+.rwho ul{list-style:none;margin-top:5px;display:grid;gap:4px}
+.rwho li{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10.5px;
+  color:var(--dim);min-width:0}
+.rwho b{font-weight:500;color:var(--dimmer);white-space:nowrap}
+.rwho em{font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rwho a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line)}
+.rwho a:hover{border-bottom-color:var(--ink)}
+/*
+ * The avatar seam. An anonymous peer gets a deterministic robot drawn from its
+ * data-avatar-seed attribute; that generator is another module's and this page
+ * does not write one. Until it lands the slot holds a neutral placeholder, which
+ * is why it is a sized box and not an empty span.
+ */
+.ravatar{display:inline-block;width:14px;height:14px;flex:0 0 auto;background:var(--card);
+  border:1px solid var(--line)}
+.rj .rkey i.rself{border-top-color:var(--cut);height:8px;border:0;background:rgb(var(--cut-c) / .17);
+  box-shadow:inset 0 0 0 2px var(--cut)}
+.rb .rkey i.rself{border-top-color:var(--held);height:8px;border:0;background:rgb(var(--held-c) / .17);
+  box-shadow:inset 0 0 0 2px var(--held)}
+/*
+ * Progressive enhancement, and nothing depends on it: focusing or hovering a
+ * legend entry pushes the other shapes back so one comparison can be isolated
+ * without a script. A browser with no :has() support simply does not dim.
+ */
+.rfig:has(.rk1:hover) :is(.rp,.rpdot):not(.rk1),.rfig:has(.rk1:focus-visible) :is(.rp,.rpdot):not(.rk1),
+.rfig:has(.rk2:hover) :is(.rp,.rpdot):not(.rk2),.rfig:has(.rk2:focus-visible) :is(.rp,.rpdot):not(.rk2),
+.rfig:has(.rk3:hover) :is(.rp,.rpdot):not(.rk3),.rfig:has(.rk3:focus-visible) :is(.rp,.rpdot):not(.rk3),
+.rfig:has(.rk4:hover) :is(.rp,.rpdot):not(.rk4),.rfig:has(.rk4:focus-visible) :is(.rp,.rpdot):not(.rk4)
+  {opacity:.14}
+.rkey span[tabindex]{cursor:default;border-radius:2px}
+.rkey span[tabindex]:focus-visible{outline:2px solid var(--cut);outline-offset:3px}
+.rp,.rpdot,.rself{transition:opacity .18s ease}
+@media (prefers-reduced-motion:reduce){.rp,.rpdot,.rself{transition:none}}
+
 /* ---------- the table view: identity is never colour alone ---------- */
 .tv{margin-top:12px}
 .tv summary{font-family:var(--mono);font-size:11px;color:var(--dim);cursor:pointer;
@@ -420,6 +550,11 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
   background-image:repeating-linear-gradient(90deg,transparent 0,transparent calc(25% - 1px),
     rgb(var(--ink-c) / .11) calc(25% - 1px),rgb(var(--ink-c) / .11) 25%)}
 .lbfill{position:absolute;left:0;top:0;bottom:0;background:var(--cut)}
+/* The category median, on the SAME axis as the bar it qualifies — a reference
+   value, not a second measure, so it is a tick and never a second track. Grey,
+   because it is context: the emphasis series is the bar. */
+.lbmed{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;
+  background:rgb(var(--ink-c) / .36)}
 /* The whisker is uncertainty, not loss, so it is ink and never the accent. */
 .lbwhisk{position:absolute;top:50%;height:1px;margin-top:-1px;background:rgb(var(--ink-c) / .90)}
 .lbwhisk::before,.lbwhisk::after{content:"";position:absolute;top:-4px;width:1px;height:9px;
@@ -560,6 +695,485 @@ function healthMeter(verdict: Verdict): string {
 /** A width, as a percentage string with no floating-point tail. */
 function pct(value: number): string {
   return `${Math.max(0, Math.min(100, value)).toFixed(2)}%`;
+}
+
+// --- the two radials -------------------------------------------------------------
+
+/**
+ * The geometry, in viewBox units. One constant block so the labels and the plot
+ * cannot drift apart.
+ *
+ * The box is wider than it is tall because the widest thing on the chart is a
+ * juror's name, not the polygon. With six axes starting at the top, no axis sits
+ * at 0° or 180°, so the furthest a label reaches horizontally is `R * cos 30°`
+ * plus its own width — which is what `W` is sized for.
+ */
+const RAD = { W: 336, H: 310, CX: 168, CY: 146, R: 86 } as const;
+
+/**
+ * Characters per label line, and how many lines a label may take.
+ *
+ * Measured, not guessed: the labels are IBM Plex Mono at 8.4px, whose advance is
+ * 0.6em, so a line of `AXIS_CHARS` costs `AXIS_CHARS * 5.04px`. The tightest
+ * position is an axis at 30° off horizontal, where the label starts at
+ * `CX + R * cos 30 + 12` and has `W - that` to grow into — about 74px, or 14
+ * characters. Twelve leaves a margin for the wider glyphs.
+ */
+const AXIS_CHARS = 12;
+const AXIS_LINES = 3;
+
+/** Axis `i` of `n`, at value `v` (0–100), as a viewBox point. */
+function radialPoint(index: number, count: number, value: number): [number, number] {
+  const angle = ((-90 + (360 / count) * index) * Math.PI) / 180;
+  // Radius is LINEAR in the value. Area is not, and cannot be made to be, which
+  // is why no number on this chart is read off the polygon: every axis prints its
+  // own figure and the table below repeats all of them.
+  const radius = (Math.max(0, Math.min(100, value)) / 100) * RAD.R;
+  return [RAD.CX + radius * Math.cos(angle), RAD.CY + radius * Math.sin(angle)];
+}
+
+/** `12.3456` -> `12.35`, for an SVG coordinate. */
+function c(value: number): string {
+  return value.toFixed(2);
+}
+
+/**
+ * A series as a closed polygon.
+ *
+ * A `null` value is plotted at the centre and gets no vertex dot. That is the
+ * heatmap's rule restated: a juror who returned nothing is not a juror who took
+ * nothing, so the shape passes through zero but nothing is drawn claiming they
+ * scored it, and the axis label says `no answer` instead of a number.
+ */
+function radialPath(values: readonly (number | null)[]): string {
+  return values
+    .map((value, index) => {
+      const [x, y] = radialPoint(index, values.length, value ?? 0);
+      return `${index === 0 ? 'M' : 'L'}${c(x)} ${c(y)}`;
+    })
+    .join(' ')
+    .concat(' Z');
+}
+
+/**
+ * `The Terminal Minimalist` -> lines that fit beside the plot.
+ *
+ * Greedy wrap on whole words, then a hard break for a single word longer than a
+ * line — a juror role or a buyer's name is not something this page may abbreviate
+ * by dropping the end of it silently, so an over-long word is broken rather than
+ * cut, and only a label that overruns `AXIS_LINES` is truncated with an ellipsis
+ * the reader can see.
+ */
+export function wrapAxisLabel(text: string): string[] {
+  const lines: string[] = [];
+  let line = '';
+  const flush = (): void => {
+    if (line !== '') lines.push(line);
+    line = '';
+  };
+
+  // A hyphen is a break opportunity, so `The Self-Experimenter` wraps to
+  // `Self-` / `Experimenter` rather than being chopped mid-syllable by the hard
+  // break below. The lookbehind keeps the hyphen on the line it belongs to.
+  for (const word of text.split(/(?<=-)|\s+/).filter((part) => part !== '')) {
+    const glue = line.endsWith('-') ? '' : ' ';
+    if (line === '') line = word;
+    else if (`${line}${glue}${word}`.length <= AXIS_CHARS) line = `${line}${glue}${word}`;
+    else {
+      flush();
+      line = word;
+    }
+    while (line.length > AXIS_CHARS) {
+      lines.push(line.slice(0, AXIS_CHARS));
+      line = line.slice(AXIS_CHARS);
+    }
+  }
+  flush();
+
+  if (lines.length <= AXIS_LINES) return lines.length === 0 ? [''] : lines;
+  const kept = lines.slice(0, AXIS_LINES);
+  kept[AXIS_LINES - 1] = `${(kept[AXIS_LINES - 1] as string).slice(0, AXIS_CHARS - 1)}…`;
+  return kept;
+}
+
+/** The class that carries a context series' line style. Peers cycle, the median is fixed. */
+const PEER_STYLES = ['rp1', 'rp2', 'rp3', 'rp4'] as const;
+
+function contextClass(series: RadialSeries, peerIndex: number): string {
+  if (series.role === 'median') return 'rmed';
+  return PEER_STYLES[Math.min(peerIndex, PEER_STYLES.length - 1)] as string;
+}
+
+/**
+ * What the legend calls a context shape by default.
+ *
+ * Positional, and deliberately so. The founder's rule is that comparing against a
+ * peer must not publish that peer's verdict on your page, and a name in a legend
+ * is the beginning of that. A shape is a summary and stays one; who each outline
+ * belongs to is one control away, in `identityList` below.
+ */
+function contextLabel(series: RadialSeries, peerIndex: number): string {
+  return series.role === 'median' ? 'Category median' : `Peer ${peerIndex + 1}`;
+}
+
+/**
+ * Who each outline is, once the reader asks.
+ *
+ * An anonymous peer shows its pseudonym beside the avatar slot and links
+ * nowhere — a link to its verdict page carries the name it withheld. A named peer
+ * links to its own public page, which is already public.
+ *
+ * The avatar itself is NOT drawn here. `data-avatar-seed` is the seam the
+ * deterministic robot generator reads; this page reserves the box and stops.
+ */
+function identityList(context: readonly { entry: RadialSeries; style: string; label: string }[], origin: string): string {
+  const peers = context.filter(({ entry }) => entry.role === 'peer');
+  if (peers.length === 0) return '';
+
+  const items = peers
+    .map(({ entry, label }) => {
+      const who =
+        entry.anonymous === false && typeof entry.slug === 'string' && entry.slug !== ''
+          ? `<a href="${escapeHtml(origin)}/v/${encodeURIComponent(entry.slug)}">${escapeHtml(entry.label)}</a>`
+          : `<em title="${escapeHtml(entry.label)}">${escapeHtml(entry.label)}</em>`;
+      const avatar =
+        entry.anonymous === true
+          ? `<span class="ravatar" data-avatar-seed="${escapeHtml(entry.avatarSeed ?? '')}" aria-hidden="true"></span>`
+          : '';
+      return `<li>${avatar}<b>${escapeHtml(label)}</b>${who}</li>`;
+    })
+    .join('');
+
+  return [
+    '<details class="rwho">',
+    `<summary>Which outline is which (${peers.length})</summary>`,
+    `<ul>${items}</ul>`,
+    '<p class="figcap">A product chooses at submission whether to be named. An anonymous one keeps every ',
+    'cut and every reason public and withholds only its name and its address.</p>',
+    '</details>',
+  ].join('');
+}
+
+/**
+ * The table twin: every series, on every axis, as numbers.
+ *
+ * Required rather than optional. `anti-patterns.md` treats a colour-only encoding
+ * on a continuous scale as a defect, and a radial adds a second one — identity by
+ * SHAPE. This table is the answer to both: it survives greyscale, a screen reader
+ * and a reader who wants to compare two numbers without tracing a polygon, and
+ * `test/verdict-radial.test.ts` asserts it carries the same figures the shapes do.
+ */
+function radialTable(
+  radial: Radial,
+  title: string,
+  columns: readonly { readonly entry: RadialSeries; readonly label: string }[],
+): string {
+  const series = [radial.self, ...radial.context];
+  // The same positional labels the legend uses. The table is the twin of the
+  // chart, so naming a peer here that the chart declines to name would put the
+  // identity back on the page through the accessible door.
+  const head = [radial.self.label, ...columns.map(({ label }) => label)]
+    .map((label) => `<th scope="col">${escapeHtml(label)}</th>`)
+    .join('');
+
+  const body = radial.axes
+    .map((axis, index) => {
+      const cells = series
+        .map((entry) => {
+          const value = entry.values[index];
+          return `<td>${value === null || value === undefined ? '&mdash;' : n1(value)}</td>`;
+        })
+        .join('');
+      const mark = radial.marks[index];
+      return (
+        `<tr><th scope="row">${escapeHtml(axis)}${mark === null || mark === undefined ? '' : ` (${escapeHtml(mark)})`}</th>` +
+        `${cells}</tr>`
+      );
+    })
+    .join('');
+
+  return [
+    // `tv rtv`, not bare `tv`: the heatmap's table twin is the one that answers
+    // to `<details class="tv">`, and `test/verdict-charts.test.ts` reaches for it
+    // by that selector. A second table under the same exact class would have made
+    // that test silently assert about this one instead.
+    '<details class="tv rtv">',
+    '<summary>The same numbers, as a table</summary>',
+    '<div class="tvscroll">',
+    '<table>',
+    `<caption>${escapeHtml(title)} &mdash; ${escapeHtml(radial.unit)}.</caption>`,
+    `<thead><tr><th scope="col">Axis</th>${head}</tr></thead>`,
+    `<tbody>${body}</tbody>`,
+    '</table>',
+    '</div>',
+    '</details>',
+  ].join('');
+}
+
+/**
+ * One radial: this product's shape, its cluster peers', and the category's.
+ *
+ * ## Why this is a radial and not six more bars
+ *
+ * Because the question is a SHAPE question. "Did the same juror who hurt me hurt
+ * the thing I am being compared to" is answered by two polygons dented in the same
+ * place, and six pairs of bars answer it only after the reader has done the
+ * pairing themselves. The previous pass on this page was right that a radial with
+ * nothing overlaid is a worse bar chart; what changed is that there is now
+ * something to overlay, frozen at delivery (`charts.ts` carries the full argument).
+ *
+ * ## What is done about the two objections that still stand
+ *
+ * Area grows as the square of the radius, so no magnitude is read off the
+ * polygon: every axis prints its own value beside its own name, the rings are
+ * labelled, and the table twin carries every series on every axis. Axis order is
+ * not arbitrary — it is the installed panel's order, frozen in the payload, and
+ * identical for every shape on the chart.
+ */
+function radialFigure(
+  radial: Radial,
+  kind: 'jury' | 'buyers',
+  title: string,
+  caption: string,
+  origin: string,
+): string {
+  const count = radial.axes.length;
+  const series = [radial.self, ...radial.context];
+
+  const rings = [25, 50, 75, 100]
+    .map((step) => {
+      const points = radial.axes
+        .map((_, index) => radialPoint(index, count, step).map(c).join(','))
+        .join(' ');
+      return `<polygon class="rring${step === 100 ? ' rout' : ''}" points="${points}"></polygon>`;
+    })
+    .join('');
+
+  const spokes = radial.axes
+    .map((_, index) => {
+      const [x, y] = radialPoint(index, count, 100);
+      return `<line class="rspoke" x1="${c(RAD.CX)}" y1="${c(RAD.CY)}" x2="${c(x)}" y2="${c(y)}"></line>`;
+    })
+    .join('');
+
+  // The rings need numbers or the reader has no scale to hang a shape on. They
+  // sit on the vertical spoke and are painted stroke-first in the well's own
+  // colour, so a polygon crossing underneath does not eat them. `100` is left
+  // off: it would land on the outer ring under the top axis's own figure, and
+  // the outer ring is the one value the caption already states.
+  const ticks = [25, 50, 75]
+    .map((step) => {
+      const [, y] = radialPoint(0, count, step);
+      return `<text class="rtick" x="${c(RAD.CX + 4)}" y="${c(y + 3)}">${step}</text>`;
+    })
+    .join('');
+
+  // One pass fixes each context series' line style, its positional label and its
+  // highlight key, so the legend swatch, the table column and the shape they name
+  // cannot drift apart.
+  let peerIndex = -1;
+  const context = radial.context.map((entry, index) => {
+    if (entry.role === 'peer') peerIndex += 1;
+    return {
+      entry,
+      style: contextClass(entry, peerIndex),
+      label: contextLabel(entry, peerIndex),
+      key: `rk${index + 1}`,
+    };
+  });
+
+  const shapes = context
+    .map(({ entry, style, key }) => {
+      const marks = entry.values
+        .map((value, index) => {
+          if ((value ?? 0) <= 0) return '';
+          const [x, y] = radialPoint(index, count, value as number);
+          return `<circle class="rpdot ${key}" cx="${c(x)}" cy="${c(y)}" r="2.6"></circle>`;
+        })
+        .join('');
+      return `<path class="rp ${style} ${key}" d="${radialPath(entry.values)}"></path>${marks}`;
+    })
+    .join('');
+
+  const dots = radial.self.values
+    .map((value, index) => {
+      if (value === null) return '';
+      const [x, y] = radialPoint(index, count, value);
+      return `<circle class="rdot" cx="${c(x)}" cy="${c(y)}" r="4"></circle>`;
+    })
+    .join('');
+
+  // Labels sit outside the outer ring, anchored by which side of the chart their
+  // axis is on, so a long juror name grows away from the plot rather than over it.
+  const labels = radial.axes
+    .map((axis, index) => {
+      const [ax, ay] = radialPoint(index, count, 100);
+      const dx = ax - RAD.CX;
+      const dy = ay - RAD.CY;
+      const anchor = Math.abs(dx) < 1 ? 'middle' : dx > 0 ? 'start' : 'end';
+      const x = RAD.CX + dx * 1.13;
+      const y = RAD.CY + dy * 1.13 + (Math.abs(dx) < 1 ? (dy < 0 ? -12 : 16) : 0);
+      const lines = wrapAxisLabel(axis);
+      const value = radial.self.values[index];
+      const mark = radial.marks[index];
+      const figure =
+        mark === 'no answer' || value === null || value === undefined
+          ? 'no answer'
+          : mark === '2nd choice'
+            ? `0 · 2nd choice`
+            : n1(value);
+      const tspans = lines
+        .map((line, lineIndex) => `<tspan x="${c(x)}" dy="${lineIndex === 0 ? 0 : 9.6}">${escapeHtml(line)}</tspan>`)
+        .join('');
+      return (
+        `<text class="rax${mark === null ? '' : ' rmk'}" x="${c(x)}" y="${c(y - (lines.length - 1) * 4.8)}" ` +
+        `text-anchor="${anchor}">${tspans}` +
+        `<tspan class="rv" x="${c(x)}" dy="10.4">${escapeHtml(figure)}</tspan></text>`
+      );
+    })
+    .join('');
+
+  const legend = [
+    `<span><i class="rself"></i><em title="${escapeHtml(radial.self.label)}">${escapeHtml(radial.self.label)}</em></span>`,
+    ...context.map(
+      ({ style, label, key }) =>
+        `<span tabindex="0" class="${key}"><i class="${style}"></i>` +
+        `<em>${escapeHtml(label)}</em></span>`,
+    ),
+  ].join('');
+
+  // A short label and a pointer to the table, rather than twenty-four numbers
+  // read aloud in a sentence. `anti-patterns.md` wants every value reachable
+  // without the graphic, and the table twin below is where they are reachable.
+  const described =
+    `${title}: ${radial.self.label} on ${count} axes` +
+    (context.length === 0
+      ? ', with nothing overlaid'
+      : `, overlaid with ${context.map(({ label }) => label).join(' and ')}`) +
+    '. Every figure is in the table below this chart.';
+
+  return [
+    `<figure class="rfig ${kind === 'jury' ? 'rj' : 'rb'}">`,
+    `<figcaption class="rtitle">${escapeHtml(title)}</figcaption>`,
+    '<div class="well2">',
+    '<span class="rwrap">',
+    `<svg viewBox="0 0 ${RAD.W} ${RAD.H}" role="img" aria-label="${escapeHtml(described)}">`,
+    rings,
+    spokes,
+    ticks,
+    shapes,
+    `<path class="rp rself" d="${radialPath(radial.self.values)}"></path>`,
+    dots,
+    labels,
+    '</svg>',
+    '</span>',
+    `<div class="rkey">${legend}</div>`,
+    identityList(context, origin),
+    '</div>',
+    `<p class="figcap">${caption}</p>`,
+    radialTable(radial, title, context),
+    '</figure>',
+  ].join('');
+}
+
+/**
+ * Both radials, side by side, and the sentence that says what they compare to.
+ *
+ * The three states this has to render honestly:
+ *
+ * - **Peers.** The comparison the founder asked for. The overlay is the other
+ *   products in this product's own cluster.
+ * - **The category.** No peers exist — 32 of 48 Developer Tools products and 26
+ *   of 44 Health & Fitness products are a cluster of one — so the only baseline
+ *   is the category's own middle, and the caption names it as the category rather
+ *   than letting a reader take it for a rival.
+ * - **Neither.** The verdict predates the frozen comparison. `verdicts` refuses
+ *   UPDATE and is never backfilled, so those pages draw the shape alone. No
+ *   overlay is invented for them, and the caption does not pretend one is missing.
+ */
+function radialsSection(verdict: Verdict, origin: string): string {
+  const labels = panelLabels(verdict);
+  const jury = juryRadial(verdict);
+  const buyers = buyerRadial(verdict);
+  if (jury === null && buyers === null) return '';
+
+  /**
+   * What the caption may claim, derived from the shapes that are actually on the
+   * chart rather than from what the payload could have supplied.
+   *
+   * The distinction is not pedantic. `freezeComparison` drops the median once
+   * there are more than two peers, because five context outlines on six axes stop
+   * being a comparison — so a caption that named a median from the payload would
+   * describe an overlay the reader cannot see.
+   */
+  const against = (radial: Radial): string => {
+    const peers = radial.context.filter((entry) => entry.role === 'peer').length;
+    const hasMedian = radial.context.some((entry) => entry.role === 'median');
+
+    if (peers > 0) {
+      return (
+        `Compared with ${peers === 1 ? 'the one other product' : `the ${peers} other products`} in ` +
+        `<b>${escapeHtml(verdict.cluster.label)}</b>` +
+        (hasMedian && radial.medianOver > 0 ? `, and with the middle of the category (${radial.medianOver} products)` : '') +
+        '. '
+      );
+    }
+    if (hasMedian) {
+      return (
+        'Nothing else was in this cluster, so the outline is the middle of the category' +
+        `${radial.medianOver > 0 ? ` &mdash; ${radial.medianOver} products` : ''}, not a rival. `
+      );
+    }
+    return 'This verdict was issued before comparisons were frozen, so there is nothing to overlay. ';
+  };
+
+  /** Said plainly when the shape collapses onto the centre, because it is a finding. */
+  const flat = (radial: Radial): string =>
+    radial.self.values.every((value) => (value ?? 0) === 0)
+      ? ' Your own shape sits on the centre point: not one of them made this their first choice.'
+      : '';
+
+  const juryFigure =
+    jury === null
+      ? ''
+      : radialFigure(
+          jury,
+          'jury',
+          `${labels.jury} — who hurt you`,
+          `${against(jury)}Each spoke is one juror; further out is a deeper cut. ` +
+            'Rings are 25, 50, 75 and 100. Radius is the value, so read the figure on each spoke and compare the shapes &mdash; never the areas.',
+          origin,
+        );
+
+  const buyersFigure =
+    buyers === null
+      ? ''
+      : radialFigure(
+          buyers,
+          'buyers',
+          `${labels.floor} — who wanted you`,
+          `${against(buyers)}Each spoke is one buyer; further out is more conviction behind a first choice. ` +
+            'Rings are 25, 50, 75 and 100. A runner-up sits at zero and is marked &mdash; the run records conviction on a first pick and on nothing else.' +
+            flat(buyers),
+          origin,
+        );
+
+  // The heading names the charts that are actually here. A solo cluster gets no
+  // buyer radial — nobody was ever shown it — and a heading promising one would
+  // read as a section that failed to render.
+  const heading = buyers === null ? 'Who hurt you' : 'Who hurt you, who wanted you';
+  const lede =
+    buyers === null
+      ? `${escapeHtml(labels.jury)}, on fixed axes in the order the panel was installed. Your shape is filled; the outline is what you were judged against.`
+      : `${escapeHtml(labels.jury)} and ${escapeHtml(labels.floor)}, on fixed axes in the order the panel was installed. Your shape is filled; the outlines are what you were judged beside.`;
+
+  return [
+    '<section>',
+    `<h2>${heading}</h2>`,
+    `<p class="lede">${lede}</p>`,
+    `<div class="rgrid">${juryFigure}${buyersFigure}</div>`,
+    '</section>',
+  ].join('');
 }
 
 /**
@@ -778,19 +1392,32 @@ function lossFigure(verdict: Verdict): string {
         bar.spread <= 0
           ? 'every juror scored it identically'
           : `the six landed within &plusmn;${n1(bar.spread)} of ${n1(bar.score)}`;
+      // The frozen category median, as a tick on the bar's own axis. `null` on a
+      // verdict issued before comparisons were frozen — those bars carry no tick
+      // rather than a tick at some invented place.
+      const median =
+        bar.categoryCuts === null
+          ? ''
+          : `<i class="lbmed" style="left:${pct(bar.categoryCuts)}"></i>`;
+      const against =
+        bar.categoryCuts === null
+          ? ''
+          : `<i>The middle product on this board lost ${n1(bar.categoryCuts)} here.</i>`;
       return [
         '<div class="lbrow" tabindex="0" role="img" ',
         `aria-label="${escapeHtml(
           `${metricLabel(bar.metric)}: ${n1(bar.cuts)} in cuts, cross-juror spread ${n1(bar.spread)}, ` +
-            `${bar.cutters} of ${bar.jurors} jurors cut here`,
+            `${bar.cutters} of ${bar.jurors} jurors cut here` +
+            (bar.categoryCuts === null ? '' : `, category median ${n1(bar.categoryCuts)}`),
         )}">`,
         `<span class="lbname" title="${escapeHtml(bar.metric)}">${escapeHtml(metricLabel(bar.metric))}${flag}</span>`,
-        `<span class="lbtrack"><i class="lbfill" style="width:${pct(bar.cuts)}"></i>${whisker}</span>`,
+        `<span class="lbtrack"><i class="lbfill" style="width:${pct(bar.cuts)}"></i>${whisker}${median}</span>`,
         `<span class="lbval">&minus;${n1(bar.cuts)}<em>&plusmn;${n1(bar.spread)}</em></span>`,
         '<span class="tip" aria-hidden="true">',
         `<b>&minus;${n1(bar.cuts)} on ${escapeHtml(metricLabel(bar.metric))}</b>`,
         `<em>${bar.cutters} of ${bar.jurors} jurors cut here</em>`,
         `<i>Merged score ${n1(bar.score)} / 100 &mdash; ${agreement}.</i>`,
+        against,
         '</span>',
         '</div>',
       ].join('');
@@ -819,6 +1446,9 @@ function lossFigure(verdict: Verdict): string {
     `<figcaption class="figcap">${note}`,
     'Bars are the merged cut, 100 minus the mean of the six. The ink whisker is one ',
     'cross-juror standard deviation either side of it, on the same axis.',
+    bars.some((bar) => bar.categoryCuts !== null)
+      ? ' The grey tick is what the middle product on this board lost on the same metric, frozen when this was issued.'
+      : '',
     '</figcaption>',
     '</figure>',
   ].join('');
@@ -909,11 +1539,11 @@ function floorSection(verdict: Verdict): string {
     return [
       '<section>',
       `<h2>${escapeHtml(labels.floor)}</h2>`,
-      `<p class="lede">Six simulated ${escapeHtml(labels.buyers)} make a forced choice between products that do the same job. That choice needs at least two products to choose between.</p>`,
+      `<p class="lede">A forced choice needs at least two products to choose between.</p>`,
       '<div class="blk solo">',
       `<p><b>No ${escapeHtml(labels.buyers)} were shown this product, because nothing in the category was close enough to compare it to.</b></p>`,
-      `<p>Its cluster &mdash; <b>${escapeHtml(verdict.cluster.label)}</b> &mdash; held ${verdict.floor.clusterSize} product${verdict.floor.clusterSize === 1 ? '' : 's'} on the day this was issued, so there was no substitute to weigh it against and no forced choice to run.</p>`,
-      '<p>This is the common case, not a gap in the run. Demand is normally 35% of the blended score; with no demand signal to read, that weight was moved onto merit rather than scored as a zero, so this rank is merit at full weight. It cuts both ways: a strong product gains what a weak one loses.</p>',
+      `<p>Its cluster &mdash; <b>${escapeHtml(verdict.cluster.label)}</b> &mdash; held ${verdict.floor.clusterSize} product${verdict.floor.clusterSize === 1 ? '' : 's'} on the day this was issued.</p>`,
+      '<p>This is the common case, not a gap in the run. Demand is normally 35% of the blended score; with no demand signal to read, that weight was moved onto merit rather than scored as a zero. It cuts both ways: a strong product gains what a weak one loses.</p>',
       '</div>',
       '</section>',
     ].join('');
@@ -967,7 +1597,7 @@ function floorSection(verdict: Verdict): string {
   const silent =
     chart.silent === 0
       ? `<div class="dsilent">Every one of the <b>${chart.roster}</b> ${escapeHtml(labels.buyers.toLowerCase())} on this run named it.</div>`
-      : `<div class="dsilent"><b>${chart.silent}</b> of the ${chart.roster} ${escapeHtml(labels.buyers.toLowerCase())} on this run were shown it beside its cluster peers and reached for something else. The run records who chose you, never who declined, so they are a count here and not a list.</div>`;
+      : `<div class="dsilent"><b>${chart.silent}</b> of the ${chart.roster} ${escapeHtml(labels.buyers.toLowerCase())} were shown it and reached for something else. The run records who chose you, never who declined, so they are a count here and not a list.</div>`;
 
   const parts = chart.parts
     .map(
@@ -983,7 +1613,7 @@ function floorSection(verdict: Verdict): string {
   return [
     '<section>',
     `<h2>${escapeHtml(labels.floor)}</h2>`,
-    `<p class="lede"><b>${chart.named} of ${chart.roster}</b> simulated ${escapeHtml(labels.buyers)} named this product when they were shown it beside its cluster peers and made a forced choice. These are the ones who named it, why, and how hard.</p>`,
+    `<p class="lede"><b>${chart.named} of ${chart.roster}</b> ${escapeHtml(labels.buyers)} named this product in a forced choice against its cluster peers. Here is why, in their words.</p>`,
     '<div class="blk">',
     empty,
     picks,
@@ -1011,7 +1641,7 @@ function clusterSection(verdict: Verdict): string {
   return [
     '<section>',
     '<h2>Judged inside</h2>',
-    '<p class="lede">Demand is only meaningful against a substitute. Every product is placed in a cluster of things that do the same job, and it is judged against those and no others.</p>',
+    '<p class="lede">Demand is only meaningful against a substitute, so every product is judged inside a cluster of things that do the same job.</p>',
     '<div class="blk">',
     `<p><b>${escapeHtml(cluster.label)}</b> &middot; ${cluster.size} product${cluster.size === 1 ? '' : 's'} &middot; scarcity ${cluster.uniqueness}/100</p>`,
     `<p>${escapeHtml(cluster.reason)}</p>`,
@@ -1101,35 +1731,37 @@ ${FONTS}
   <a class="act" href="${escapeHtml(origin)}/">Everyone walks in at 100</a>
 </div>
 
+${radialsSection(verdict, origin)}
+
 <section>
   <h2>Who cut you, and where</h2>
-  <p class="lede"><b>${escapeHtml(cutsLine(verdict))}</b> Everyone walks in at 100. Cuts is 100 minus the mean metric score &mdash; not the sum of the points below, because those are each juror's own deduction off their own 100, and ${escapeHtml(labels.jury.toLowerCase())} cutting 20 each for the same omission is one 20-point cut, not 120.</p>
+  <p class="lede"><b>${escapeHtml(cutsLine(verdict))}</b> Everyone walks in at 100. Cuts is 100 minus the mean metric score &mdash; not the sum of the points below, because those are each juror's own deduction off their own 100.</p>
   ${matrixFigure(verdict)}
 </section>
 
 <section>
   <h2>Where it landed, and whether they agreed</h2>
-  <p class="lede">Being weak on a metric and having ${escapeHtml(labels.jury)} <i>agree</i> you were weak are two different findings. The bar is the loss; the whisker is how far apart ${escapeHtml(labels.jury)} were when they wrote it.</p>
+  <p class="lede">Being weak and having ${escapeHtml(labels.jury)} <i>agree</i> you were weak are two findings. The bar is the loss; the whisker is how far apart they were.</p>
   ${lossFigure(verdict)}
-</section>
-
-<section>
-  <h2>Every cut, in the juror's own words</h2>
-  <p class="lede">The full ledger, heaviest metric first. Every line is one juror's deduction and the sentence they wrote for it &mdash; the charts above are only a way to find the ones worth reading.</p>
-  ${ledger(verdict)}
 </section>
 
 ${clusterSection(verdict)}
 ${floorSection(verdict)}
+
+<section>
+  <h2>Every cut, in the juror's own words</h2>
+  <p class="lede">The full ledger, heaviest metric first. Every line is one juror's deduction and the sentence behind it.</p>
+  ${ledger(verdict)}
+</section>
 
 <footer>
   <b>${escapeHtml(verdict.name)}</b> &middot; ${verdict.productCount} products &middot; issued ${escapeHtml(stampTime(verdict.issuedAt))}${verdict.pitchLabel === null ? '' : ` &middot; ${escapeHtml(verdict.pitchLabel)}`}<br>
   prompt ${escapeHtml(verdict.versions.prompt)} &middot; personas ${escapeHtml(verdict.versions.persona)} &middot; scarcity ${escapeHtml(verdict.versions.uniqueness)} &middot; category snapshot ${escapeHtml(verdict.versions.categorySnapshot)}<br>
   weights: merit ${verdict.weights.merit} &middot; demand ${verdict.weights.demand} &middot; scarcity tilt ${verdict.weights.uniqueness_lambda}${verdict.tiebroken ? ' &middot; demand and scarcity moved this row off its pure-merit position' : ''}<br>
   <br>
-  This page was frozen when it was issued and never recomputed. The board it describes is rebuilt on
-  every placement, so the rank above is what it was on the date stamped beside it &mdash; not what it is
-  now. That is why every rank here carries a date and a count. <a href="${escapeHtml(origin)}/">thepit.show</a>
+  This page was frozen when it was issued and never recomputed &mdash; the comparison shapes above
+  included. The board is rebuilt on every placement, which is why every rank here carries a date and a
+  count. <a href="${escapeHtml(origin)}/">thepit.show</a>
 </footer>
 
 </div>

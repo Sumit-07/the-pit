@@ -397,7 +397,10 @@ describe('the Floor', () => {
     expect(chart?.rows).toHaveLength(5);
 
     const html = renderVerdictPage(verdict);
-    expect(html).toContain('<b>1</b> of the 6 buyers on this run were shown it');
+    // The wording tightened when the prose moved below the charts; the rule it
+    // protects did not. The count is a COUNT, with its denominator, and never a
+    // list of personas the run does not record.
+    expect(html).toContain('<b>1</b> of the 6 buyers were shown it and reached for something else');
     expect(html).toContain('reached for something else');
   });
 

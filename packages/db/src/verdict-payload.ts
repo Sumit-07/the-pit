@@ -50,9 +50,26 @@
  * than inside `row`. A `solo_cluster` row carries it too even though nothing
  * renders it: the Floor never convened for that product, so there is no numerator
  * to divide, and `DECISIONS.md` S3 is what the verdict page states instead.
+ *
+ * `comparison` is the newest thing frozen here, and the reason it can be is worth
+ * stating where the freezing happens. `DECISIONS.md §1.2` forbids a verdict page
+ * from FETCHING a baseline — every z-score moves on the next placement, so a
+ * baseline read at render time would make a shared link change under its reader.
+ * It does not forbid freezing one. This product's cluster peers and the category's
+ * own middle are both facts about the board being delivered, known at this
+ * instant, and frozen at this instant they are as permanent as the rank beside
+ * them. `verdict-comparison.ts` carries the derivation and the honesty rules;
+ * this module's only job is to put it in the document.
+ *
+ * The table refuses UPDATE, so no verdict issued before that key existed will
+ * ever grow one. `apps/web/src/lib/verdict/charts.ts` reads its absence as "there
+ * is no comparison" and draws no overlay, which is the truth about those pages.
  */
 
 import type { Ranking } from '@the-pit/engine';
+
+import type { PeerIdentityResolver } from './verdict-comparison.js';
+import { freezeComparison } from './verdict-comparison.js';
 
 /** One row of a delivered board. `Ranking['ranking'][number]`, named. */
 export type RankedRow = Ranking['ranking'][number];
@@ -85,6 +102,12 @@ export function verdictPayload(
   row: RankedRow,
   categorySnapshotVersion: string,
   issuedAt: Date,
+  /**
+   * Who the cluster peers may be named as. Optional so the delivery path is
+   * untouched; `verdict-comparison.ts`'s default withholds every name, which is
+   * the fail-safe direction for a document that can never be updated.
+   */
+  identity?: PeerIdentityResolver,
 ): Record<string, unknown> {
   return {
     category: ranking.category,
@@ -98,6 +121,7 @@ export function verdictPayload(
     weights: ranking.weights,
     metrics: ranking.metrics,
     demand_roster_size: ranking.personas.length,
+    comparison: freezeComparison(ranking, row, identity),
     verdict: row,
   };
 }
