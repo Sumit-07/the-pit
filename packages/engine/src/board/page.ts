@@ -85,7 +85,12 @@ const CSS = `
   --e1:0 1px 2px rgb(var(--shade-c) / .45);
   --e2:0 2px 6px rgb(var(--shade-c) / .40), 0 10px 26px rgb(var(--shade-c) / .42);
   --e3:0 3px 10px rgb(var(--shade-c) / .45), 0 24px 64px rgb(var(--shade-c) / .55);
-  --r1:6px; --r2:10px; --r3:16px;
+  /* Square. Three steps kept as tokens so the corner stays one lever for every
+     card, panel, well, button and board row — the lever is at zero. Tags and
+     picks keep their 999px: on a page of squares the pill is what says "label"
+     rather than "cell". The meter and the bars are square for a reason of their
+     own, given at .meter below. apps/web/src/app/pit.css has the long version. */
+  --r1:0; --r2:0; --r3:0;
   --sans:"Archivo","Helvetica Neue",Helvetica,Arial,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
@@ -93,14 +98,14 @@ const CSS = `
 html{background:var(--pit);-webkit-text-size-adjust:100%}
 body{background:var(--pit);color:var(--ink);font-family:var(--sans);font-size:15px;
   line-height:1.55;-webkit-font-smoothing:antialiased;font-synthesis-weight:none;overflow-x:hidden}
-:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:3px;
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:0;
   box-shadow:0 0 0 4px rgb(var(--shade-c) / .55)}
 .wrap{max-width:1080px;margin:0 auto;padding:0 18px}
 
 nav{display:flex;justify-content:space-between;align-items:center;padding:20px 0 18px}
 .mark{font-weight:800;font-size:14px;letter-spacing:.02em;text-transform:uppercase;
   display:inline-flex;align-items:center;gap:7px}
-.mark::before{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--cut)}
+.mark::before{content:"";display:inline-block;width:8px;height:8px;border-radius:0;background:var(--cut)}
 .mark i{font-style:normal}
 .navr{font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.04em}
 
@@ -178,7 +183,7 @@ h1 em{font-style:normal;color:var(--dim)}
 .rowhead:hover{background:color-mix(in srgb, var(--card) calc(100% - var(--depth) * 45%), var(--pit));
   box-shadow:inset 0 1px 0 rgb(var(--ink-c) / .15)}
 .rowhead:focus-visible{outline:2px solid var(--ink);outline-offset:-2px}
-.flag{position:absolute;left:0;top:10px;bottom:10px;width:2px;border-radius:0 2px 2px 0;
+.flag{position:absolute;left:0;top:10px;bottom:10px;width:2px;border-radius:0;
   background:rgb(var(--ink-c) / .30)}
 .rk{grid-area:rank;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px;
   font-weight:600;color:var(--dim);letter-spacing:-.02em;padding-top:1px}
@@ -204,9 +209,16 @@ h1 em{font-style:normal;color:var(--dim)}
  * quiet L* 43 neutral; the segment ramp is FLOORED at .58 because fading the
  * accent toward a near-black track by alpha runs it into mud, and the smallest
  * metric's block has to still read as red rather than as empty track.
+ *
+ * The ends are square. The track was a 999px pill with overflow:hidden, so the
+ * cap clipped the kept head and the last segment — the smallest metric's block
+ * was drawn narrower than its share, which is the one thing this element claims
+ * not to do. Square ends give every segment its true width and put the boundary
+ * between kept and taken on an exact vertical, which is what makes the descent
+ * readable as a shape down the board.
  */
 .meterwrap{grid-area:meter;min-width:0;margin-top:9px}
-.meter{display:flex;height:10px;border-radius:999px;background:var(--sunk);overflow:hidden;
+.meter{display:flex;height:10px;border-radius:0;background:var(--sunk);overflow:hidden;
   box-shadow:inset 0 1px 2px rgb(var(--shade-c) / .55)}
 .meter .kept{background:rgb(var(--ink-c) / .40);height:100%;flex:0 0 auto}
 .meter .seg{background:var(--cut);height:100%;flex:0 0 auto;box-shadow:-1px 0 0 rgb(var(--shade-c) / .55)}
@@ -250,7 +262,7 @@ h1 em{font-style:normal;color:var(--dim)}
 .ledger-h .mt{font-size:14px;font-weight:600;letter-spacing:-.008em}
 .ledger-h .sc{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11px;
   color:var(--dimmer);white-space:nowrap}
-.bar{display:flex;height:10px;border-radius:999px;background:var(--sunk);overflow:hidden;
+.bar{display:flex;height:10px;border-radius:0;background:var(--sunk);overflow:hidden;
   margin-top:10px;box-shadow:inset 0 1px 2px rgb(var(--shade-c) / .55)}
 .bar i{display:block;height:100%}
 .bar i.kept{background:rgb(var(--ink-c) / .40)}

@@ -133,7 +133,12 @@ export const TOKENS = `
   --e2:0 2px 6px rgb(var(--shade-c) / .40), 0 10px 26px rgb(var(--shade-c) / .42);
   --e3:0 3px 10px rgb(var(--shade-c) / .45), 0 24px 64px rgb(var(--shade-c) / .55);
 
-  --r1:6px; --r2:10px; --r3:16px;
+  /* Square. Three steps kept as tokens so the corner stays one lever for every
+     card, panel, well, input and button — the lever is at zero. Badges and
+     status chips are the exception and keep their 999px inline; the meter and
+     the bars are square for a reason of their own, given at .meter below.
+     app/pit.css holds the long version. */
+  --r1:0; --r2:0; --r3:0;
 
   --sans:"Archivo","Helvetica Neue",Helvetica,Arial,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
@@ -163,7 +168,7 @@ body{background:var(--pit);color:var(--ink);font-family:var(--sans);
  * tones — a bright inner ring and a dark outer one — is visible on every surface
  * in the stack, which is the whole point of a focus ring.
  */
-:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:3px;
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:0;
   box-shadow:0 0 0 4px rgb(var(--shade-c) / .55)}
 a{color:inherit}
 
@@ -174,7 +179,7 @@ nav{display:flex;justify-content:space-between;align-items:center;
   padding:20px 0 18px;gap:16px}
 .mark{font-weight:800;font-size:14px;letter-spacing:.02em;text-transform:uppercase;
   text-decoration:none;display:inline-flex;align-items:center;gap:6px}
-.mark::before{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;
+.mark::before{content:"";display:inline-block;width:8px;height:8px;border-radius:0;
   background:var(--cut);flex:0 0 auto}
 .mark i{font-style:normal}
 .navr{display:flex;gap:18px;align-items:center;font-family:var(--mono);font-size:11px;
@@ -243,8 +248,14 @@ textarea{min-height:110px;resize:vertical;line-height:1.55}
  * are drawn on. The kept head is a quiet neutral at L* 43; the segments are the
  * accent stepped down but FLOORED at .58, because fading an accent toward a dark
  * track by alpha runs it into mud and the smallest block has to still read red.
+ *
+ * The ends are square, and not merely because the cards are. The track was a
+ * 999px pill with overflow:hidden, so the cap was clipping the head and the
+ * last segment: the smallest metric's block was drawn narrower than its share,
+ * which is exactly the claim this element makes about itself. Square ends give
+ * every segment its true width. app/pit.css .meter carries the argument.
  */
-.meter{display:block;height:9px;border-radius:999px;background:var(--sunk);
+.meter{display:block;height:9px;border-radius:0;background:var(--sunk);
   overflow:hidden;box-shadow:inset 0 1px 2px rgb(var(--shade-c) / .55)}
 .meter .row{display:flex;height:100%;width:100%}
 .meter .kept{background:rgb(var(--ink-c) / .40);flex:0 0 auto;height:100%}

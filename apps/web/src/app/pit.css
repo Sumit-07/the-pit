@@ -84,9 +84,27 @@
   --e2: 0 2px 6px rgb(var(--shade-c) / 0.4), 0 10px 26px rgb(var(--shade-c) / 0.42);
   --e3: 0 3px 10px rgb(var(--shade-c) / 0.45), 0 24px 64px rgb(var(--shade-c) / 0.55);
 
-  --r1: 6px;
-  --r2: 10px;
-  --r3: 16px;
+  /*
+   * Square. The three steps stay as tokens rather than being deleted, so the
+   * corner is still ONE lever for every card, panel, well, input, button and
+   * board row — the lever is simply at zero now. Nothing else moves with it:
+   * a surface is separated from the one under it by the stack, the hairline,
+   * the lip and the shadow, which is what was doing that work all along.
+   *
+   * Two things are deliberately NOT on this lever, and both are in `pit.css`
+   * as literals so the exception is visible where it is made:
+   *
+   *   - Badges and status chips keep `999px`. On a page of squares the pill is
+   *     what says "label"; a square chip the size of a word reads as a table
+   *     cell, and the board would start looking like a spreadsheet of the thing
+   *     instead of a judgement about it.
+   *   - The cut meter and the ledger bars are square on their own account, and
+   *     would stay square if this lever ever came back off zero — squaring them
+   *     fixed a drawing error rather than following a taste. `.meter` says why.
+   */
+  --r1: 0;
+  --r2: 0;
+  --r3: 0;
 
   --sans: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -115,11 +133,16 @@ body {
  * A ring made only of the text colour vanishes against a raised surface; one made
  * only of the ground vanishes against the floor. Bright ring, dark halo — visible
  * on all four surfaces in the stack.
+ *
+ * The corner went to 0 with everything else, and the ring is untouched by that:
+ * what makes it visible is the two-tone outline and its offset, not its shape. A
+ * square ring on a square control is also the honest outline — a 3px radius here
+ * used to leave a hairline of ground showing at each corner of a squared button.
  */
 :focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
-  border-radius: 3px;
+  border-radius: 0;
   box-shadow: 0 0 0 4px rgb(var(--shade-c) / 0.55);
 }
 
@@ -164,7 +187,7 @@ nav {
   display: inline-block;
   width: 8px;
   height: 8px;
-  border-radius: 2px;
+  border-radius: 0;
   background: var(--cut);
   flex: 0 0 auto;
 }
@@ -366,7 +389,7 @@ a.navlink:hover {
 .prog {
   height: 2px;
   background: var(--sunk);
-  border-radius: 2px 2px 0 0;
+  border-radius: 0;
   overflow: hidden;
   margin-top: 14px;
 }
@@ -506,7 +529,7 @@ div.brow {
 .brow > summary:focus-visible .rowhead {
   outline: 2px solid var(--ink);
   outline-offset: -3px;
-  border-radius: 3px;
+  border-radius: 0;
 }
 
 .rowhead {
@@ -544,7 +567,7 @@ div.brow {
   top: 10px;
   bottom: 10px;
   width: 2px;
-  border-radius: 0 2px 2px 0;
+  border-radius: 0;
   background: rgb(var(--ink-c) / 0.3);
 }
 .rk {
@@ -652,11 +675,28 @@ div.brow {
  * track — the drawing would have been quietly wrong. So the ramp is 1 → .58, and
  * the dividers between blocks are `--shade-c` rather than the card colour,
  * because on dark the thing that separates two lit blocks is a dark line.
+ *
+ * ## Why the ends are square, and would be square even if the cards were not
+ *
+ * The track was a `999px` pill, which on a 10px bar is a 5px cap at each end,
+ * and `overflow:hidden` clips the contents to it. So the first pixels of the
+ * kept head and the last pixels of the smallest segment were being rounded
+ * away: the sixth metric's block — often only a few pixels wide — rendered as a
+ * lozenge whose visible area was smaller than its share. On the verdict page,
+ * where the bar is 14px tall and the cap is 7px, the last segment was drawn as
+ * a half-circle and read as a decorative end rather than as a quantity.
+ *
+ * The widths here are exact (`cuts = 100 − mean(score)`, summed), and the whole
+ * claim of this element is that it is the mechanic drawn rather than a chart
+ * bolted to it. A cap that shaves the ends breaks that claim at precisely the
+ * end of the bar the eye goes to. Square ends give every segment its true width
+ * and let the boundary between kept and taken land on an exact vertical — which
+ * is also what makes the descent readable as a shape down the board.
  */
 .meter {
   display: flex;
   height: 10px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--sunk);
   overflow: hidden;
   box-shadow: inset 0 1px 2px rgb(var(--shade-c) / 0.55);
@@ -765,6 +805,20 @@ details[open] > summary .chev {
 }
 
 /* ---------- tags ---------- */
+/*
+ * The one shape that stayed round when the cards were squared.
+ *
+ * A tag is a LABEL attached to a row — "solo cluster", "moved" — sitting inline
+ * beside the product's own name, at 9.5px, in the same mono as the numerals
+ * around it. The pill is what separates it from the data: a square chip the
+ * width of a word, on a page where every container is now square, reads as
+ * another cell in a table, and a board of cells is a spreadsheet about products
+ * rather than a judgement on them. Two very different things are being said in
+ * one row and the shapes should not converge.
+ *
+ * It is also the only round thing left, which is what makes it work: one soft
+ * form on a page of hard ones is a deliberate mark, not a leftover.
+ */
 .tags {
   display: inline-flex;
   gap: 6px;
@@ -862,7 +916,7 @@ details[open] > summary .chev {
 .bar {
   display: flex;
   height: 9px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--sunk);
   overflow: hidden;
   margin-top: 10px;
@@ -884,7 +938,7 @@ details[open] > summary .chev {
 .jurorbar {
   display: flex;
   height: 9px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--sunk);
   overflow: hidden;
   margin-top: 10px;

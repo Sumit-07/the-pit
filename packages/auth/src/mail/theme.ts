@@ -51,10 +51,18 @@ export const MAIL_FONT = '16px/1.5 "Archivo","Helvetica Neue",Helvetica,Arial,sa
 /** The shared `<body>` opener. One string, so the two emails cannot drift apart. */
 export const MAIL_BODY_STYLE = `margin:0;padding:24px;background:${MAIL_GROUND};color:${MAIL_INK};font:${MAIL_FONT}`;
 
-/** The one action in either email: a lit fill with the ground as its type. */
+/**
+ * The one action in either email: a lit fill with the ground as its type.
+ *
+ * `border-radius:0` is `--r1` written out, the same as every other literal here.
+ * The site's corner went to zero, and a rounded button in the email that sends
+ * someone to a squared sign-in screen is the same drift this file exists to
+ * stop — smaller than a wrong palette and exactly as visible, because the button
+ * is the one object in the message.
+ */
 export const MAIL_BUTTON_STYLE =
   `display:inline-block;padding:12px 20px;background:${MAIL_INK};color:${MAIL_GROUND};` +
-  'text-decoration:none;border-radius:6px;font-weight:600';
+  'text-decoration:none;border-radius:0;font-weight:600';
 
 /** Small print: the resolved muted stop, never an opacity. */
 export const MAIL_SMALL_STYLE = `font-size:14px;color:${MAIL_MUTED}`;
