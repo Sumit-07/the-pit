@@ -189,7 +189,12 @@ describe('frozen, not derived', () => {
   it('says on the page that it was frozen', async () => {
     const html = await renderSeeded('developer-tools', 'Sequo');
 
-    expect(html).toContain('This page was frozen when it was issued and never recomputed.');
+    // The sentence gained a clause when the comparison overlay landed — the peer
+    // and category shapes are frozen too, and a reader is owed that in the same
+    // breath as the rank. The claim under test is unchanged: the page says, on
+    // the page, that it is frozen and never recomputed.
+    expect(html).toContain('This page was frozen when it was issued and never recomputed');
+    expect(html).toContain('the comparison shapes above');
   });
 });
 

@@ -12,38 +12,51 @@
  *
  * Nothing here reads a live ranking, a board, a category median or a clock. The
  * input is one frozen verdict and the output is only what can be arithmetic on
- * it. That is the same rule `model.ts` states and it is why there is no
- * "compared with the category" figure on this page: `DECISIONS.md §1.2` moves
- * every z-score on every placement, so a baseline drawn from the current
- * population would make a shared link show a different chart next week. The
- * payload carries this product's numbers and no one else's, and that is the
- * whole set of things a frozen page may draw.
+ * it. That rule has not moved. What has moved is what the frozen verdict CONTAINS:
+ * `packages/db/src/verdict-comparison.ts` now freezes this product's cluster peers
+ * and the category's own middle into the payload at delivery, so a comparison is
+ * arithmetic on the frozen document rather than a read of the live population.
+ * `DECISIONS.md §1.2` forbids fetching a baseline, because a fetched one would
+ * make a shared link change under its reader. A frozen one cannot.
  *
- * ## Three figures, three jobs
+ * ## Four figures, four jobs
  *
- * 1. `cutMatrix` — **who cut you, and where.** Magnitude across two categorical
- *    dimensions (juror × metric), which is a heatmap and takes a sequential ramp.
- * 2. `lossBars` — **how deep, and did the panel agree.** Magnitude on one
+ * 1. `juryRadial` — **who hurt me.** Six jurors, fixed axes, this product's shape
+ *    against its cluster peers and the category median.
+ * 2. `buyerRadial` — **who wanted me.** Six buyers, the same treatment.
+ * 3. `cutMatrix` — **where exactly.** Magnitude across two categorical dimensions
+ *    (juror × metric), which is a heatmap and takes a sequential ramp.
+ * 4. `lossBars` — **how deep, and did the panel agree.** Magnitude on one
  *    dimension with an interval, which is a sorted horizontal bar with a spread
- *    whisker.
- * 3. `demandView` — **did any buyer want it.** A count against a roster, plus a
- *    per-persona strength, which is a labelled bar per persona and an explicit
- *    row for the buyers who were shown it and reached for something else.
+ *    whisker; the category median now rides on the same axis as a tick.
  *
- * The founder asked for a radar. `references/anti-patterns.md` is against it on
- * two counts that both apply here — radar area grows as the square of the value,
- * so a 20-point difference near the rim looks several times a 20-point difference
- * near the centre, and the axis order is arbitrary, so the SHAPE is an artefact of
- * which metric was drawn first. A third count is specific to this page: a radar's
- * one real justification is an overlaid baseline ring, and the frozen payload
- * carries no category median to draw one from. A radar here would be five numbers
- * in a polygon with no comparison and a misleading area. `lossBars` plots the same
- * five numbers on one shared linear axis, sorted by loss, with the cross-juror
- * spread on the same scale — strictly more readable, and it plots the LOSS rather
- * than the score, which is what the rest of the page is about.
+ * ## The radar objections, and which of them this satisfies
+ *
+ * A previous pass on this page refused a radial and was right at the time. Three
+ * objections were recorded. Two still bind and are answered by construction; one
+ * no longer applies.
+ *
+ * 1. **Area grows as the square of the value.** True, and unfixable. It is
+ *    answered by never asking the reader to read a magnitude off the polygon:
+ *    radius is linear in the value, every axis prints its own number beside its
+ *    label, and `radialTable` repeats every series on every axis. The polygon's
+ *    job is SHAPE COMPARISON — is my dent in the same place as theirs — which is
+ *    the one thing a radial does better than six bars, and the only thing the
+ *    founder asked it for.
+ * 2. **Axis order is arbitrary.** Not here. The axes are the six jurors and the
+ *    six buyers in the order the panel was installed in, frozen in the payload as
+ *    `comparison.jurors` and `comparison.personas`. Every series on a chart is
+ *    plotted against the same frozen order, so a shape is comparable to another
+ *    shape by construction rather than by coincidence.
+ * 3. **No baseline could be drawn.** This is the one that changed. Cluster peers
+ *    and the category median are both known at delivery and are now frozen, so the
+ *    chart has the overlay that is a radial's only real justification.
+ *
+ * `lossBars` stays. It is the better form for "how deep, on one linear axis with
+ * an interval", and the radial does not answer that question.
  */
 
-import type { Verdict, VerdictDeduction, VerdictMetric } from './model';
+import type { Verdict, VerdictComparison, VerdictDeduction, VerdictMetric } from './model';
 
 // --- the sequential ramp -------------------------------------------------------
 
@@ -232,6 +245,244 @@ export function cutMatrix(verdict: Verdict): CutMatrix {
   };
 }
 
+// --- the two radials -----------------------------------------------------------
+
+/**
+ * One shape on a radial.
+ *
+ * `role` is the whole colour system of these charts and it is `choosing-a-form.md`'s
+ * **emphasis** form, not a categorical palette: one series is the point and the
+ * rest are context, so there is one hue and one de-emphasis grey rather than four
+ * hues competing. `self` wears the theme hue; `peer` and `median` wear the same
+ * grey and are told apart by line style, by the legend, and by the table twin.
+ */
+export interface RadialSeries {
+  /**
+   * What the chart may call this series, once the reader has asked.
+   *
+   * For a peer this is the frozen label: a pseudonym when the product chose
+   * anonymity, its own name when it did not. There is no third option and no way
+   * back to a withheld name — `model.ts` never parses one.
+   */
+  readonly label: string;
+  /** One value per axis, 0–100. `null` where this series has no number on that axis. */
+  readonly values: readonly (number | null)[];
+  readonly role: 'self' | 'peer' | 'median';
+  /** `true` when `label` is a pseudonym. Peers only. */
+  readonly anonymous?: boolean;
+  /** The peer's own verdict page. Never set for an anonymous peer. */
+  readonly slug?: string | null;
+  /** The seam the robot-avatar generator draws from. Never the product name. */
+  readonly avatarSeed?: string;
+}
+
+/** A per-axis fact that is not a magnitude — the thing a `0` on that axis is not. */
+export type RadialMark = 'no answer' | '2nd choice' | null;
+
+/** One radial, ready to draw. */
+export interface Radial {
+  /** Juror roles or persona names, in the frozen installed order. */
+  readonly axes: readonly string[];
+  readonly self: RadialSeries;
+  /** Peers first, then the category median. Empty when the payload carries no comparison. */
+  readonly context: readonly RadialSeries[];
+  readonly marks: readonly RadialMark[];
+  /**
+   * What the reader is being compared against, for the caption.
+   *
+   * - `peers` — real cluster peers, the comparison the founder asked for.
+   * - `category` — no peers exist (a solo cluster: 32 of 48 rows), so the only
+   *   honest baseline is the category's own middle, and the caption says so.
+   * - `none` — the payload predates the frozen comparison. No overlay is drawn
+   *   and none is invented.
+   */
+  readonly baseline: 'peers' | 'category' | 'none';
+  /** What the axis units are, in one phrase. Rendered verbatim. */
+  readonly unit: string;
+  /** How many products the median was taken over, and out of what. */
+  readonly medianOver: number;
+  readonly boardSize: number;
+}
+
+/** The points one juror took off one metric on THIS card, summed over their cuts. */
+function pointsFrom(metric: VerdictMetric, role: string): number {
+  return metric.deductions
+    .filter((deduction) => deduction.role === role)
+    .reduce((sum, deduction) => sum + deduction.points, 0);
+}
+
+/**
+ * The mean points a juror took per metric they actually scored, 0–100.
+ *
+ * The same arithmetic as `packages/db/src/verdict-comparison.ts`'s `jurorCut`,
+ * because the self series and the peer series have to be on one scale or the
+ * shapes are not comparable. `01 §5.1` starts every juror on every metric at 100
+ * and their deductions sum to `100 - their score`, so this is a real 0–100 figure
+ * and not an index.
+ *
+ * A metric this juror was substituted a 50 on is excluded from the denominator
+ * rather than counted as a zero — the board wrote that 50, the juror did not, and
+ * this page refuses to draw a substitution as an opinion. `null` when they scored
+ * nothing at all.
+ */
+export function jurorMeanCut(verdict: Verdict, role: string): number | null {
+  let points = 0;
+  let answered = 0;
+  for (const metric of verdict.metrics) {
+    if (metric.substituted.includes(role)) continue;
+    answered += 1;
+    points += pointsFrom(metric, role);
+  }
+  return answered === 0 ? null : points / answered;
+}
+
+/** Every juror who appears on this card, in the order they appear. The fallback roster. */
+function rolesOnCard(verdict: Verdict): string[] {
+  const roles: string[] = [];
+  const seen = new Set<string>();
+  for (const metric of verdict.metrics) {
+    for (const deduction of metric.deductions) {
+      if (seen.has(deduction.role)) continue;
+      seen.add(deduction.role);
+      roles.push(deduction.role);
+    }
+    for (const role of metric.substituted) {
+      if (seen.has(role)) continue;
+      seen.add(role);
+      roles.push(role);
+    }
+  }
+  return roles;
+}
+
+/** The context shapes, shared by both radials. Peers in rank order, then the median. */
+function contextSeries(
+  comparison: VerdictComparison | null,
+  pick: (peer: VerdictComparison['peers'][number]) => readonly (number | null)[],
+  medianOf: (comparison: VerdictComparison) => readonly (number | null)[],
+): RadialSeries[] {
+  if (comparison === null) return [];
+
+  const peers: RadialSeries[] = [...comparison.peers]
+    .sort((a, b) => a.rank - b.rank)
+    .map((peer) => ({
+      label: peer.label,
+      values: pick(peer),
+      role: 'peer' as const,
+      anonymous: peer.anonymous,
+      slug: peer.slug,
+      avatarSeed: peer.avatarSeed,
+    }));
+
+  const median = medianOf(comparison);
+  // A median that is null on every axis is not a baseline; drawing a polygon
+  // collapsed onto the centre would read as "the category scores zero" rather
+  // than "there was no sample". It is left off and the table says so.
+  if (median.some((value) => value !== null)) {
+    peers.push({ label: 'Category median', values: median, role: 'median' });
+  }
+  return peers;
+}
+
+function baselineOf(comparison: VerdictComparison | null, context: readonly RadialSeries[]): Radial['baseline'] {
+  if (comparison === null || context.length === 0) return 'none';
+  return context.some((series) => series.role === 'peer') ? 'peers' : 'category';
+}
+
+/**
+ * **Who hurt me.** One axis per juror, in installed order; the value is how hard
+ * that juror cut this product.
+ *
+ * The axis order comes from the frozen `comparison.jurors` when the payload has
+ * one. When it does not — every verdict delivered before that key existed — it
+ * falls back to the order the jurors appear in on this card, which is the same
+ * order for the same reason (`rank/scorecard.ts` walks the merged score log, and
+ * that is the order the panel was installed in). The fallback draws no overlay,
+ * so nothing is being compared across two different axis orders.
+ *
+ * `null` when the card has no scorecard at all, which `model.ts` already refuses
+ * to parse — the guard is for the type.
+ */
+export function juryRadial(verdict: Verdict): Radial | null {
+  const { comparison } = verdict;
+  const axes = comparison === null ? rolesOnCard(verdict) : [...comparison.jurors];
+  if (axes.length === 0) return null;
+
+  const values = axes.map((role) => jurorMeanCut(verdict, role));
+  const context = contextSeries(
+    comparison,
+    (peer) => peer.jurors,
+    (found) => found.median.jurors,
+  );
+
+  return {
+    axes,
+    self: { label: verdict.name, values, role: 'self' },
+    context,
+    marks: axes.map((role) =>
+      verdict.metrics.some((metric) => metric.substituted.includes(role)) &&
+      jurorMeanCut(verdict, role) === null
+        ? ('no answer' as const)
+        : null,
+    ),
+    baseline: baselineOf(comparison, context),
+    unit: 'points taken per metric, out of the 100 each juror scores on',
+    medianOver: comparison?.boardSize ?? 0,
+    boardSize: comparison?.boardSize ?? 0,
+  };
+}
+
+/**
+ * **Who wanted me.** One axis per buyer, in installed order; the value is the
+ * conviction behind naming this product their FIRST choice.
+ *
+ * `null` for a solo cluster, and that is the majority of products: `demandChart`
+ * documents why a chart of zeros there would state the opposite of the truth. It
+ * also means this radial always has peers when it exists — a Floor only convenes
+ * on a cluster with at least two members — so its overlay is never the category
+ * median standing in for a comparison that could not be made.
+ *
+ * A runner-up scores `0` on the axis and is MARKED. `01 §6.2` appends a strength
+ * to a first pick and to nothing else, so there is no conviction number to plot
+ * for a runner-up; inventing one would publish a figure nobody recorded, and
+ * dropping the axis would hide a buyer who did name it. `0` with a `2nd choice`
+ * mark is exactly what the run knows.
+ */
+export function buyerRadial(verdict: Verdict): Radial | null {
+  const { comparison, floor } = verdict;
+  if (floor.kind === 'solo') return null;
+
+  const axes =
+    comparison === null
+      ? [...new Set(floor.picks.map((pick) => pick.persona))]
+      : [...comparison.personas];
+  if (axes.length === 0) return null;
+
+  const byPersona = new Map(floor.picks.map((pick) => [pick.persona, pick]));
+  const values = axes.map((persona) => {
+    const pick = byPersona.get(persona);
+    if (pick === undefined || pick.pick !== 'first') return 0;
+    return typeof pick.strength === 'number' ? pick.strength : 0;
+  });
+
+  const context = contextSeries(
+    comparison,
+    (peer) => peer.personas,
+    (found) => found.median.personas,
+  );
+
+  return {
+    axes,
+    self: { label: verdict.name, values, role: 'self' },
+    context,
+    marks: axes.map((persona) => (byPersona.get(persona)?.pick === 'second' ? ('2nd choice' as const) : null)),
+    baseline: baselineOf(comparison, context),
+    unit: 'conviction behind a first choice, 0–100',
+    medianOver: comparison?.votedSize ?? 0,
+    boardSize: comparison?.boardSize ?? 0,
+  };
+}
+
 // --- per-metric loss, with the cross-juror spread ------------------------------
 
 /** One metric's bar. All four numbers are on the same 0-100 axis. */
@@ -251,6 +502,15 @@ export interface LossBar {
   readonly cutters: number;
   /** The widest spread on this card — the one metric the panel split hardest on. */
   readonly widest: boolean;
+  /**
+   * What the middle product on this board lost on this metric, frozen at delivery.
+   *
+   * `null` on a verdict delivered before the comparison was frozen. It is drawn as
+   * a tick on the same axis as the bar rather than a second bar: it is a reference
+   * value, not a second measure, and `anti-patterns.md`'s first entry is about
+   * exactly the temptation to give it its own scale.
+   */
+  readonly categoryCuts: number | null;
 }
 
 /**
@@ -267,11 +527,16 @@ export interface LossBar {
  */
 export function lossBars(verdict: Verdict): readonly LossBar[] {
   const widest = Math.max(0, ...verdict.metrics.map((metric) => metric.spread));
+  const categoryByMetric = new Map(
+    (verdict.comparison?.median.metrics ?? []).map((entry) => [entry.metric, entry.cuts]),
+  );
 
   return verdict.metrics.map((metric) => {
     const cuts = clamp(metric.cuts);
     const cutters = new Set(metric.deductions.map((deduction) => deduction.role)).size;
+    const category = categoryByMetric.get(metric.metric);
     return {
+      categoryCuts: category === undefined ? null : clamp(category),
       metric: metric.metric,
       cuts,
       score: metric.score,
