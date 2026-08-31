@@ -21,7 +21,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { buyerRadial, juryRadial, jurorMeanCut, lossBars } from '@/lib/verdict/charts';
+import { buyerRadial, juryRadial, jurorHealth, jurorMeanCut, lossBars } from '@/lib/verdict/charts';
 import { parseComparison, parseVerdict, type Verdict } from '@/lib/verdict/model';
 import { renderVerdictPage, wrapAxisLabel } from '@/lib/verdict/page';
 
@@ -34,6 +34,22 @@ async function withPeers(slug: string): Promise<Verdict> {
     if ((verdict.comparison?.peers.length ?? 0) > 0) return verdict;
   }
   throw new Error(`no seeded verdict in ${slug} has cluster peers`);
+}
+
+/**
+ * A seeded verdict by the DESIGNATION printed on it.
+ *
+ * `seededVerdictNamed` resolves against the raw board, which carries the real
+ * submitted name; every seeded listing is anonymous, so the frozen payload
+ * carries a call sign instead. When a test is about the shape a particular
+ * product draws, the call sign is the only stable handle it has.
+ */
+async function seededVerdictDesignated(slug: string, designation: string): Promise<Verdict> {
+  for (const row of await seededVerdicts(slug)) {
+    const parsed = parseVerdict(row);
+    if (parsed.name === designation) return parsed;
+  }
+  throw new Error(`no seeded verdict in ${slug} designated ${designation}`);
 }
 
 /** The real product names on a board, for proving none of them leaked. */
@@ -72,7 +88,11 @@ describe('the axes are the installed panel, and every shape shares them', () => 
 });
 
 describe('every plotted value derives from the payload', () => {
-  it('plots a juror’s points over the metrics they answered, and fails if that changes', async () => {
+  it('plots the health each juror LEFT, over the metrics they answered', async () => {
+    // The rule this has always protected — the plotted number is that juror's
+    // own arithmetic over the metrics they actually scored — is unchanged. What
+    // changed is the direction: the axis is the health left standing, not the
+    // points taken, so `100 - cuts` is what has to come out.
     const verdict = await withPeers('developer-tools');
     const radial = juryRadial(verdict);
     if (radial === null) throw new Error('no jury radial');
@@ -87,11 +107,107 @@ describe('every plotted value derives from the payload', () => {
         answered += 1;
         for (const deduction of metric.deductions) if (deduction.role === role) points += deduction.points;
       }
-      expect(radial.self.values[index], role).toBe(answered === 0 ? null : points / answered);
+      expect(radial.self.values[index], role).toBe(answered === 0 ? null : 100 - points / answered);
     });
 
-    // And it is a live quantity: at least one juror took something off this card.
-    expect(radial.self.values.some((value) => (value ?? 0) > 0)).toBe(true);
+    // And it is a live quantity: at least one juror took something off this card,
+    // so at least one axis sits short of a full 100.
+    expect(radial.self.values.some((value) => value !== null && value < 100)).toBe(true);
+  });
+
+  it('points the health axis so that fewer cuts draws a BIGGER polygon', async () => {
+    // The bug this replaces, stated as arithmetic. The chart used to plot points
+    // taken, so the best card on the board drew the smallest shape and a reader's
+    // instinct that bigger is better was exactly backwards. Two real products,
+    // one gently handled and one taken apart: the gently handled one must now be
+    // the larger shape on every axis it wins, and by area.
+    const kind = await seededVerdictDesignated('developer-tools', 'Unit Lima-249');
+    const brutal = await seededVerdictDesignated('developer-tools', 'Unit Papa-354');
+
+    const kindRadial = juryRadial(kind);
+    const brutalRadial = juryRadial(brutal);
+    if (kindRadial === null || brutalRadial === null) throw new Error('no jury radial');
+    expect(kindRadial.axes).toEqual(brutalRadial.axes);
+
+    // The one that was cut LESS took fewer points, so under the old cuts axis it
+    // was the smaller shape. Assert that fact first, so this test is anchored to
+    // the real data rather than to a fixture that happens to agree.
+    const cuts = (verdict: Verdict): number =>
+      (juryRadial(verdict) as NonNullable<ReturnType<typeof juryRadial>>).axes.reduce(
+        (sum, role) => sum + (jurorMeanCut(verdict, role) ?? 0),
+        0,
+      );
+    expect(cuts(kind)).toBeLessThan(cuts(brutal));
+
+    // Radar area is proportional to the sum of adjacent-radius products, so a
+    // shape that is further out on every axis is strictly larger. Both hold.
+    const area = (values: readonly (number | null)[]): number =>
+      values.reduce<number>(
+        (sum, value, index) => sum + (value ?? 0) * (values[(index + 1) % values.length] ?? 0),
+        0,
+      );
+    kindRadial.axes.forEach((role, index) => {
+      expect(kindRadial.self.values[index], role).toBeGreaterThan(brutalRadial.self.values[index] as number);
+    });
+    expect(area(kindRadial.self.values)).toBeGreaterThan(area(brutalRadial.self.values));
+  });
+
+  it('keeps the axis at 0–100 with zero at the centre, and never rebases it', async () => {
+    // The tempting "fix" once the chart plots health: most shapes crowd the outer
+    // band, so start the axis at 50 or 60 and the differences look bigger. It is
+    // a lie twice over — radar area already goes as the square of the radius, and
+    // there is no axis line on a radar for a reader to catch the baseline on.
+    // This test fails the moment a baseline is introduced.
+    const verdict = await withPeers('developer-tools');
+    const html = renderVerdictPage(verdict);
+
+    // The geometry is stated in the SVG itself: a value of 0 lands exactly on the
+    // centre point of the plot, and the outer ring is 100. Both radials share it.
+    const box = /viewBox="0 0 (\d+) (\d+)"[^>]*role="img"/.exec(html);
+    expect(box, 'the radial declares its own viewBox').not.toBeNull();
+
+    const rings = [...html.matchAll(/<polygon class="rring(?: rout)?" points="([^"]+)"/g)].map((match) =>
+      (match[1] as string).split(' ').map((pair) => pair.split(',').map(Number) as [number, number]),
+    );
+    expect(rings.length, 'four rings on each of the two charts').toBe(8);
+
+    // Every chart's rings are concentric about one centre, and the radii step in
+    // equal quarters from it: 25/50/75/100 of a scale whose zero IS that centre.
+    // A baseline at 50 would make the innermost ring a radius of 0 or the rings
+    // unevenly spaced; either way this arithmetic breaks.
+    for (let chart = 0; chart < 2; chart += 1) {
+      const four = rings.slice(chart * 4, chart * 4 + 4);
+      const outer = four[3] as [number, number][];
+      const cx = outer.reduce((sum, [x]) => sum + x, 0) / outer.length;
+      const cy = outer.reduce((sum, [, y]) => sum + y, 0) / outer.length;
+      const radii = four.map((ring) => Math.hypot((ring[0] as [number, number])[0] - cx, (ring[0] as [number, number])[1] - cy));
+      const unit = (radii[3] as number) / 100;
+      expect(radii[0] as number).toBeCloseTo(unit * 25, 1);
+      expect(radii[1] as number).toBeCloseTo(unit * 50, 1);
+      expect(radii[2] as number).toBeCloseTo(unit * 75, 1);
+    }
+
+    // And it is said out loud, so a reader never has to infer it.
+    expect(html).toContain('The centre is 0 and the outer ring is 100');
+  });
+
+  it('paints the health polygon --held, the hue that means survived', () => {
+    // The page's own CSS, asserted as a fact. `theme-drift.test.ts` fixes the two
+    // meanings — --cut for what was taken, --held for what survived — and a chart
+    // of the health a juror LEFT drawn in the colour for what they TOOK says the
+    // opposite of its caption. It is also the error this page has already shipped
+    // once.
+    const css = renderVerdictPage(parseVerdict(handBuiltVerdict({ demandStatus: 'scored' })));
+    for (const selector of ['.rj .rself', '.rj .rdot', '.rb .rself', '.rb .rdot']) {
+      const rule = new RegExp(`${selector.replace(/[.*+?^$()|[\]\\]/g, '\\$&')}\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+      expect(rule, `${selector} must be painted`).not.toBe('');
+      expect(rule, `${selector} must wear --held`).toContain('--held');
+      expect(rule, `${selector} must never wear --cut`).not.toContain('--cut');
+    }
+    // The legend swatch is the same mark at 14px and has to agree with it.
+    const swatch = /\.rj \.rkey i\.rself[^{]*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(swatch).toContain('--held');
+    expect(swatch).not.toContain('--cut');
   });
 
   it('plots conviction only where a buyer made it their first choice', async () => {
@@ -120,10 +236,17 @@ describe('every plotted value derives from the payload', () => {
     const peers = radial.context.filter((series) => series.role === 'peer');
     expect(peers.length).toBe(verdict.comparison?.peers.length);
 
+    // The payload freezes what each juror TOOK from that peer, and `verdicts`
+    // refuses UPDATE, so the inversion happens on the read. The rule the test
+    // protects is unchanged — the peer's own frozen figures, on the peer's own
+    // shape, on the same scale as the subject — but the scale is now health, and
+    // a peer left on the cuts scale would be a shape pointing the other way.
     const frozen = [...(verdict.comparison?.peers ?? [])].sort((a, b) => a.rank - b.rank);
     peers.forEach((series, index) => {
-      expect(series.values).toEqual(frozen[index]?.jurors);
+      expect(series.values).toEqual((frozen[index]?.jurors ?? []).map((cut) => (cut === null ? null : 100 - cut)));
     });
+    // And it really is an inversion of a live quantity, not a row of nulls.
+    expect(peers.some((series) => series.values.some((value) => value !== null && value < 100))).toBe(true);
   });
 
   it('puts the frozen category median on the loss bars, on the bar’s own axis', async () => {
@@ -142,8 +265,11 @@ describe('every plotted value derives from the payload', () => {
     const role = verdict.comparison?.jurors[0];
     if (role === undefined) throw new Error('no roster');
     // If these ever diverge the two shapes are drawn on different scales and the
-    // comparison silently stops meaning anything.
-    expect(juryRadial(verdict)?.self.values[0]).toBe(jurorMeanCut(verdict, role));
+    // comparison silently stops meaning anything. The freezer's arithmetic is
+    // still `jurorMeanCut`; the chart is its complement, and `jurorHealth` is the
+    // single place that complement is taken.
+    expect(juryRadial(verdict)?.self.values[0]).toBe(jurorHealth(verdict, role));
+    expect(jurorHealth(verdict, role)).toBe(100 - (jurorMeanCut(verdict, role) as number));
   });
 });
 
@@ -164,6 +290,81 @@ describe('the table twin lists the numbers the shapes encode', () => {
         expect(table, `${series.label} ${value}`).toContain(`<td>${value.toFixed(1)}</td>`);
       }
     }
+  });
+
+  it('draws a polygon whose vertices decode back to the table’s own numbers', async () => {
+    // The table twin is only a twin if the shape and the numbers say the same
+    // thing. This walks the rendered path back to a value per axis — radius over
+    // the outer ring's radius, times 100 — and checks it against the figure the
+    // table prints. It fails if the plot is ever rebased, rescaled, or inverted
+    // away from the numbers beside it.
+    const verdict = await withPeers('developer-tools');
+    const radial = juryRadial(verdict);
+    if (radial === null) throw new Error('no jury radial');
+    const html = renderVerdictPage(verdict);
+
+    const outer = /<polygon class="rring rout" points="([^"]+)"/.exec(html)?.[1] ?? '';
+    const ring = outer.split(' ').map((pair) => pair.split(',').map(Number) as [number, number]);
+    expect(ring.length).toBe(radial.axes.length);
+    const cx = ring.reduce((sum, [x]) => sum + x, 0) / ring.length;
+    const cy = ring.reduce((sum, [, y]) => sum + y, 0) / ring.length;
+    const unit = Math.hypot((ring[0] as [number, number])[0] - cx, (ring[0] as [number, number])[1] - cy) / 100;
+
+    const path = /<path class="rp rself" d="([^"]+)"/.exec(html)?.[1] ?? '';
+    const vertices = [...path.matchAll(/[ML]([\d.-]+) ([\d.-]+)/g)].map(
+      (match) => [Number(match[1]), Number(match[2])] as [number, number],
+    );
+    // Every axis with a value is a vertex; a `no answer` axis is skipped rather
+    // than plotted at the centre, which on a health axis would draw a total
+    // collapse out of a juror's silence.
+    const plotted = radial.self.values.filter((value) => value !== null) as number[];
+    expect(vertices.length).toBe(plotted.length);
+
+    vertices.forEach(([x, y], index) => {
+      expect(Math.hypot(x - cx, y - cy) / unit, radial.axes[index]).toBeCloseTo(plotted[index] as number, 1);
+    });
+
+    const table = /<table><caption>The Panel — who hurt you[\s\S]*?<\/table>/.exec(html)?.[0] ?? '';
+    for (const value of plotted) expect(table).toContain(`<td>${value.toFixed(1)}</td>`);
+  });
+
+  it('bridges an axis nobody answered instead of plotting it at the centre', () => {
+    // Under the old cuts axis a silent juror at the centre drew nothing and cost
+    // nothing. On a health axis the centre means "left you with zero", so the
+    // absence of a finding would render as the worst finding on the chart. The
+    // outline steps over the axis, no vertex dot is drawn, and the label and the
+    // table both still say so.
+    const base = parseVerdict(handBuiltVerdict({ demandStatus: 'scored' }));
+    const radial = juryRadial(base);
+    if (radial === null) throw new Error('no jury radial');
+
+    const mute = radial.axes[0] as string;
+    const silenced: Verdict = {
+      ...base,
+      metrics: base.metrics.map((metric) => ({
+        ...metric,
+        substituted: [...metric.substituted, mute],
+        deductions: metric.deductions.filter((deduction) => deduction.role !== mute),
+      })),
+    };
+    const quiet = juryRadial(silenced);
+    if (quiet === null) throw new Error('no jury radial');
+    // The fallback roster reorders when a juror stops appearing in a deduction
+    // list, so the silenced axis is found by name and not by position.
+    const at = quiet.axes.indexOf(mute);
+    expect(at).toBeGreaterThan(-1);
+    expect(quiet.self.values[at]).toBeNull();
+    expect(quiet.marks[at]).toBe('no answer');
+
+    const html = renderVerdictPage(silenced);
+    const path = /<path class="rp rself" d="([^"]+)"/.exec(html)?.[1] ?? '';
+    const vertices = [...path.matchAll(/[ML]([\d.-]+) ([\d.-]+)/g)];
+    // One fewer vertex than there are axes, and the polygon still closes.
+    expect(vertices.length).toBe(quiet.axes.length - 1);
+    expect(path.endsWith(' Z')).toBe(true);
+    expect(html).toContain('>no answer</tspan>');
+    // The table says the same thing, as an em dash rather than a zero.
+    expect(html).toContain('(no answer)</th><td>&mdash;</td>');
   });
 
   it('gives every axis a visible figure on the chart, so no value is colour-only', async () => {
@@ -267,7 +468,11 @@ describe('a solo cluster compares against the category, and says so', () => {
     if (jury === null) throw new Error('no jury radial');
     expect(jury.baseline).toBe('category');
     expect(jury.context.map((series) => series.role)).toEqual(['median']);
-    expect(jury.context[0]?.values).toEqual(verdict.comparison?.median.jurors);
+    // Inverted onto the health axis with the subject, or the only baseline on
+    // the page would point the opposite way from the shape it is a baseline for.
+    expect(jury.context[0]?.values).toEqual(
+      (verdict.comparison?.median.jurors ?? []).map((cut) => (cut === null ? null : 100 - cut)),
+    );
 
     const html = renderVerdictPage(verdict);
     expect(html).toContain('Nothing else was in this cluster');
@@ -289,6 +494,36 @@ describe('a solo cluster compares against the category, and says so', () => {
     expect(html).not.toContain('class="rfig rb"');
     expect(html).toContain('<h2>Who hurt you</h2>');
     expect(html).toContain('No buyers were shown this product');
+  });
+
+  it('gives its one chart the whole row instead of an empty second column', async () => {
+    // 32 of 48 Developer Tools rows and 26 of 44 Health rows are a cluster of
+    // one, so this is the MAJORITY layout. A two-column grid with one figure in
+    // it prints a hole where the buyers chart would be, and a solo verdict is
+    // exactly the page with the fewest other things to look at.
+    const solo = parseVerdict(await seededVerdictNamed('developer-tools', 'Carillon'));
+    const soloHtml = renderVerdictPage(solo);
+
+    expect(soloHtml).toContain('<div class="rgrid rsolo">');
+    expect(soloHtml).not.toContain('<div class="rgrid rpair">');
+    // Exactly one figure in the grid, and no placeholder standing in for the
+    // other: an empty slot is what this test exists to catch.
+    expect((soloHtml.match(/<figure class="rfig /g) ?? []).length).toBe(1);
+    expect(soloHtml).not.toContain('<figure class="rfig rb"');
+
+    // The class is not decoration: it carries a layout that spends the row.
+    // `rsolo` gives the chart one column and its words the other, and the
+    // two-column PAIR rule is scoped so it can never apply to a lone figure.
+    expect(soloHtml).toContain('.rgrid.rsolo .rfig{display:grid');
+    expect(soloHtml).toContain('.rgrid.rpair{grid-template-columns:minmax(0,1fr) minmax(0,1fr)');
+    expect(soloHtml).not.toMatch(/\.rgrid\{[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/);
+
+    // And a verdict that HAS both charts still gets the pair layout, so the fix
+    // is a branch rather than a change of the default.
+    const paired = await withPeers('developer-tools');
+    const pairedHtml = renderVerdictPage(paired);
+    expect(pairedHtml).toContain('<div class="rgrid rpair">');
+    expect((pairedHtml.match(/<figure class="rfig /g) ?? []).length).toBe(2);
   });
 });
 

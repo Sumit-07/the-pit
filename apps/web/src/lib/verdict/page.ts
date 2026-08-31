@@ -28,10 +28,14 @@
  * - **The health meter**, on the card. Part-to-whole: the hundred points this
  *   product walked in with, the `--held` head it walked out with, and each
  *   metric's exact `--cut` share of what came off.
- * - **Two radials, side by side.** Six jurors and six buyers on fixed axes, this
- *   product's shape against its frozen cluster peers and the category median.
- *   They answer *who hurt me* and *who wanted me* as a shape comparison, which is
- *   the one question six bars answer worse.
+ * - **Two radials.** Six jurors and six buyers on fixed axes, this product's
+ *   shape against its frozen cluster peers and the category median. They answer
+ *   *who hurt me* and *who wanted me* as a shape comparison, which is the one
+ *   question six bars answer worse. Both plot a quantity where **further out is
+ *   better** — the health each juror left standing, the conviction each buyer
+ *   put behind a first choice — so both are painted `--held`, and a strong
+ *   product fills its shape instead of drawing a speck. Side by side when there
+ *   are two; the one chart takes the whole row when there is one.
  * - **The juror × metric heatmap.** Magnitude across two categorical dimensions,
  *   so a sequential ramp on the one hue the theme has. It answers *where*, and
  *   every cell carries the juror's own sentence.
@@ -416,9 +420,18 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
 /*
  * Emphasis, not a categorical palette. choosing-a-form.md: "one series is the
  * point, the rest are context -> highlight one, gray the rest -> 1 hue + gray".
- * So there is exactly ONE hue per chart — --cut on the jury, --held on the buyers
- * — and every context shape is the same de-emphasis grey, told apart by line
- * style, by the legend, and by the table twin underneath.
+ * So there is exactly ONE hue per chart, and every context shape is the same
+ * de-emphasis grey, told apart by line style, by the legend, and by the table
+ * twin underneath.
+ *
+ * That hue is --held on BOTH radials, and it is not a style choice. The theme
+ * spends --cut on what was taken and --held on what survived, and theme-drift
+ * tests treat a leak either way as a defect. The jury radial now plots the health
+ * each juror LEFT STANDING, so it is a chart of what survived and wears the hue
+ * that means survived; painting a health polygon in the colour that means "taken"
+ * would say the opposite of its own caption. The buyers radial plots conviction —
+ * also a thing the product HAS — and was already --held. Two charts pointing the
+ * same way, in the same hue, reading as a pair.
  *
  * The grey is rgb(--ink-c / .36), which composites to #5F5954 over the --sunk
  * well. Run through the data-viz skill's validator against #1a1610 it separates
@@ -430,13 +443,45 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
  * scoped to categorical palettes, and a de-emphasis grey that passed the chroma
  * floor would be a fifth colour rather than context.
  */
-.rgrid{display:grid;gap:14px;grid-template-columns:1fr}
-@media (min-width:760px){.rgrid{grid-template-columns:1fr 1fr}}
+/*
+ * The size, which was the founder's actual complaint: "the radial graphs look
+ * very small". Three things make them bigger and none of them is a truncated
+ * axis.
+ *
+ * 1. The plot spends more of its own frame: R 86 -> 112 inside a box 336 -> 372
+ *    wide, so the polygon is 60% of the figure's width where it was 51%.
+ * 2. The pair breaks out of the 820px column on a wide screen. The heading and
+ *    the prose stay in the measure; the figures do not have to.
+ * 3. A SOLO verdict — 32 of 48 Developer Tools rows and 26 of 44 Health rows, so
+ *    the majority case, not an edge case — draws one radial and used to leave the
+ *    second grid column empty beside it. It now takes the whole row and puts its
+ *    caption and its table twin in the space the missing chart was wasting.
+ */
+.rgrid{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:760px){.rgrid.rpair{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}}
+@media (min-width:1180px){.rgrid{margin-inline:-120px}}
+/*
+ * The solo layout. The chart takes the wide column and the words that explain it
+ * take the narrow one, so the row is used rather than half-filled. Below the
+ * breakpoint it stacks back into the ordinary single-column figure, which is the
+ * same component the pair renders.
+ */
+@media (min-width:860px){
+  .rgrid.rsolo .rfig{display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,.56fr);
+    grid-template-areas:"t t" "chart cap" "chart tbl" "chart .";gap:0 26px;align-content:start}
+  .rsolo .rtitle{grid-area:t}
+  .rsolo .well2{grid-area:chart}
+  .rsolo .figcap{grid-area:cap;margin-top:0;font-size:11.5px;line-height:1.75}
+  .rsolo .rtv{grid-area:tbl;align-self:start;margin-top:14px}
+}
 .rfig{margin:0}
 .rtitle{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.14em;
   text-transform:uppercase;color:var(--dimmer);margin-bottom:9px}
 .rwrap{display:block;width:100%}
-.rwrap svg{display:block;width:100%;height:auto}
+/* Capped, because a solo verdict at a window width between the two breakpoints
+   would otherwise spend 750px on one hexagon and 19px type on its axis labels.
+   Every layout below the cap fills its column. */
+.rwrap svg{display:block;width:100%;max-width:620px;height:auto;margin-inline:auto}
 /* Gridlines: solid hairlines one step off the surface, never dashed. */
 .rring{fill:none;stroke:rgb(var(--ink-c) / .13);stroke-width:1}
 .rring.rout{stroke:rgb(var(--ink-c) / .22)}
@@ -447,13 +492,15 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
  * reader cannot tell a conviction of 90 from the grid. The chart's own marks win.
  */
 .rspoke{fill:none;stroke:rgb(var(--ink-c) / .07);stroke-width:1}
-.rax{font-family:var(--mono);font-size:8.4px;letter-spacing:.05em;text-transform:uppercase;
+.rax{font-family:var(--mono);font-size:9.2px;letter-spacing:.05em;text-transform:uppercase;
   fill:var(--dimmer)}
 /* Ring numbers cross the shapes, so they are painted stroke-first in the well's
    own colour: a halo of the surface rather than a box drawn around a label. */
-.rtick{font-family:var(--mono);font-size:7.6px;fill:var(--faint);
-  stroke:var(--sunk);stroke-width:2.6;paint-order:stroke;stroke-linejoin:round}
-.rax .rv{fill:var(--ink);font-weight:600}
+.rtick{font-family:var(--mono);font-size:8.2px;fill:var(--faint);
+  stroke:var(--sunk);stroke-width:2.8;paint-order:stroke;stroke-linejoin:round}
+/* The one number per spoke. It is the direct label the polygon's area is NOT
+   allowed to stand in for, so it is the loudest text in the plot. */
+.rax .rv{fill:var(--ink);font-weight:600;font-size:11.2px}
 .rax.rmk .rv{fill:var(--dimmer);font-weight:500}
 /* The context shapes: one grey, three line styles. No fill — the filled polygon
    is the emphasis series and nothing else on the chart may claim that weight. */
@@ -468,9 +515,11 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
 .rp.rmed{stroke-dasharray:1 3;stroke-linecap:round;stroke-width:1.6}
 .rself{stroke-width:2;stroke-linejoin:round}
 .rdot{stroke:var(--sunk);stroke-width:2}
-.rj .rself{fill:rgb(var(--cut-c) / .17);stroke:var(--cut)}
-.rj .rdot{fill:var(--cut)}
-.rb .rself{fill:rgb(var(--held-c) / .17);stroke:var(--held)}
+/* Both charts plot a thing the product HAS — health left, conviction won — so
+   both wear --held, the hue that means survived. Never --cut here. */
+.rj .rself{fill:rgb(var(--held-c) / .19);stroke:var(--held)}
+.rj .rdot{fill:var(--held)}
+.rb .rself{fill:rgb(var(--held-c) / .19);stroke:var(--held)}
 .rb .rdot{fill:var(--held)}
 .rkey{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;
   font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.02em}
@@ -509,9 +558,7 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
  */
 .ravatar{display:inline-block;width:14px;height:14px;flex:0 0 auto;background:var(--card);
   border:1px solid var(--line)}
-.rj .rkey i.rself{border-top-color:var(--cut);height:8px;border:0;background:rgb(var(--cut-c) / .17);
-  box-shadow:inset 0 0 0 2px var(--cut)}
-.rb .rkey i.rself{border-top-color:var(--held);height:8px;border:0;background:rgb(var(--held-c) / .17);
+.rj .rkey i.rself,.rb .rkey i.rself{height:8px;border:0;background:rgb(var(--held-c) / .19);
   box-shadow:inset 0 0 0 2px var(--held)}
 /*
  * Progressive enhancement, and nothing depends on it: focusing or hovering a
@@ -524,7 +571,9 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
 .rfig:has(.rk4:hover) :is(.rp,.rpdot):not(.rk4),.rfig:has(.rk4:focus-visible) :is(.rp,.rpdot):not(.rk4)
   {opacity:.14}
 .rkey span[tabindex]{cursor:default;border-radius:2px}
-.rkey span[tabindex]:focus-visible{outline:2px solid var(--cut);outline-offset:3px}
+/* The focus ring is --ink, not a data hue: nothing inside a chart of what
+   survived may be painted in the colour that means taken, chrome included. */
+.rkey span[tabindex]:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
 .rp,.rpdot,.rself{transition:opacity .18s ease}
 @media (prefers-reduced-motion:reduce){.rp,.rpdot,.rself{transition:none}}
 
@@ -723,16 +772,34 @@ function pct(value: number): string {
  * at 0° or 180°, so the furthest a label reaches horizontally is `R * cos 30°`
  * plus its own width — which is what `W` is sized for.
  */
-const RAD = { W: 336, H: 310, CX: 168, CY: 146, R: 86 } as const;
+const RAD = { W: 372, H: 350, CX: 186, CY: 172, R: 112 } as const;
+
+/**
+ * How far out the axis labels sit, as a multiple of `R`, and the type metrics
+ * the box was sized against.
+ *
+ * The plot is 30% larger than it was (`R` 86 -> 112) inside a box only 11% wider,
+ * because the founder's complaint was that the charts read as small and the
+ * honest fix is to spend a larger share of the frame on the polygon rather than
+ * on air around the labels. The share went from 51% of the width to 60%. The rest
+ * of the size comes from the layout below: a solo verdict now spends the whole
+ * row on its one chart instead of leaving the second grid column empty.
+ */
+const AXIS_OUT = 1.11;
+/** Label type size, and the baseline step between wrapped lines. */
+const AXIS_FS = 9.2;
+const AXIS_LH = 10.4;
+/** The direct-labelled figure under each axis name: the one number per spoke. */
+const VALUE_DY = 12.4;
 
 /**
  * Characters per label line, and how many lines a label may take.
  *
- * Measured, not guessed: the labels are IBM Plex Mono at 8.4px, whose advance is
- * 0.6em, so a line of `AXIS_CHARS` costs `AXIS_CHARS * 5.04px`. The tightest
- * position is an axis at 30° off horizontal, where the label starts at
- * `CX + R * cos 30 + 12` and has `W - that` to grow into — about 74px, or 14
- * characters. Twelve leaves a margin for the wider glyphs.
+ * Measured, not guessed: the labels are IBM Plex Mono at `AXIS_FS`, whose advance
+ * is 0.6em, so a line of `AXIS_CHARS` costs `AXIS_CHARS * AXIS_FS * 0.6` =
+ * 66.2px. The tightest position is an axis at 30° off horizontal, where the label
+ * starts at `CX + AXIS_OUT * R * cos 30` = 295.7 and has `W - that` = 76px to
+ * grow into. Twelve characters leaves a margin for the wider glyphs.
  */
 const AXIS_CHARS = 12;
 const AXIS_LINES = 3;
@@ -740,9 +807,12 @@ const AXIS_LINES = 3;
 /** Axis `i` of `n`, at value `v` (0–100), as a viewBox point. */
 function radialPoint(index: number, count: number, value: number): [number, number] {
   const angle = ((-90 + (360 / count) * index) * Math.PI) / 180;
-  // Radius is LINEAR in the value. Area is not, and cannot be made to be, which
-  // is why no number on this chart is read off the polygon: every axis prints its
-  // own figure and the table below repeats all of them.
+  // Radius is LINEAR in the value, and the value scale runs 0 to 100 with ZERO AT
+  // THE CENTRE. It is never rebased to the band the data occupies. Area already
+  // grows as the square of the radius, so a truncated baseline would multiply one
+  // exaggeration by another and leave the reader no way to see either — and on a
+  // shape with no numbered axis line there is nowhere to disclose it. The rings
+  // and the printed figure on every spoke are what a magnitude is read from.
   const radius = (Math.max(0, Math.min(100, value)) / 100) * RAD.R;
   return [RAD.CX + radius * Math.cos(angle), RAD.CY + radius * Math.sin(angle)];
 }
@@ -755,19 +825,24 @@ function c(value: number): string {
 /**
  * A series as a closed polygon.
  *
- * A `null` value is plotted at the centre and gets no vertex dot. That is the
- * heatmap's rule restated: a juror who returned nothing is not a juror who took
- * nothing, so the shape passes through zero but nothing is drawn claiming they
- * scored it, and the axis label says `no answer` instead of a number.
+ * A `null` axis is **skipped**: the outline bridges from the neighbour before it
+ * to the neighbour after it, and no vertex dot is drawn. It used to be plotted at
+ * the centre, which was defensible while the axis was points TAKEN — a missing
+ * juror drew no spike and the label said `no answer`. On a health axis the centre
+ * means "this juror left nothing standing", so plotting a silent juror there
+ * would draw the worst possible finding out of the absence of a finding. Bridging
+ * asserts nothing about the missing axis; the label still says `no answer` and
+ * the table still prints an em dash.
+ *
+ * `''` when every value is null, so the caller renders an empty path rather than
+ * a dot at the centre.
  */
 function radialPath(values: readonly (number | null)[]): string {
-  return values
-    .map((value, index) => {
-      const [x, y] = radialPoint(index, values.length, value ?? 0);
-      return `${index === 0 ? 'M' : 'L'}${c(x)} ${c(y)}`;
-    })
-    .join(' ')
-    .concat(' Z');
+  const drawn = values
+    .map((value, index) => (value === null ? '' : radialPoint(index, values.length, value)))
+    .filter((point): point is [number, number] => point !== '');
+  if (drawn.length === 0) return '';
+  return `${drawn.map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${c(x)} ${c(y)}`).join(' ')} Z`;
 }
 
 /**
@@ -979,7 +1054,7 @@ function radialFigure(
   const ticks = [25, 50, 75]
     .map((step) => {
       const [, y] = radialPoint(0, count, step);
-      return `<text class="rtick" x="${c(RAD.CX + 4)}" y="${c(y + 3)}">${step}</text>`;
+      return `<text class="rtick" x="${c(RAD.CX + 5)}" y="${c(y + 3.2)}">${step}</text>`;
     })
     .join('');
 
@@ -1003,7 +1078,7 @@ function radialFigure(
         .map((value, index) => {
           if ((value ?? 0) <= 0) return '';
           const [x, y] = radialPoint(index, count, value as number);
-          return `<circle class="rpdot ${key}" cx="${c(x)}" cy="${c(y)}" r="2.6"></circle>`;
+          return `<circle class="rpdot ${key}" cx="${c(x)}" cy="${c(y)}" r="3"></circle>`;
         })
         .join('');
       return `<path class="rp ${style} ${key}" d="${radialPath(entry.values)}"></path>${marks}`;
@@ -1014,7 +1089,7 @@ function radialFigure(
     .map((value, index) => {
       if (value === null) return '';
       const [x, y] = radialPoint(index, count, value);
-      return `<circle class="rdot" cx="${c(x)}" cy="${c(y)}" r="4"></circle>`;
+      return `<circle class="rdot" cx="${c(x)}" cy="${c(y)}" r="4.6"></circle>`;
     })
     .join('');
 
@@ -1026,8 +1101,8 @@ function radialFigure(
       const dx = ax - RAD.CX;
       const dy = ay - RAD.CY;
       const anchor = Math.abs(dx) < 1 ? 'middle' : dx > 0 ? 'start' : 'end';
-      const x = RAD.CX + dx * 1.13;
-      const y = RAD.CY + dy * 1.13 + (Math.abs(dx) < 1 ? (dy < 0 ? -12 : 16) : 0);
+      const x = RAD.CX + dx * AXIS_OUT;
+      const y = RAD.CY + dy * AXIS_OUT + (Math.abs(dx) < 1 ? (dy < 0 ? -13 : 18) : 0);
       const lines = wrapAxisLabel(axis);
       const value = radial.self.values[index];
       const mark = radial.marks[index];
@@ -1038,12 +1113,12 @@ function radialFigure(
             ? `0 · 2nd choice`
             : n1(value);
       const tspans = lines
-        .map((line, lineIndex) => `<tspan x="${c(x)}" dy="${lineIndex === 0 ? 0 : 9.6}">${escapeHtml(line)}</tspan>`)
+        .map((line, lineIndex) => `<tspan x="${c(x)}" dy="${lineIndex === 0 ? 0 : AXIS_LH}">${escapeHtml(line)}</tspan>`)
         .join('');
       return (
-        `<text class="rax${mark === null ? '' : ' rmk'}" x="${c(x)}" y="${c(y - (lines.length - 1) * 4.8)}" ` +
+        `<text class="rax${mark === null ? '' : ' rmk'}" x="${c(x)}" y="${c(y - (lines.length - 1) * (AXIS_LH / 2))}" ` +
         `text-anchor="${anchor}">${tspans}` +
-        `<tspan class="rv" x="${c(x)}" dy="10.4">${escapeHtml(figure)}</tspan></text>`
+        `<tspan class="rv" x="${c(x)}" dy="${VALUE_DY}">${escapeHtml(figure)}</tspan></text>`
       );
     })
     .join('');
@@ -1061,7 +1136,8 @@ function radialFigure(
   // read aloud in a sentence. `anti-patterns.md` wants every value reachable
   // without the graphic, and the table twin below is where they are reachable.
   const described =
-    `${title}: ${radial.self.label} on ${count} axes` +
+    `${title}: ${radial.self.label} on ${count} axes, ${radial.unit}, ` +
+    'on a scale from 0 at the centre to 100 at the outer ring where further out is better' +
     (context.length === 0
       ? ', with nothing overlaid'
       : `, overlaid with ${context.map(({ label }) => label).join(' and ')}`) +
@@ -1155,8 +1231,11 @@ function radialsSection(verdict: Verdict, origin: string): string {
           jury,
           'jury',
           `${labels.jury} — who hurt you`,
-          `${against(jury)}Each spoke is one juror; further out is a deeper cut. ` +
-            'Rings are 25, 50, 75 and 100. Radius is the value, so read the figure on each spoke and compare the shapes &mdash; never the areas.',
+          `${against(jury)}Each spoke is one juror, and the figure on it is the <b>health you had left</b> ` +
+            'after that juror &mdash; 100 minus what they took. Further out is better, so a bigger shape is a ' +
+            'better card and the dent is the juror who took the most. ' +
+            'The centre is 0 and the outer ring is 100; the rings between are 25, 50 and 75. ' +
+            'Radius is the value, so read the figure on each spoke and compare the shapes &mdash; never the areas.',
           origin,
         );
 
@@ -1167,8 +1246,10 @@ function radialsSection(verdict: Verdict, origin: string): string {
           buyers,
           'buyers',
           `${labels.floor} — who wanted you`,
-          `${against(buyers)}Each spoke is one buyer; further out is more conviction behind a first choice. ` +
-            'Rings are 25, 50, 75 and 100. A runner-up sits at zero and is marked &mdash; the run records conviction on a first pick and on nothing else.' +
+          `${against(buyers)}Each spoke is one buyer; further out is more conviction behind a first choice, ` +
+            'the same direction the panel chart reads. ' +
+            'The centre is 0 and the outer ring is 100; the rings between are 25, 50 and 75. ' +
+            'A runner-up sits at zero and is marked &mdash; the run records conviction on a first pick and on nothing else.' +
             flat(buyers),
           origin,
         );
@@ -1179,14 +1260,19 @@ function radialsSection(verdict: Verdict, origin: string): string {
   const heading = buyers === null ? 'Who hurt you' : 'Who hurt you, who wanted you';
   const lede =
     buyers === null
-      ? `${escapeHtml(labels.jury)}, on fixed axes in the order the panel was installed. Your shape is filled; the outline is what you were judged against.`
-      : `${escapeHtml(labels.jury)} and ${escapeHtml(labels.floor)}, on fixed axes in the order the panel was installed. Your shape is filled; the outlines are what you were judged beside.`;
+      ? `${escapeHtml(labels.jury)}, on fixed axes in the order the panel was installed. Your shape is the health you kept &mdash; further out is better; the outline is what you were judged against.`
+      : `${escapeHtml(labels.jury)} and ${escapeHtml(labels.floor)}, on fixed axes in the order the panel was installed. Both charts run the same way: further out is better. Your shape is filled; the outlines are what you were judged beside.`;
+
+  // One chart or two is a LAYOUT fact, not a styling afterthought: a solo verdict
+  // is the majority of rows, and a grid that keeps two columns for it prints a
+  // hole where the buyers chart would be. `rsolo` gives the one chart the row.
+  const layout = juryFigure !== '' && buyersFigure !== '' ? 'rpair' : 'rsolo';
 
   return [
     '<section>',
     `<h2>${heading}</h2>`,
     `<p class="lede">${lede}</p>`,
-    `<div class="rgrid">${juryFigure}${buyersFigure}</div>`,
+    `<div class="rgrid ${layout}">${juryFigure}${buyersFigure}</div>`,
     '</section>',
   ].join('');
 }

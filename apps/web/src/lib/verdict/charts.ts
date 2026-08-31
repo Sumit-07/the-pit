@@ -22,8 +22,10 @@
  * ## Four figures, four jobs
  *
  * 1. `juryRadial` — **who hurt me.** Six jurors, fixed axes, this product's shape
- *    against its cluster peers and the category median.
- * 2. `buyerRadial` — **who wanted me.** Six buyers, the same treatment.
+ *    against its cluster peers and the category median. It plots the HEALTH each
+ *    juror left standing, not the points they took — see `jurorHealth`.
+ * 2. `buyerRadial` — **who wanted me.** Six buyers, the same treatment, already
+ *    pointing the same way: conviction, where further out is more of it.
  * 3. `cutMatrix` — **where exactly.** Magnitude across two categorical dimensions
  *    (juror × metric), which is a heatmap and takes a sequential ramp.
  * 4. `lossBars` — **how deep, and did the panel agree.** Magnitude on one
@@ -54,6 +56,27 @@
  *
  * `lossBars` stays. It is the better form for "how deep, on one linear axis with
  * an interval", and the radial does not answer that question.
+ *
+ * ## Which way the radials point, and why it is health and not cuts
+ *
+ * Both radials plot a quantity where **further out is better**, and that is a
+ * correction rather than a preference. The jury radial used to plot points TAKEN,
+ * which failed twice over: a good product has few cuts, so the product a reader
+ * most wants to look at drew the smallest polygon; and a larger shape read as a
+ * worse card, against every instinct a reader brings to a chart. So the axis is
+ * `100 - cuts` — the health that juror left standing — which is also the framing
+ * the rest of the app already carries (`HEALTH_NOTE`, the meter's kept head,
+ * "health on entry is 100"). The buyers radial already pointed this way and is
+ * unchanged in direction, so the two now read as a pair.
+ *
+ * **The axis is 0–100 and starts at zero.** It is not truncated to the band the
+ * data happens to occupy, and that is the one thing about this chart that must
+ * not be "improved". Radar area already grows as the square of the radius; a
+ * baseline at 50 would compound a second exaggeration on top of that one, and a
+ * reader has no way to see either. The seeded boards do not need the help in any
+ * case: per-juror health across both categories runs 10.6 to 93.0 with a median
+ * of 53.0, and a product's mean health runs 15.4 to 90.6. The full axis has more
+ * than enough room for that. `test/verdict-radial.test.ts` pins the zero.
  */
 
 import type { Verdict, VerdictComparison, VerdictDeduction, VerdictMetric } from './model';
@@ -265,7 +288,12 @@ export interface RadialSeries {
    * back to a withheld name — `model.ts` never parses one.
    */
   readonly label: string;
-  /** One value per axis, 0–100. `null` where this series has no number on that axis. */
+  /**
+   * One value per axis, on a 0–100 axis that starts at zero, where FURTHER OUT
+   * IS BETTER on both radials — health left on the jury chart, conviction on the
+   * buyers chart. `null` where this series has no number on that axis, which is
+   * not a zero and is never drawn as one.
+   */
   readonly values: readonly (number | null)[];
   readonly role: 'self' | 'peer' | 'median';
   /** `true` when `label` is a pseudonym. Peers only. */
@@ -336,6 +364,38 @@ export function jurorMeanCut(verdict: Verdict, role: string): number | null {
   return answered === 0 ? null : points / answered;
 }
 
+/**
+ * The health one juror left standing, 0–100. `100 - jurorMeanCut`.
+ *
+ * This is the number the jury radial plots, and the inversion is the whole point
+ * of the chart: every juror starts this product on 100 (`01 §5.1`) and their
+ * deductions sum to what they took away, so what is left is a real quantity on
+ * the same 0–100 axis and not an index. A product that survived its panel fills
+ * the shape; one that was taken apart draws a small one. Plotting the cuts
+ * instead — which this page did — made the best cards the smallest marks.
+ *
+ * `null` where the juror scored nothing, propagated rather than turned into a
+ * number: a juror who answered nothing left neither 0 health nor 100.
+ */
+export function jurorHealth(verdict: Verdict, role: string): number | null {
+  const cut = jurorMeanCut(verdict, role);
+  return cut === null ? null : 100 - cut;
+}
+
+/**
+ * A frozen row of cuts, as the health remaining it is the complement of.
+ *
+ * The payload is frozen and append-only: `comparison.jurors` stores what each
+ * juror TOOK from that peer, because that is what was frozen before the chart
+ * changed direction and `verdicts` refuses `UPDATE`. The inversion therefore
+ * happens here, on the read, and it has to happen to the peers and the median as
+ * well as to the subject or the shapes are on two different scales pointing two
+ * different ways.
+ */
+function asHealth(values: readonly (number | null)[]): readonly (number | null)[] {
+  return values.map((value) => (value === null ? null : 100 - value));
+}
+
 /** Every juror who appears on this card, in the order they appear. The fallback roster. */
 function rolesOnCard(verdict: Verdict): string[] {
   const roles: string[] = [];
@@ -390,9 +450,17 @@ function baselineOf(comparison: VerdictComparison | null, context: readonly Radi
 }
 
 /**
- * **Who hurt me.** One axis per juror, in installed order; the value is how hard
- * that juror cut this product.
+ * **Who hurt me.** One axis per juror, in installed order; the value is the
+ * HEALTH that juror left standing — `100 - what they took`.
  *
+ * The direction is deliberate and is the correction this chart needed: further
+ * out is a better card, so a strong product fills the polygon and a reader's
+ * instinct that a bigger shape is a better shape is right rather than backwards.
+ * The dent is still where the reader looks — it is now the juror who took the
+ * most, which is the same finding read the way round that the rest of the page
+ * reads it.
+ *
+
  * The axis order comes from the frozen `comparison.jurors` when the payload has
  * one. When it does not — every verdict delivered before that key existed — it
  * falls back to the order the jurors appear in on this card, which is the same
@@ -408,11 +476,11 @@ export function juryRadial(verdict: Verdict): Radial | null {
   const axes = comparison === null ? rolesOnCard(verdict) : [...comparison.jurors];
   if (axes.length === 0) return null;
 
-  const values = axes.map((role) => jurorMeanCut(verdict, role));
+  const values = axes.map((role) => jurorHealth(verdict, role));
   const context = contextSeries(
     comparison,
-    (peer) => peer.jurors,
-    (found) => found.median.jurors,
+    (peer) => asHealth(peer.jurors),
+    (found) => asHealth(found.median.jurors),
   );
 
   return {
@@ -426,7 +494,7 @@ export function juryRadial(verdict: Verdict): Radial | null {
         : null,
     ),
     baseline: baselineOf(comparison, context),
-    unit: 'points taken per metric, out of the 100 each juror scores on',
+    unit: 'health left per metric, out of the 100 each juror starts you on',
     medianOver: comparison?.boardSize ?? 0,
     boardSize: comparison?.boardSize ?? 0,
   };
