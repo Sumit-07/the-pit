@@ -352,21 +352,29 @@ export async function enqueuePlacementForPayment(
        * re-derived once: form -> `submissions.anonymous` -> here -> `products`,
        * where `products_anonymity_immutable` freezes it.
        *
-       * `listing` is the real name and address, which the `product` above no
-       * longer carries. The catalogue write needs them — `products` stores the
-       * TRUTH and redacts on the way out, which is what `pg-catalog` reads and
-       * what makes a later claim able to reveal anything at all. A row that stored
-       * its own designation would have forgotten who it was, and the one legal
-       * transition (`anonymous -> named` on a verified claim) would have nothing
-       * to reveal.
+       * `submissionId` is where the catalogue write finds the real name and
+       * address, which the `product` above no longer carries. `products` stores
+       * the TRUTH and redacts on the way out — that is what `pg-catalog` reads
+       * and what makes a later claim able to reveal anything at all; a row that
+       * stored its own designation would have forgotten who it was, and the one
+       * legal transition (`anonymous -> named` on a verified claim) would have
+       * nothing to reveal.
        *
-       * Sent only when the listing is anonymous. On a named placement the product
-       * already carries both, and a second copy would be two answers to one
-       * question.
+       * **An id, and not the name and the URL.** They used to travel here
+       * verbatim, which put the real identity of a listing the customer had asked
+       * us to withhold onto the event body — an Inngest log, its replays, and any
+       * observability attached to the queue. Everything else on this path already
+       * redacts: the panel is prompted with a designation, `deliverStep` redacts
+       * the published board, `verdictPayload` stamps the frozen verdict
+       * `anonymous`. The event was the one surface that did not, and it is the
+       * one surface a customer can never see or ask about.
+       *
+       * Sent on every paid placement, named or not. The row the buyer bought is
+       * theirs whichever byline it carries, and a field that appeared only for
+       * anonymous listings would make the event body itself say which is which.
        */
-      ...(anonymous
-        ? { anonymous: true, listing: { name: submission.name, url: submission.url } }
-        : {}),
+      submissionId: submission.submissionId,
+      ...(anonymous ? { anonymous: true } : {}),
     },
   };
 

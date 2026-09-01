@@ -181,8 +181,9 @@ export function verdictPayloadFor(
   engineId: number,
   categorySnapshotVersion: string,
   issuedAt: Date,
+  context: VerdictPayloadContext = {},
 ): Record<string, unknown> {
   const row = ranking.ranking.find((candidate) => candidate.id === engineId);
   if (row === undefined) throw new VerdictRowMissingError(engineId);
-  return verdictPayload(ranking, row, categorySnapshotVersion, issuedAt);
+  return verdictPayload(ranking, row, categorySnapshotVersion, issuedAt, context);
 }

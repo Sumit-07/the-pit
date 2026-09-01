@@ -59,6 +59,25 @@ export interface PipelineStore extends RunStore {
    * run whose store has no id, and the two facts should not be able to disagree.
    */
   readonly runId?: string;
+  /**
+   * The `category_snapshot_version` the board this run publishes is stored
+   * under, when the store keys boards by one.
+   *
+   * `undefined` on the filesystem and memory stores, which hold a single
+   * `ranking.json` and overwrite it — which is exactly why the defect this
+   * property exists to close was invisible for as long as it was. On Postgres a
+   * board is one `snapshots` row per population version, a PLACEMENT produces a
+   * new board (`brief §1.2` moves every z-score the moment a product is
+   * appended), and the version has to move with it or the write is refused by
+   * `snapshots_body_immutable_trg` after the customer has been charged.
+   *
+   * It is read here rather than passed a second time so that the version the
+   * published document, its CDN key and the frozen verdict payload are stamped
+   * with is the version the row was actually written under. Two independent
+   * copies of that answer is how a board comes to disagree with its own cache
+   * key.
+   */
+  readonly publishedCategoryVersion?: string;
 }
 
 /**
@@ -160,6 +179,14 @@ export class PlacementPhaseStore implements PipelineStore {
    */
   get runId(): string | undefined {
     return this.scoped.runId;
+  }
+
+  /**
+   * The CATEGORY's, like `slug` and unlike `runId`: a placement republishes the
+   * category's board, and the board is what this version names.
+   */
+  get publishedCategoryVersion(): string | undefined {
+    return this.category.publishedCategoryVersion;
   }
 
   writePhase(phase: PhaseName, envelope: unknown): Promise<void> {

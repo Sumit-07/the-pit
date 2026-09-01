@@ -113,6 +113,22 @@ export interface RunScope {
    * and the rules that read one are Postgres rules.
    */
   paid?: PaidListing;
+  /**
+   * The `category_snapshot_version` this run's board is published under, when
+   * the run MOVES the category's version — which every placement does.
+   *
+   * `brief §1.2`: appending a product shifts the population mean and std and
+   * moves every existing z-score, so a placement does not edit the board it read,
+   * it produces a different one. `PgPipelineStore` writes it under this version
+   * and moves `categories.category_snapshot_version` to the same value in the
+   * same transaction; see `publishAs` there for what each half alone would break.
+   *
+   * The filesystem store ignores it, as it ignores `paid`, and for the same kind
+   * of reason: `cjr/runs/<slug>/ranking.json` is one file that is overwritten,
+   * there is no `categories` row to move, and every rule this value serves is a
+   * Postgres rule.
+   */
+  publishAs?: string;
 }
 
 /** What a deployment binds. */
@@ -233,6 +249,7 @@ export function defaultBindings(env: Env = process.env): RunnerBindings {
         versions,
         ...(scope?.placement === undefined ? {} : { placement: scope.placement }),
         ...(scope?.paid === undefined ? {} : { paid: scope.paid }),
+        ...(scope?.publishAs === undefined ? {} : { publishAs: scope.publishAs }),
       }),
     // Same factory as the filesystem branch and as the board read path.
     snapshots: defaultSnapshotSink(env),

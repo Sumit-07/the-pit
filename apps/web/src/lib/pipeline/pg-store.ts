@@ -73,7 +73,16 @@ import {
   type Ranking,
   type RunResults,
 } from '@the-pit/engine';
-import { categories, deterministicUuid, jobs, normalizeUrl, products, snapshots, type Database } from '@the-pit/db';
+import {
+  categories,
+  deterministicUuid,
+  jobs,
+  normalizeUrl,
+  products,
+  snapshots,
+  submissions,
+  type Database,
+} from '@the-pit/db';
 import { and, desc, eq, ne, or, sql, type SQL } from 'drizzle-orm';
 
 import { SNAPSHOT_VERSION_CONFLICT } from './errors';
@@ -184,6 +193,79 @@ export interface PgPipelineStoreOptions {
    * has pitched.
    */
   paid?: PaidListing;
+  /**
+   * The `category_snapshot_version` the board THIS run publishes is stored
+   * under — and the value `categories.category_snapshot_version` is moved to,
+   * in the same transaction that stores it.
+   *
+   * Absent on a seed run and on an admin re-run, which republish a category
+   * under the version they were enqueued for. Present on every PLACEMENT, and
+   * it is the whole of the fix for the defect that made a paid placement
+   * unable to publish at all:
+   *
+   * `brief §1.2` is explicit that appending a product "shifts the population
+   * mean and std and therefore moves every existing z-score", so a placement
+   * does not edit the board it read — it produces a DIFFERENT one. Written
+   * under the version it read, that board collides with the stored snapshot and
+   * `snapshots_body_immutable_trg` refuses it (correctly: `01 §9` rule 5 and
+   * `brief §1.3` make a version bump the mechanism that invalidates a cached
+   * board, so an unchanged version under a changed board means the bump was
+   * skipped). The refusal landed inside the `rank` step, AFTER the webhook had
+   * granted attempts and the pipeline had spent twelve juror calls, a
+   * clustering pass and a persona round — the customer paid and the board never
+   * moved.
+   *
+   * So the version moves WITH the board, and it moves in one transaction with
+   * it. The two failures either half alone would produce are the reason:
+   * a bumped version with no snapshot behind it is a board that 404s, and a
+   * snapshot under a stale version is a board that never invalidates.
+   *
+   * It replaces `versions.category_version` for everything this store KEYS on —
+   * the snapshot row and the `jobs` row that carries `results.json` — and for
+   * nothing it STAMPS. The four versions inside a phase envelope are the run's
+   * own and are written verbatim (see the module header); this is where the
+   * run's output lands, which is a different question.
+   *
+   * Keying `results.json` on it too is what makes a SECOND placement work. The
+   * next submission is enqueued under the bumped version, so it reads the score
+   * log the previous placement appended to rather than an empty job row — and
+   * the seed run's own `results.json` stays where it was written instead of
+   * being overwritten by the first placement.
+   */
+  publishAs?: string;
+}
+
+/**
+ * The `category_snapshot_version` a placement's board is published under.
+ *
+ * Derived rather than counted, and derived from two values that do not move
+ * across a replay: the version the category was seeded or last rebuilt at, and
+ * the engine id of the product being placed. `seed-1` becomes `seed-1+p8`, and
+ * the NEXT placement — reading a category that now says `seed-1+p8` — becomes
+ * `seed-1+p9` rather than `seed-1+p8+p9`, because the trailing `+p<id>` is
+ * replaced and not appended.
+ *
+ * Both properties are load-bearing:
+ *
+ * - **Replay-stable.** Inngest re-executes a function body from the top, and on
+ *   a replay `PgCategorySource` reports the version this placement has already
+ *   moved the category to. Stripping the suffix means the replay computes the
+ *   SAME target and lands on the snapshot it already wrote (an identical
+ *   document, which `snapshots_body_immutable_trg` permits) rather than on a
+ *   third version with nothing behind it.
+ * - **Bounded.** A chain that appended would grow a segment per placement
+ *   forever, and this string is a CDN key segment (`snapshot.ts`), a cache key
+ *   (`brief §1.3`) and a column on every verdict payload.
+ *
+ * Engine ids are unique within a category — `products_category_engine_uk` and
+ * the engine's own `assertPlaceable` both refuse a collision — so two different
+ * placements can never target the same version. Two runs that DO, placing one
+ * engine id twice under one root and producing different boards, are the
+ * genuine conflict `SnapshotVersionConflictError` exists to report, and it still
+ * reports it.
+ */
+export function nextCategorySnapshotVersion(current: string, engineId: number): string {
+  return `${current.replace(/\+p\d+$/, '')}+p${engineId}`;
 }
 
 /** The payer behind one row of a placement's catalogue. */
@@ -200,22 +282,31 @@ export interface PaidListing {
    */
   readonly anonymous?: boolean;
   /**
-   * The listing's REAL name and address, when the run was shown a designation.
+   * `submissions.id` — where the listing's REAL name and address are read from,
+   * when the run was shown a designation instead.
    *
-   * `lib/payments/enqueue.ts` redacts an anonymous submission before the event is
-   * sent, so by the time a `ProductSet` reaches `writeProducts` the bought row
-   * carries `Unit Kilo-427` and a blank URL. Storing that would be storing the
-   * mask: `products` holds the truth and every read path redacts on the way out
-   * (`pg-catalog.ts`), which is what lets a verified owner later choose to be
-   * named — the one transition `products_anonymity_immutable` allows. A row that
-   * had forgotten who it was would have nothing to reveal, and would also lose
-   * `normalized_url`, which `brief §2.5`'s per-product cap keys on.
+   * `lib/payments/enqueue.ts` redacts an anonymous submission before the event
+   * is sent, so by the time a `ProductSet` reaches `writeProducts` the bought
+   * row carries `Unit Kilo-427` and a blank URL. Storing that would be storing
+   * the mask: `products` holds the truth and every read path redacts on the way
+   * out (`pg-catalog.ts`), which is what lets a verified owner later choose to
+   * be named — the one transition `products_anonymity_immutable` allows. A row
+   * that had forgotten who it was would have nothing to reveal, and would also
+   * lose `normalized_url`, which `brief §2.5`'s per-product cap keys on.
    *
-   * Absent on a named placement: the product already carries both, and a second
-   * copy would be two answers to one question.
+   * **An ID, and not the name and URL themselves.** They used to ride on the
+   * placement event, beside the payer's address, and that put the real identity
+   * of a listing the customer asked us to withhold into an Inngest event body —
+   * which is a log, a replay, and whatever observability is attached to the
+   * queue. The board redacts, the payload redacts, the prompts never see it;
+   * the event was the one surface that did not. So the event carries the id of
+   * the row the buyer typed into, and the identity is read back here, once,
+   * inside the deployment that owns the table.
+   *
+   * One primary-key lookup, on the `deliver` step, on the write that creates the
+   * paid row. It is not on the read path and it is not on any juror prompt.
    */
-  readonly name?: string;
-  readonly url?: string;
+  readonly submissionId?: string;
 }
 
 /**
@@ -234,8 +325,21 @@ export class PgPipelineStore implements PipelineStore {
   private readonly kind: RunJobKind;
   private readonly jobId: string;
   private readonly paid: PaidListing | undefined;
+  /**
+   * The population version this run's OUTPUT is addressed by — `publishAs` when
+   * the run publishes a new board, and the version it ran under otherwise.
+   *
+   * Read by `writeRanking`, `readRanking` and the `jobs` row key. Never by
+   * `writePhase`: an envelope is stamped with `this.versions`, verbatim, and the
+   * module header explains why that stamp has exactly one owner.
+   */
+  private readonly boardVersion: string;
+  /** Set only when this run MOVES the category's version. See `publishAs`. */
+  private readonly publishAs: string | undefined;
   /** Memoized so a run does not re-resolve the category on every phase. */
   private categoryIdPromise: Promise<string> | undefined;
+  /** Memoized so a replayed `writeProducts` does not re-read the submission. */
+  private listingPromise: Promise<{ name: string; url: string } | undefined> | undefined;
 
   constructor(db: Database, category: string, options: PgPipelineStoreOptions) {
     this.slug = categorySlug(category);
@@ -245,8 +349,28 @@ export class PgPipelineStore implements PipelineStore {
     this.db = db;
     this.versions = options.versions;
     this.kind = options.kind ?? 'full_run';
-    this.jobId = runJobId(this.slug, options.versions, this.kind, options.placement);
+    this.publishAs = options.publishAs;
+    this.boardVersion = options.publishAs ?? options.versions.category_version;
+    this.jobId = runJobId(
+      this.slug,
+      { ...options.versions, category_version: this.boardVersion },
+      this.kind,
+      options.placement,
+    );
     this.paid = options.paid;
+  }
+
+  /**
+   * The version the board this run publishes is stored under.
+   *
+   * `deliverStep` stamps the published snapshot, its CDN key and the frozen
+   * verdict payload with it, so the document a reader receives names the same
+   * version the `snapshots` row and `categories` do. Reading it off the store —
+   * rather than passing it a second time — is what stops those two from being
+   * able to disagree.
+   */
+  get publishedCategoryVersion(): string {
+    return this.boardVersion;
   }
 
   /**
@@ -361,6 +485,34 @@ export class PgPipelineStore implements PipelineStore {
   async writeProducts(set: ProductSet): Promise<void> {
     if (set.products.length === 0) return;
     const categoryId = await this.categoryId();
+    const listing = await this.boughtListing();
+
+    /**
+     * A redacted row with nothing to un-redact it is refused, loudly.
+     *
+     * A blank `url` is the sentinel `lib/payments/enqueue.ts` sets on an
+     * anonymous submission and the one `deliverStep` and `verdictPayload` both
+     * read. Writing that row as it stands would store the DESIGNATION as the
+     * listing's name and an empty string as its address — a `products` row that
+     * has forgotten who it is, with nothing for the one legal reveal to reveal
+     * and no `normalized_url` for `brief §2.5`'s per-product cap to key on. Both
+     * are frozen by `products_scored_identity_immutable` the moment the row is
+     * scored, so there is no later correction.
+     *
+     * Failing here costs a support conversation on a board that is already
+     * published; writing it costs a listing that can never be claimed.
+     */
+    const boughtProduct = set.products.find((product) => product.id === this.paid?.engineId);
+    if (this.paid !== undefined && boughtProduct?.url === '' && listing === undefined) {
+      throw new PipelineStoreNotProvisionedError(
+        `the paid listing at engine id ${this.paid.engineId} in ${JSON.stringify(this.slug)} reached the ` +
+          'catalogue write wearing its designation, and the submission row that holds its real name and ' +
+          `address could not be read (submissions.id ${JSON.stringify(this.paid.submissionId ?? '(none)')}). ` +
+          'products stores the truth and every read path redacts on the way out (pg-catalog.ts); a row ' +
+          'written from the mask would be unclaimable and would lose the normalized_url brief §2.5 keys ' +
+          'its per-product cap on.',
+      );
+    }
 
     await this.db
       .insert(products)
@@ -369,13 +521,14 @@ export class PgPipelineStore implements PipelineStore {
           const bought = this.paid !== undefined && this.paid.engineId === product.id;
           /**
            * The bought row is written under its REAL identity even when the run
-           * was shown a designation. See `PaidListing.name`: `products` stores the
-           * truth and the read paths redact, which is the only arrangement in
-           * which a verified owner can later choose to be named — and the only one
-           * that keeps `normalized_url` pointing at the address the cap keys on.
+           * was shown a designation. See `PaidListing.submissionId`: `products`
+           * stores the truth and the read paths redact, which is the only
+           * arrangement in which a verified owner can later choose to be named —
+           * and the only one that keeps `normalized_url` pointing at the address
+           * the cap keys on.
            */
-          const name = bought ? this.paid?.name ?? product.name : product.name;
-          const url = bought ? this.paid?.url ?? product.url : product.url;
+          const name = bought ? listing?.name ?? product.name : product.name;
+          const url = bought ? listing?.url ?? product.url : product.url;
           return {
             id: deterministicUuid('product', this.slug, String(product.id)),
             categoryId,
@@ -457,13 +610,35 @@ export class PgPipelineStore implements PipelineStore {
    *   version means somebody forgot to bump it — and `DO NOTHING` would swallow
    *   that, leave the OLD board in place, and let `readRanking` hand the delivered
    *   run a ranking of a population it was not computed over.
+   *
+   * ## The version moves with the board, in this transaction and no other
+   *
+   * When the run is a PLACEMENT (`publishAs`), the board being written is a new
+   * board — `brief §1.2` moves every z-score the moment a product is appended —
+   * so it is written under a new version, and `categories.category_snapshot_version`
+   * is moved to that same value here, in the same transaction.
+   *
+   * One transaction rather than two statements, because the two halves fail in
+   * opposite and equally bad directions. A version bumped with no snapshot behind
+   * it is a board that 404s for everyone holding a link to it. A snapshot stored
+   * under a version the category never moved to is a board nothing invalidates:
+   * `brief §1.3` keys the preview cache on this column, so the next reader is
+   * served the ranks of a population the board no longer describes. Rolled back
+   * together, neither state exists — the placement either published or it did
+   * not.
+   *
+   * The conflict is still a conflict. It simply is not one a legitimate placement
+   * can reach any more, which is what it was before: the placement wrote under
+   * the version it had read, the trigger refused it, and `SnapshotVersionConflictError`
+   * came out of the `rank` step after the customer had been charged.
    */
   async writeRanking(ranking: Ranking): Promise<void> {
     const categoryId = await this.categoryId();
+    const version = this.boardVersion;
     const row = {
-        id: deterministicUuid('snapshot', this.slug, this.versions.category_version),
+        id: deterministicUuid('snapshot', this.slug, version),
         categoryId,
-        categorySnapshotVersion: this.versions.category_version,
+        categorySnapshotVersion: version,
         promptVersion: ranking.prompt_version,
         personaVersion: ranking.demand_version,
         uniquenessVersion: ranking.uniqueness_version,
@@ -474,18 +649,35 @@ export class PgPipelineStore implements PipelineStore {
       publishedAt: null,
     } satisfies typeof snapshots.$inferInsert;
 
+    const publishAs = this.publishAs;
+
     try {
-      await this.db
-        .insert(snapshots)
-        .values(row)
-        .onConflictDoUpdate({
-          target: [snapshots.categoryId, snapshots.categorySnapshotVersion],
-          set: { document: row.document, health: row.health, productCount: row.productCount },
-        });
+      await this.db.transaction(async (tx) => {
+        await tx
+          .insert(snapshots)
+          .values(row)
+          .onConflictDoUpdate({
+            target: [snapshots.categoryId, snapshots.categorySnapshotVersion],
+            set: { document: row.document, health: row.health, productCount: row.productCount },
+          });
+
+        if (publishAs === undefined) return;
+
+        // The bump, inside the same transaction as the board it belongs to.
+        // Unconditional on the CURRENT value rather than compare-and-set: this
+        // run has already produced the board that version names, and a placement
+        // that found the column somewhere else would be one that had raced with
+        // another placement — which `placeProductFunction`'s per-slug concurrency
+        // of 1 does not permit, and which a silent no-op here would hide.
+        await tx
+          .update(categories)
+          .set({ categorySnapshotVersion: publishAs, updatedAt: new Date() })
+          .where(eq(categories.id, categoryId));
+      });
     } catch (cause) {
       throw new SnapshotVersionConflictError(
         `the board for ${JSON.stringify(this.slug)} at category_snapshot_version ` +
-          `${JSON.stringify(this.versions.category_version)} already exists and is different from the one this run ` +
+          `${JSON.stringify(version)} already exists and is different from the one this run ` +
           'produced. A published board is immutable, because a verdict card is stamped against it at an instant ' +
           '(brief Part 3, Part 5).\n\n' +
           'A board changes when the population changes, when the jury is re-approved, or when the customer panel ' +
@@ -514,7 +706,7 @@ export class PgPipelineStore implements PipelineStore {
       .where(
         and(
           eq(snapshots.categoryId, categoryId),
-          eq(snapshots.categorySnapshotVersion, this.versions.category_version),
+          eq(snapshots.categorySnapshotVersion, this.boardVersion),
         ),
       )
       .limit(1);
@@ -534,7 +726,7 @@ export class PgPipelineStore implements PipelineStore {
       eq(jobs.kind, this.kind),
       ne(jobs.id, this.jobId),
       or(
-        ne(jobs.categorySnapshotVersion, this.versions.category_version),
+        ne(jobs.categorySnapshotVersion, this.boardVersion),
         ne(jobs.promptVersion, this.versions.prompt_version),
         ne(jobs.personaVersion, this.versions.persona_version),
         ne(jobs.engineVersion, this.versions.engine_version),
@@ -569,7 +761,7 @@ export class PgPipelineStore implements PipelineStore {
       categoryId: await this.categoryId(),
       promptVersion: this.versions.prompt_version,
       personaVersion: this.versions.persona_version,
-      categorySnapshotVersion: this.versions.category_version,
+      categorySnapshotVersion: this.boardVersion,
       engineVersion: this.versions.engine_version,
     };
   }
@@ -582,6 +774,36 @@ export class PgPipelineStore implements PipelineStore {
    * is a misconfigured deployment rather than an empty one. Failing here, by
    * name, beats a foreign-key violation from three statements further on.
    */
+  /**
+   * The real name and address of the listing somebody paid to place.
+   *
+   * Read from `submissions` — the row the buyer typed into, before checkout
+   * opened — rather than carried on the placement event, because an event body
+   * is a log and a replay and the whole point of an anonymous listing is that
+   * its name is not in one. See `PaidListing.submissionId`.
+   *
+   * `undefined` when there is no payer, no submission id (an admin placement, or
+   * an event written before the id was carried), or no such row. Two of those
+   * three are ordinary; `writeProducts` decides which of them is fatal, because
+   * it is the only one that can see whether the row it is about to write arrived
+   * redacted.
+   *
+   * Memoized, so a replayed `deliver` step re-reads nothing.
+   */
+  private boughtListing(): Promise<{ name: string; url: string } | undefined> {
+    this.listingPromise ??= (async () => {
+      const submissionId = this.paid?.submissionId;
+      if (submissionId === undefined || submissionId === '') return undefined;
+      const [row] = await this.db
+        .select({ name: submissions.name, url: submissions.url })
+        .from(submissions)
+        .where(eq(submissions.id, submissionId))
+        .limit(1);
+      return row;
+    })();
+    return this.listingPromise;
+  }
+
   private categoryId(): Promise<string> {
     this.categoryIdPromise ??= (async () => {
       const [row] = await this.db

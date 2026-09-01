@@ -514,18 +514,41 @@ describe('the panel is never shown the name it could write into a reason', () =>
     expect(event.product.normalized_url).toBe('');
   }, 120_000);
 
-  it('sends the real name only on the payer, where nothing renders it', async () => {
-    const { event } = await buy(BYLINE_ANONYMOUS);
+  it('sends the id of the submission and not the identity on it', async () => {
+    // The event used to carry the real name and URL on `payer.listing`, which
+    // put the identity of a listing the customer had asked us to withhold into
+    // an Inngest event body — a log, its replays, and whatever observability is
+    // attached to the queue. Asserted over the SERIALIZED event, because that is
+    // the thing that is actually written down, and a field assertion would miss
+    // a copy that reappeared somewhere else on it.
+    const { event, submissionId } = await buy(BYLINE_ANONYMOUS);
+    const body = JSON.stringify(event);
 
-    expect(event.payer?.listing).toEqual({ name: NAME, url: URL_TYPED });
+    expect(body).not.toContain(NAME);
+    expect(body).not.toContain('Ashgrove');
+    expect(body).not.toContain(URL_TYPED);
+    expect(body).not.toContain(NORMALIZED);
+    // The bare host is deliberately NOT asserted: `payer.email` is
+    // `founder@ashgrove.dev`, and the address Dodo verified is a fact about the
+    // customer rather than about the listing's byline. It is what
+    // `products_source_submitter` requires on a paid row and what the ownership
+    // rule joins on, it is carried knowingly, and anonymity was never a promise
+    // about the buyer's email.
+
+    // What it carries instead: the id of the row the buyer typed into, which the
+    // catalogue write resolves inside the deployment that owns the table.
+    expect(event.payer?.submissionId).toBe(submissionId);
   }, 120_000);
 
   it('leaves a NAMED submission identity exactly as it was typed', async () => {
-    const { event } = await buy(BYLINE_NAMED);
+    const { event, submissionId } = await buy(BYLINE_NAMED);
 
     expect(event.product.name).toBe(NAME);
     expect(event.product.url).toBe(URL_TYPED);
-    expect(event.payer?.listing).toBeUndefined();
+    // The id rides on every paid placement, named or not. A field that appeared
+    // only for anonymous listings would make the event body itself say which is
+    // which.
+    expect(event.payer?.submissionId).toBe(submissionId);
   }, 120_000);
 });
 

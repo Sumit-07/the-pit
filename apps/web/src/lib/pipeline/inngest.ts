@@ -42,6 +42,7 @@ import { Inngest, NonRetriableError } from 'inngest';
 
 import { PlacementInFlightError, type PlacementSubmission } from './claims';
 import { isTerminalFailure } from './errors';
+import { nextCategorySnapshotVersion } from './pg-store';
 import { runPlacement, type PlacementOutcome } from './placement';
 import { runPipeline, type PipelineResult } from './run';
 import { defaultBindings, type RunnerBindings } from './service';
@@ -160,17 +161,28 @@ export interface PlacementPayer {
    */
   anonymous?: boolean;
   /**
-   * The real name and address, when `anonymous` withheld them from the product.
+   * `submissions.id` — the row the buyer typed into, before checkout opened.
    *
-   * `products` stores the truth and redacts on the way out — that is what
-   * `pg-catalog.ts` reads, and it is the only reason the one legal transition
-   * (`anonymous -> named`, on a listing whose owner has been verified) has
-   * anything to reveal. A row that had stored its own designation would have
-   * forgotten who it was.
+   * An ID, and deliberately not the name and URL themselves. Those used to ride
+   * here as `payer.listing`, so that a listing the customer had asked us to
+   * publish anonymously travelled through the queue with its real identity
+   * written on the outside — into an Inngest event body, its replays, and
+   * whatever observability is attached to them. The board redacts, the payload
+   * redacts, and no juror is ever shown a name; the event was the one surface
+   * that carried it anyway.
    *
-   * Absent on a named placement, where the product carries both already.
+   * So the event carries what the pipeline needs to FIND the listing, and
+   * `PgPipelineStore.writeProducts` reads the identity back inside the
+   * deployment that owns the table. `products` still stores the truth and every
+   * read path still redacts on the way out — which is the only arrangement in
+   * which the one legal transition (`anonymous -> named`, on a listing whose
+   * owner has been verified) has anything to reveal.
+   *
+   * Present on every paid placement, named or not: the identity a customer typed
+   * belongs to the row they bought, whichever byline it is published under.
+   * Absent on an admin placement, which has no submission.
    */
-  listing?: { name: string; url: string };
+  submissionId?: string;
 }
 
 export const inngest = new Inngest({ id: 'the-pit' });
@@ -427,30 +439,54 @@ export async function executePlacement(
   }
 
   const versions = phaseVersions(category);
-  // Two handles on the same rows. The plain one reads; the second knows which
-  // engine id was bought, and is the one the placement writes its catalogue
-  // through. They are separate constructions rather than one mutable store
-  // because "which row is paid for" is a fact about this submission, not about
-  // the category — a store that could be told later is a store that could be told
-  // twice.
+
+  /**
+   * The version the board this placement produces is published under — and the
+   * value `categories.category_snapshot_version` moves to when it lands.
+   *
+   * A placement does not edit the board it read. `brief §1.2`: appending a
+   * product "shifts the population mean and std and therefore moves every
+   * existing z-score", so what comes out of the `rank` step is a DIFFERENT board
+   * from the one that went in, and `01 §9` rule 5 and `brief §1.3` make a new
+   * `category_snapshot_version` the mechanism by which a new board invalidates
+   * the old one's cache. Publishing it under the version it read is what
+   * `snapshots_body_immutable_trg` refuses — and it refused it inside the `rank`
+   * step, after the webhook had granted attempts and the pipeline had spent
+   * twelve juror calls, a clustering pass and a persona round.
+   *
+   * Derived (see `nextCategorySnapshotVersion`) rather than counted, so that an
+   * Inngest replay — which re-executes this body from the top, against a
+   * category whose version this placement has already moved — computes the same
+   * target rather than a third one.
+   */
+  const publishAs = nextCategorySnapshotVersion(versions.category_version, data.product.id);
+
+  // Two handles on the same rows, and they address two different boards. The
+  // plain one READS the board this placement is being appended to, under the
+  // version it was enqueued for. The second is what the placement WRITES
+  // through: it knows which engine id was bought, and it publishes under the
+  // bumped version. They are separate constructions rather than one mutable
+  // store because "which row is paid for" and "which board this run produces"
+  // are facts about this submission, not about the category — a store that could
+  // be told later is a store that could be told twice.
   const categoryStore = bindings.store(category.category, versions);
-  const paidCategoryStore =
-    data.payer === undefined
-      ? categoryStore
-      : bindings.store(category.category, versions, {
+  const boardStore = bindings.store(category.category, versions, {
+    publishAs,
+    ...(data.payer === undefined
+      ? {}
+      : {
           paid: {
             engineId: data.product.id,
             email: data.payer.email,
-            // The choice, and the identity the run was not shown. `writeProducts`
-            // needs both: `products.anonymous` is the choice, and `products.name`
-            // and `products.url` are the truth this run has been reading a
+            // The choice, and where to find the identity the run was not shown.
+            // `writeProducts` needs both: `products.anonymous` is the choice, and
+            // the submission row holds the truth this run has been reading a
             // designation in place of.
             ...(data.payer.anonymous === undefined ? {} : { anonymous: data.payer.anonymous }),
-            ...(data.payer.listing === undefined
-              ? {}
-              : { name: data.payer.listing.name, url: data.payer.listing.url }),
+            ...(data.payer.submissionId === undefined ? {} : { submissionId: data.payer.submissionId }),
           },
-        });
+        }),
+  });
   const [results, ranking] = await Promise.all([categoryStore.readResults(), categoryStore.readRanking()]);
 
   if (results === undefined || ranking === undefined) {
@@ -508,7 +544,7 @@ export async function executePlacement(
     // work durably — `PgPipelineStore` resolves a real `categories.id` from the
     // slug, and there is no category called "... placement 41".
     store: new PlacementPhaseStore(
-      paidCategoryStore,
+      boardStore,
       bindings.store(category.category, versions, { placement: data.product.id }),
     ),
     snapshots: bindings.snapshots,

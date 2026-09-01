@@ -359,14 +359,44 @@ async function rankStep(
  *   published a board.
  *
  * Both writes are idempotent, so a replayed step lands on the same rows.
+ *
+ * ## The version the board is stamped with is the one it was STORED under
+ *
+ * A placement produces a new board — `brief §1.2` moves every z-score the moment
+ * a product is appended — so a durable store publishes it under a new
+ * `category_snapshot_version` and moves the category's to match, in one
+ * transaction (`pg-store.ts`'s `publishAs`). That version is read back off the
+ * store rather than taken from `input.config.categoryVersion`, which is the
+ * version this run READ.
+ *
+ * It has to be, because the stamp is not decoration. It is the CDN key segment
+ * the archived board sits under (`snapshot.ts`), the cache key `brief §1.3`
+ * invalidates on, and the `category_snapshot_version` frozen onto the verdict
+ * payload a customer's permanent URL resolves through. Stamped with the version
+ * that was read, all three would name a board that no longer exists.
+ *
+ * `input.config.categoryVersion` is the fallback for the stores that do not key
+ * boards by version at all — the filesystem and memory ones, which hold a single
+ * `ranking.json` and overwrite it.
  */
 async function placementDeliverStep(input: PlacementInput, deps: PipelineDeps): Promise<DeliverReport> {
-  return deliverStep(input.config.categoryVersion, deps, async () => {
-    await deps.store.writeProducts({
-      category: input.category,
-      products: [...input.products, input.product],
-    });
-  });
+  const categoryVersion = deps.store.publishedCategoryVersion ?? input.config.categoryVersion;
+  return deliverStep(
+    categoryVersion,
+    deps,
+    async () => {
+      await deps.store.writeProducts({
+        category: input.category,
+        products: [...input.products, input.product],
+      });
+    },
+    // The installed jury this placement was judged by, frozen onto the verdict
+    // with the rank. `deliverStep` says why it cannot be read at render, and
+    // `verdict-panel.ts` says why nothing downstream can recover it from the
+    // board: without it a paying customer's verdict draws six merit spokes and
+    // can say who cut them for none.
+    input.jury,
+  );
 }
 
 /** Which of the three phases did not come back, for a failure that names them. */

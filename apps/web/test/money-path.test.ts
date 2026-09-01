@@ -21,7 +21,7 @@
  * = 11 calls) and the placement is 11 more, five steps each.
  */
 
-import { FixtureClient, phaseVersions, type PhaseVersions } from '@the-pit/engine';
+import { FixtureClient, JUROR_COUNT, phaseVersions, type PhaseVersions } from '@the-pit/engine';
 import { describe, expect, it } from 'vitest';
 
 import { INNGEST_FUNCTIONS } from '@/app/api/inngest/route';
@@ -49,6 +49,7 @@ import {
   CATEGORY,
   CATEGORY_SLUG,
   CATEGORY_VERSION,
+  JURORS,
   makeJury,
   makePanel,
   makeProducts,
@@ -265,6 +266,34 @@ describe('the payer reaches the catalogue and the delivery record', () => {
     const board = await snapshots.read(CATEGORY_SLUG);
     expect(board?.generated_at).toBe(record.delivered_at);
     expect(board?.ranking.ranking).toHaveLength(SEED_SIZE + 1);
+  });
+
+  it('freezes the panel that judged them — both halves, on a PAID verdict', async () => {
+    // `freezePanel` writes the biography behind every axis of both radials, and
+    // the buyers come off `ranking.personas` so they ride every path. The JURORS
+    // have no roster on a `Ranking` at all (`packages/db/src/verdict-panel.ts`),
+    // so only a caller holding the installed jury can supply one — the seed
+    // builder did and the delivery path did not, which left a paying customer's
+    // verdict page drawing six merit spokes it could name nobody behind.
+    //
+    // Frozen rather than read at render for the reason the rank is
+    // (`DECISIONS.md §1.2`): a jury is versioned, `01 §4` Step 2 bumps
+    // `prompt_version` on any mandate edit, and a page that read the current
+    // panel would re-attribute its own sentences on a permanent URL.
+    const { record } = await paidPlacement();
+
+    const panel = (record.paid?.payload as { panel?: { jurors?: unknown[]; buyers?: unknown[] } }).panel;
+
+    expect(panel?.jurors).toHaveLength(JUROR_COUNT);
+    expect(panel?.jurors?.[0]).toEqual({
+      role: JURORS[0]?.role,
+      who: JURORS[0]?.who,
+      cares_most: JURORS[0]?.cares_most,
+      biased_against: JURORS[0]?.biased_against,
+    });
+    // The control: the buyers were never the broken half, and an assertion that
+    // only counted a non-empty `panel` would have passed on them alone.
+    expect(panel?.buyers).toHaveLength(makePanel().personas.length);
   });
 
   it('leaves an admin placement unpaid and unclaimed', async () => {

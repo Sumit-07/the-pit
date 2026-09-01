@@ -858,6 +858,12 @@ describe('the funnel, end to end', () => {
       // `brief §2.4`'s ordinal, computed before the money moved and read back off
       // the `submissions` row rather than recomputed here.
       attemptNumber: 1,
+      // Where the catalogue write finds the listing's real name and address, in
+      // place of the name and address themselves. An event body is a log and a
+      // replay, and a listing published anonymously must not have its identity
+      // written on one; the row is read back inside the deployment that owns the
+      // table (`PgPipelineStore.writeProducts`).
+      submissionId: metadata['submission_id'],
     });
   });
 

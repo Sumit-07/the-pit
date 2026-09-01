@@ -52,6 +52,7 @@ import {
   runScorePhase,
   runUniquenessPhase,
   type CustomerPhaseValue,
+  type Jury,
   type PanelOrdering,
   type PersistedPhase,
   type PhaseFailure,
@@ -140,7 +141,9 @@ export async function runPipeline(
   reports.push(await step.run('rank', () => rankStep(input, deps)));
 
   // --- Deliver: the placement that regenerates the board snapshot --------------
-  const delivered = await step.run('deliver', () => deliverStep(input.config.categoryVersion, deps));
+  const delivered = await step.run('deliver', () =>
+    deliverStep(input.config.categoryVersion, deps, undefined, input.jury),
+  );
   reports.push(delivered);
 
   return {
@@ -299,11 +302,32 @@ async function rankStep(input: PipelineInput, deps: PipelineDeps): Promise<StepR
  * `deps.onDelivered` is the join point it plugs into, and it is deliberately
  * called AFTER the snapshot exists, so an attempt can never be spent on a verdict
  * that was not published.
+ *
+ * ## The jury travels with the delivery
+ *
+ * `jury` is the INSTALLED jury this run was judged by, and it is here for one
+ * reason: `freezePanel` writes the biography of every juror onto the frozen
+ * verdict, and there is no juror roster on a `Ranking` for it to recover one
+ * from (`packages/db/src/verdict-panel.ts` says why). Without it a paying
+ * customer's verdict page draws six merit spokes with no answer to "who cut
+ * this, and what do they punish", while a seeded row — frozen by a builder that
+ * does hold the file — answers it fully.
+ *
+ * FROZEN, not read at render, for the same reason the rank is (`DECISIONS.md
+ * §1.2`): a jury is versioned, `01 §4` Step 2 bumps `prompt_version` by hand on
+ * any mandate edit, and a page that read the current panel would start
+ * describing jurors who are not the ones who judged this product — on a URL that
+ * is permanent.
+ *
+ * Optional, and the empty arm stays live: every verdict delivered before this
+ * carries no juror mandates, `verdicts` is append-only, and the page renders a
+ * spoke without a biography rather than inventing one.
  */
 export async function deliverStep(
   categoryVersion: string,
   deps: PipelineDeps,
   afterPublish?: () => Promise<void>,
+  jury?: Jury,
 ): Promise<DeliverReport> {
   const stored = await deps.store.readRanking();
   if (stored === undefined) {
@@ -363,7 +387,7 @@ export async function deliverStep(
     ...(deps.store.runId === undefined ? {} : { run_id: deps.store.runId }),
     ...(deps.paid === undefined
       ? {}
-      : { paid: await settlement(deps.paid, deps, ranking, categoryVersion, generatedAt) }),
+      : { paid: await settlement(deps.paid, deps, ranking, categoryVersion, generatedAt, jury) }),
   });
 
   return {
@@ -415,6 +439,7 @@ async function settlement(
   ranking: Ranking,
   categoryVersion: string,
   deliveredAt: Date,
+  jury?: Jury,
 ): Promise<PaidDelivery> {
   const results = await deps.store.readResults();
   if (results === undefined) {
@@ -459,7 +484,12 @@ async function settlement(
     // Frozen against THIS board, at THIS instant. `brief §1.2` moves every
     // z-score on the next placement, so a payload built later would describe a
     // board the customer never saw, on a URL that is permanent.
-    payload: verdictPayloadFor(ranking, paid.engineId, categoryVersion, deliveredAt),
+    // The jury is frozen onto the payload with everything else. See `deliverStep`:
+    // a mandate can be revised and a juror replaced, so a verdict that read the
+    // current panel would re-attribute its own sentences.
+    payload: verdictPayloadFor(ranking, paid.engineId, categoryVersion, deliveredAt, {
+      ...(jury === undefined ? {} : { jury }),
+    }),
   };
 }
 
