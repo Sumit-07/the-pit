@@ -1,0 +1,55 @@
+-- The anonymity choice, carried on the draft so it can be made BEFORE the money
+-- moves and before the panel is prompted.
+--
+-- `0009_anonymous_listings.sql` made `products.anonymous` the source of truth and
+-- froze it: the choice changes exactly once, in one direction, and only beside a
+-- verified claim. What it did not have was anybody setting it. Every paid row was
+-- written `false` because nothing on the buying path carried a value, so the
+-- trigger guarded a decision no customer had ever been offered.
+--
+-- This column is the missing half. `submissions` is the row that survives the
+-- round trip through Dodo (see `schema/submissions.ts`): the buyer's text is
+-- written here before checkout opens, only the id crosses a third party, and the
+-- webhook reads the row back to build the placement event. So this is the one
+-- place the choice can live between "typed on the form" and "written onto
+-- `products`".
+--
+-- ## Why it is on the SUBMISSION and not resolved later
+--
+-- The panel has to be prompted with a designation rather than a name —
+-- `lib/pipeline/pg-catalog.ts` spells out why, and it is not recoverable after the
+-- fact: a juror who was shown "Ashgrove" can put "Ashgrove" into a reason, and a
+-- reason is free text that is published in full. There is no filter that reliably
+-- takes a name back out of prose about the thing it names.
+--
+-- So the choice must exist before the first prompt is built, which means before
+-- the run, which means before the payment settles, which means on this row. The
+-- timing everybody argues about on fairness grounds — `brief §2.4`'s
+-- never-keep-the-best rule in another currency, see `0009`'s header — is also
+-- forced by the mechanics. A later choice is not a worse choice; it is a choice
+-- that cannot be honoured.
+--
+-- ## NOT NULL DEFAULT false
+--
+-- The same default `products.anonymous` carries, and for the same reason: a
+-- listing that says who it is, is the ordinary case and the one the board is worth
+-- reading for. The default is what a caller that says nothing gets; the form says
+-- something either way — it renders two radios with "under your name" pre-checked,
+-- so the visitor sees the default rather than inheriting it silently.
+--
+-- Backfilled to `false` on every row written before this column existed, which is
+-- correct rather than convenient: those submissions were taken through a form that
+-- offered no choice, and named is what they were promised.
+--
+-- ## Nothing here is a constraint, because there is nothing to constrain YET
+--
+-- A `submissions` row is a draft. It is not published, nothing renders it, and it
+-- can be abandoned by a buyer who closes the Dodo tab. The rule that matters —
+-- once written, frozen — belongs to `products`, and `products_anonymity_immutable`
+-- already holds it for every writer that will ever exist. Duplicating a freeze here
+-- would guard a row nobody can see and would suggest the real guard lives in two
+-- places.
+--
+-- Forward only, per `cli/migrate.ts`.
+
+ALTER TABLE "submissions" ADD COLUMN "anonymous" boolean DEFAULT false NOT NULL;

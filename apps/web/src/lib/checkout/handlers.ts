@@ -70,6 +70,7 @@ import {
   type SubmissionRejection,
 } from '@the-pit/payments';
 
+import { BYLINE_FIELD, readByline, type BylineCheck } from '@/lib/checkout/byline';
 import {
   nextRebuildFor,
   rejectionSummary,
@@ -112,6 +113,25 @@ export interface SubmissionWriter {
      * had been run over it. None has.
      */
     readonly pitch: string | null;
+    /**
+     * Published as a robot rather than under a name — the buyer's own choice, made
+     * on the form before anything was scored.
+     *
+     * On the DRAFT for the same reason the pitch is, and for a stronger one.
+     * `SubmissionClearance` is what `checkSubmission` produced, and nothing in
+     * `@the-pit/payments` has an opinion about a byline: it is not part of the cap
+     * key, not part of `descriptionHash`, not part of the material-change measure.
+     * Putting it on the clearance would imply a rule had been run over it, and
+     * worse, `SubmissionClearance` is branded precisely so it cannot be persisted
+     * and read back as proof of anything — while this value must survive the round
+     * trip through Dodo and be read back by the webhook as authoritative. It is a
+     * fact the customer stated, not a conclusion we reached.
+     *
+     * Required rather than optional. An omitted flag on a write path is how a
+     * listing gets published under a name its owner asked us to withhold, which is
+     * the one mistake here that no later code can undo.
+     */
+    readonly anonymous: boolean;
     readonly cycleId: string;
     readonly tier: PriceTierId;
     readonly attemptNumber: number;
@@ -230,20 +250,43 @@ function str(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/**
+ * What the visitor sent, plus whether their byline was readable.
+ *
+ * The byline is the one field whose wire value can be WRONG rather than merely
+ * long or empty, and the two directions of getting it wrong are not symmetric —
+ * see `lib/checkout/byline.ts`. So it is resolved once, here, and the parse
+ * result travels beside the values: `values.anonymous` is what the form re-renders
+ * with, and `byline` is what decides whether the request proceeds at all.
+ */
+interface ParsedSubmission {
+  readonly values: SubmitFormValues;
+  readonly byline: BylineCheck;
+}
+
 /** What the visitor sent, whatever shape they sent it in. */
-async function readValues(request: Request): Promise<SubmitFormValues> {
+async function readValues(request: Request): Promise<ParsedSubmission> {
   const contentType = request.headers.get('content-type') ?? '';
 
   if (contentType.includes('application/json')) {
     const parsed: unknown = await request.json().catch(() => ({}));
     const body = typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
+    const byline = readByline(body[BYLINE_FIELD]);
     return {
-      url: str(body['url']),
-      name: str(body['name']),
-      description: str(body['description']),
-      pitch: str(body['pitch']),
-      categorySlug: str(body['category'] ?? body['categorySlug']),
-      tier: str(body['tier']) === '' ? 'single' : str(body['tier']),
+      byline,
+      values: {
+        url: str(body['url']),
+        name: str(body['name']),
+        description: str(body['description']),
+        pitch: str(body['pitch']),
+        categorySlug: str(body['category'] ?? body['categorySlug']),
+        tier: str(body['tier']) === '' ? 'single' : str(body['tier']),
+        // An unreadable value re-renders as NAMED, which is what the refusal page
+        // then shows pre-checked. That is the honest echo: we did not understand
+        // what they asked for, so we show them the default and make them say it
+        // again rather than guessing at a choice that cannot be taken back.
+        anonymous: byline.ok && byline.anonymous,
+      },
     };
   }
 
@@ -252,13 +295,18 @@ async function readValues(request: Request): Promise<SubmitFormValues> {
   const form = await request.formData().catch(() => new FormData());
   const field = (key: string): string => str(form.get(key));
   const tier = field('tier');
+  const byline = readByline(field(BYLINE_FIELD));
   return {
-    url: field('url'),
-    name: field('name'),
-    description: field('description'),
-    pitch: field('pitch'),
-    categorySlug: field('category') === '' ? field('categorySlug') : field('category'),
-    tier: tier === '' ? 'single' : tier,
+    byline,
+    values: {
+      url: field('url'),
+      name: field('name'),
+      description: field('description'),
+      pitch: field('pitch'),
+      categorySlug: field('category') === '' ? field('categorySlug') : field('category'),
+      tier: tier === '' ? 'single' : tier,
+      anonymous: byline.ok && byline.anonymous,
+    },
   };
 }
 
@@ -273,13 +321,18 @@ function tierFor(id: string): PriceTier | null {
  * deployment with no keyring at all — every one of them means "we do not know who
  * this is", which is the ordinary state of a guest checkout and not an error.
  */
-function submitterAccountId(request: Request, deps: SessionSource): string | null {
+function submitterAccountId(request: Request, deps: SessionSource, now: Date = new Date()): string | null {
   if (deps.keyring === undefined) return null;
   try {
     const verified = readSession({
       cookieHeader: request.headers.get('cookie'),
       keyring: deps.keyring,
-      now: new Date(),
+      // The REQUEST's instant, not a second reading of the wall clock. Every other
+      // rule this handler applies runs against `deps.now`, and a session read at a
+      // different instant from the cycle arithmetic is a request being evaluated
+      // at two times at once — which is also how a test pinned to a fixed `now`
+      // ends up reading a cookie that expired in real time.
+      now,
       ...(deps.secureCookies === undefined ? {} : { secure: deps.secureCookies }),
     });
     return verified.valid ? verified.session.accountId : null;
@@ -366,6 +419,13 @@ function emptyFormFrom(request: Request): SubmitFormValues {
     pitch: '',
     categorySlug: params.get('category') ?? '',
     tier: params.get('tier') === 'triple' ? 'triple' : 'single',
+    // NOT prefillable from the query string, and that is the point. A "pitch this"
+    // link is written by whoever made the link, and the byline is the one field on
+    // this form that its owner must choose for themselves — a URL that arrived
+    // with the choice already made would be somebody else deciding, invisibly,
+    // about a thing that cannot be changed afterwards. The control renders
+    // pre-selected to the default and they pick.
+    anonymous: false,
   };
 }
 
@@ -386,13 +446,34 @@ export interface CheckoutCreated {
  */
 export async function handleCheckoutCreate(request: Request, deps: CheckoutHandlerDeps): Promise<Response> {
   const now = (deps.now ?? (() => new Date()))();
-  const values = await readValues(request);
-  const accountId = submitterAccountId(request, deps);
+  const { values, byline } = await readValues(request);
+  const accountId = submitterAccountId(request, deps, now);
   const form = await pageView(
     () => deps.guards.candidateCategories(),
     values,
     accountId !== null,
   );
+
+  /**
+   * The byline, before anything else.
+   *
+   * First because it is the cheapest refusal on the page and because it is the
+   * only field whose failure mode is a disclosure rather than a delay: a value we
+   * cannot read is refused rather than defaulted, since publishing a name the
+   * buyer meant to withhold cannot be undone and a refusal before payment costs
+   * them one click. `lib/checkout/byline.ts` argues the asymmetry in full.
+   */
+  if (!byline.ok) {
+    console.info('[checkout] refused before payment — byline_unreadable');
+    return wantsJson(request)
+      ? json({ status: 'rejected', code: 'byline_unreadable', message: byline.message, charged: false }, 422)
+      : html(
+          renderSubmitPage(
+            await pageView(() => deps.guards.candidateCategories(), values, accountId !== null, byline.message),
+          ),
+          422,
+        );
+  }
 
   /**
    * The pitch cap, server-side.
@@ -461,6 +542,12 @@ export async function handleCheckoutCreate(request: Request, deps: CheckoutHandl
     // clearance does not carry it — no rule in `@the-pit/payments` reads the
     // pitch, so there is nothing there for it to have been derived from.
     pitch: pitch.pitch,
+    // From the parsed FORM value, beside the pitch and for the same reason: no
+    // rule in `@the-pit/payments` reads a byline, so the clearance has nothing to
+    // have derived it from. This is the moment the choice becomes a fact — after
+    // it, `products_anonymity_immutable` owns it, and no path in this application
+    // offers to change it again.
+    anonymous: byline.anonymous,
     cycleId: clearance.cycle.id,
     tier: tier.id,
     attemptNumber: clearance.attemptNumber,

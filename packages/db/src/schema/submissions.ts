@@ -42,7 +42,7 @@
  */
 
 import { sql } from 'drizzle-orm';
-import { check, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 import { products } from './products.js';
 
@@ -107,6 +107,38 @@ export const submissions = pgTable(
      * against instead of an empty column.
      */
     pitch: text('pitch'),
+
+    /**
+     * The buyer asked to be published without their name or their URL.
+     *
+     * The one column on this table that is not "what was typed" and is not a
+     * derived value the second check will re-derive — it is a DECISION, and it is
+     * the only decision on the buying path that cannot be made again later.
+     *
+     * `products.anonymous` is the source of truth and is frozen there by
+     * `products_anonymity_immutable` (`0009_anonymous_listings.sql`). This column
+     * is how the choice reaches it: the form writes it here before checkout opens,
+     * the webhook reads it back with the rest of the draft, and the placement
+     * carries it onto the `products` row it creates. Nothing between those points
+     * asks the buyer again, and nothing after them can.
+     *
+     * **It has to be here rather than anywhere later**, and the reason is
+     * mechanical before it is ethical. `lib/pipeline/pg-catalog.ts` marshals an
+     * anonymous listing into the engine already wearing its designation, because a
+     * juror who is shown a real name can write that name into a reason and a
+     * reason is published as free text. The choice therefore has to exist before
+     * the first prompt is built — before the run, before settlement, on the draft.
+     * `brief §2.4`'s never-keep-the-best argument (see `0009`'s header) says the
+     * same timing is also the only honest one; the two agree, which is why the
+     * rule is cheap to keep.
+     *
+     * NOT NULL, defaulting to `false`, which is the same default `products`
+     * carries: a named listing is the ordinary case. The default is what a caller
+     * that says nothing gets — the form itself always says something, because it
+     * renders the choice as two radios with "under your name" pre-checked rather
+     * than as an unchecked box.
+     */
+    anonymous: boolean('anonymous').notNull().default(false),
 
     /**
      * The recalibration cycle the pre-payment check ran in. `brief §2.4` ties the

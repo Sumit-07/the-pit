@@ -95,6 +95,8 @@
 import type { Product } from '@the-pit/engine';
 import { jobIdempotencyKey } from '@the-pit/payments';
 
+import { assignPseudonyms } from '@/lib/anon';
+
 import { rejectionSummary, runSubmissionGuards, type SubmissionGuardDeps } from '@/lib/checkout/guards';
 import type { CategorySource } from '@/lib/pipeline/catalog';
 import type { PlacementRequestedData } from '@/lib/pipeline/inngest';
@@ -117,6 +119,21 @@ export interface PendingSubmission {
    * change with its own calibration cost; see the phase report.
    */
   readonly pitch?: string | null;
+  /**
+   * The buyer asked to be published without their name or their URL.
+   *
+   * Read back and USED, unlike the pitch. It is the one field on the draft that
+   * changes what the panel is shown: an anonymous listing is marshalled into the
+   * engine already wearing its designation, because a juror who is given a real
+   * name can write it into a reason and a reason is published verbatim
+   * (`lib/pipeline/pg-catalog.ts` argues this at length for the rows already on
+   * the board; below is the same argument for the row being placed).
+   *
+   * Optional in the type only so a fixture or a row written before the column
+   * existed still parses. Absent is NAMED, which is what those rows were promised
+   * — the form that took them offered no other option.
+   */
+  readonly anonymous?: boolean;
   readonly cycleId: string;
   readonly tier: 'single' | 'triple';
   readonly attemptNumber: number;
@@ -264,13 +281,43 @@ export async function enqueuePlacementForPayment(
     };
   }
 
+  /**
+   * The identity the RUN is allowed to see.
+   *
+   * `pg-catalog.ts` already does this for every row that is on the board: an
+   * anonymous listing is marshalled into the engine wearing its designation, with
+   * its address blanked, because names reach three prompts and every one of those
+   * passes produces free text that is published in full. A juror who was shown
+   * "Ashgrove" can put "Ashgrove" in a reason, and there is no filter that takes it
+   * back out of prose about the thing.
+   *
+   * The row being PLACED cannot be covered by that, because it is not in
+   * `products` yet — it exists only on this event. So the same redaction is
+   * applied here, at the one place the event is built, and everything downstream
+   * inherits it without a second rule: the panel scores a designation, `deliver`
+   * reads `url === ''` to decide what to redact out of the published board, and
+   * `verdictPayload` reads the same sentinel to stamp the frozen verdict
+   * `anonymous`. One blanked address, three surfaces, no new agreement to keep.
+   *
+   * The designation is assigned across the category's whole anonymous population
+   * rather than minted alone, exactly as `pg-catalog` assigns it — ascending
+   * engine id, first free wins — so the name this placement is given is the same
+   * name every later board build reproduces for it.
+   */
+  const engineId = nextEngineId(category.products);
+  const anonymous = submission.anonymous === true;
+  const designation = anonymous
+    ? assignPseudonyms(submission.categorySlug, [...anonymousIdsIn(category.products), engineId]).get(engineId)
+    : undefined;
+
   const product: Product = {
-    id: nextEngineId(category.products),
-    name: submission.name,
+    id: engineId,
+    name: designation ?? submission.name,
     description: submission.description,
-    url: submission.url,
-    normalized_url: submission.normalizedUrl,
-    orig_rank: nextEngineId(category.products) + 1,
+    // Blank is the sentinel every downstream surface already reads. See above.
+    url: anonymous ? '' : submission.url,
+    normalized_url: anonymous ? '' : submission.normalizedUrl,
+    orig_rank: engineId + 1,
   };
 
   const idempotencyKey = jobIdempotencyKey({
@@ -297,6 +344,29 @@ export async function enqueuePlacementForPayment(
       // than derived from anything the pipeline can see: a free retry re-enters
       // the pipeline with the same submission and must not advance it.
       attemptNumber: submission.attemptNumber,
+      /**
+       * The choice, and the identity it withholds.
+       *
+       * `anonymous` is what `products.anonymous` is written from, and it is the
+       * last hop of a value that started on a radio button and has not been
+       * re-derived once: form -> `submissions.anonymous` -> here -> `products`,
+       * where `products_anonymity_immutable` freezes it.
+       *
+       * `listing` is the real name and address, which the `product` above no
+       * longer carries. The catalogue write needs them — `products` stores the
+       * TRUTH and redacts on the way out, which is what `pg-catalog` reads and
+       * what makes a later claim able to reveal anything at all. A row that stored
+       * its own designation would have forgotten who it was, and the one legal
+       * transition (`anonymous -> named` on a verified claim) would have nothing
+       * to reveal.
+       *
+       * Sent only when the listing is anonymous. On a named placement the product
+       * already carries both, and a second copy would be two answers to one
+       * question.
+       */
+      ...(anonymous
+        ? { anonymous: true, listing: { name: submission.name, url: submission.url } }
+        : {}),
     },
   };
 
@@ -307,4 +377,17 @@ export async function enqueuePlacementForPayment(
 /** `max(existing) + 1`, and `0` for a category with no rows. See the header. */
 function nextEngineId(products: readonly Product[]): number {
   return products.reduce((highest, product) => Math.max(highest, product.id), -1) + 1;
+}
+
+/**
+ * Which rows in the loaded category are already published anonymously.
+ *
+ * The blank address, which is the sentinel `pg-catalog` sets when it marshals an
+ * anonymous row into the engine and the same one `deliverStep` reads. Asking the
+ * catalogue rather than the database keeps this function on the data the event is
+ * actually being built from — a second query could disagree with the roster whose
+ * engine ids the designation has to avoid.
+ */
+function anonymousIdsIn(products: readonly Product[]): number[] {
+  return products.filter((product) => product.url === '').map((product) => product.id);
 }

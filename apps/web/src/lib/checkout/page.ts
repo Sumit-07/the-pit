@@ -51,7 +51,9 @@
 import { escapeHtml } from '@the-pit/auth';
 import { formatUsd, PURCHASE_TERMS, type PriceTier, type SubmissionRejection } from '@the-pit/payments';
 
+import { anonSeed, pseudonymFor, robotSvg } from '@/lib/anon';
 import { panelLabels } from '@/lib/boards/copy';
+import { BYLINE_ANONYMOUS, BYLINE_FIELD, BYLINE_NAMED } from '@/lib/checkout/byline';
 import type { CategoryPanel } from '@/lib/checkout/panel';
 import { PITCH_LIMIT } from '@/lib/checkout/pitch';
 import { BASE, FONT_LINKS, TOKENS } from '@/lib/theme';
@@ -161,6 +163,33 @@ a.act{margin-top:16px}
 .look{display:block;font-family:var(--mono);font-size:11px;line-height:1.45;color:var(--dim);
   margin-top:6px;min-height:16px}
 .look[hidden]{display:none}
+
+/*
+ * ---------- the byline ----------
+ *
+ * The same two cards the tiers use, and that is the argument for the styling
+ * rather than a coincidence of markup. This is a purchase decision of the same
+ * weight as $5-or-$15: it is chosen once, before anything is known, and it is the
+ * only one on the page that cannot be revisited. A checkbox tucked under the
+ * category select would have said the opposite about it — and an UNCHECKED box
+ * would have made "named" a default nobody was shown rather than a choice
+ * somebody made.
+ */
+.byline{margin-top:10px}
+/* The example robot. A recess, like the panel column: it is a specimen of what
+   the board will show, not a feature being sold. */
+.bot{display:flex;align-items:center;gap:11px;margin-top:12px;padding:11px 13px;
+  background:var(--sunk);border:1px solid var(--hair);border-radius:var(--r1);
+  box-shadow:inset 0 1px 3px rgb(var(--shade-c) / .45)}
+.bot .robot{flex:0 0 auto;color:var(--dimmer);border-radius:var(--r1)}
+.bot .botcap{font-family:var(--mono);font-size:11px;line-height:1.55;color:var(--faint)}
+.bot .botcap b{display:block;font-size:12px;color:var(--dim);font-weight:600;letter-spacing:.02em}
+/* The frozen-ness, spelled out. Prose rather than a hint line, because a hint is
+   read as an aside and this is the term of the sale. */
+.frozen{margin-top:14px}
+.frozen p{font-size:13.5px;line-height:1.62;color:var(--dim)}
+.frozen p+p{margin-top:9px}
+.frozen b{color:var(--ink);font-weight:600}
 `;
 
 /**
@@ -455,6 +484,20 @@ export interface SubmitFormValues {
   readonly pitch: string;
   readonly categorySlug: string;
   readonly tier: string;
+  /**
+   * Published as a robot rather than under a name.
+   *
+   * A `boolean` and not a string, unlike every other field here, because it is the
+   * only one that is a DECISION rather than text being echoed back for editing.
+   * `handleCheckoutCreate` resolves the wire value to this before it builds a
+   * view, so there is exactly one place that decides what "yes" looks like and the
+   * renderer cannot reach a second answer.
+   *
+   * `false` is the default and it is a real default rather than an absence — see
+   * `bylineChoice`, which pre-checks the named card so the visitor is looking at
+   * the choice they will get.
+   */
+  readonly anonymous: boolean;
 }
 
 export const EMPTY_FORM: SubmitFormValues = {
@@ -464,6 +507,7 @@ export const EMPTY_FORM: SubmitFormValues = {
   pitch: '',
   categorySlug: '',
   tier: 'single',
+  anonymous: false,
 };
 
 export interface SubmitPageView {
@@ -523,6 +567,83 @@ function tierChoices(view: SubmitPageView): string {
       ].join('');
     })
     .join('');
+}
+
+/**
+ * The byline, as two cards and the terms of taking the second one.
+ *
+ * ## Why it is a pair of radios and not a checkbox
+ *
+ * An unchecked box makes "named" a default the visitor inherits without being
+ * shown it, and this is the one field on the form whose default they can never
+ * revisit. Two cards state both outcomes in the same breath, pre-select the
+ * ordinary one, and make choosing the other an act rather than an omission. It is
+ * also the same control the tiers use, which is the honest comparison: this is a
+ * purchase decision of that weight.
+ *
+ * ## The copy has to earn the choice
+ *
+ * Someone reading this is deciding, before they know their score, something they
+ * cannot change. So the block below says four things plainly and in this order:
+ * what stays public either way (nearly everything), that it is frozen and why,
+ * what they will look like, and the one door back. The tone is deliberately not
+ * apologetic — a founder buying an evaluation without a public byline is not
+ * ashamed of anything, and copy that implied otherwise would be selling the
+ * option it is describing.
+ *
+ * The example robot is generated, not drawn: the same `anonSeed`/`robotSvg`/
+ * `pseudonymFor` that the board and the verdict page use, so the specimen cannot
+ * drift from the real thing and the designation printed beside it is the one that
+ * seed actually produces.
+ */
+const EXAMPLE_SEED = anonSeed('example', 427);
+const EXAMPLE_DESIGNATION = pseudonymFor(EXAMPLE_SEED);
+
+function bylineChoice(view: SubmitPageView): string {
+  const named = view.values.anonymous ? '' : ' checked';
+  const anon = view.values.anonymous ? ' checked' : '';
+  return [
+    `<div class="tiers byline">`,
+    '<label class="tier">',
+    `<b><input type="radio" name="${BYLINE_FIELD}" value="${BYLINE_NAMED}"${named}>Under your name</b>`,
+    '<span>Your name and your address sit on the board beside the score.</span>',
+    '</label>',
+    '<label class="tier">',
+    `<b><input type="radio" name="${BYLINE_FIELD}" value="${BYLINE_ANONYMOUS}"${anon}>As a robot</b>`,
+    '<span>Your name and your address are withheld. Nothing else is.</span>',
+    '</label>',
+    '</div>',
+  ].join('');
+}
+
+/** The terms of the second card, printed under it. Full copy; see `bylineChoice`. */
+function bylineTerms(): string {
+  return [
+    '<div class="bot">',
+    // Labelled, because it is the subject of the sentence beside it rather than
+    // decoration: a reader who cannot see it still needs to know what it is.
+    robotSvg(EXAMPLE_SEED, { size: 40, label: `Example robot: ${EXAMPLE_DESIGNATION}` }),
+    `<span class="botcap"><b>${escapeHtml(EXAMPLE_DESIGNATION)}</b>An example. Yours is drawn from your ` +
+      'own listing and never changes — same robot, same designation, every board you appear on.</span>',
+    '</div>',
+
+    '<div class="frozen">',
+    '<p><b>Everything a reader uses stays public either way.</b> The score, every cut, the reason for ' +
+      'each one and the juror who took it, your cluster, and the whole demand picture. Anonymity ' +
+      'withholds two things and only two: your name and your URL. A verdict nobody can check is the ' +
+      'thing this place exists to replace, so we do not withhold the verdict.</p>',
+    '<p><b>You are choosing now because it cannot be changed later.</b> Nobody has scored you yet, and ' +
+      'once the choice is written the database will not move it. That is on purpose: if a founder could ' +
+      'go anonymous after reading a bad verdict, the named half of every board would be the flattering ' +
+      'half and a name would stop meaning anything. Choosing before you know the answer costs the board ' +
+      'nothing, which is why you are allowed to.</p>',
+    '<p><b>There is one way back, and it is yours to take.</b> Prove the listing is yours through GitHub ' +
+      'and you can choose to be named. That is your consent about your own product, not a reaction to a ' +
+      'number — and it names you on future boards only. The verdict you were delivered keeps the ' +
+      'designation it was delivered under.</p>',
+    '<p>Picking the robot is not hiding. It is buying the evaluation without the public byline.</p>',
+    '</div>',
+  ].join('');
 }
 
 /** A metric name, made readable. Mirrors `boards/view.ts`'s `metricLabel`. */
@@ -679,7 +800,16 @@ export function renderSubmitPage(view: SubmitPageView): string {
     '<span class="hint">Pick the one your buyers would search. Rank is computed inside a category, so a ' +
       'wrong one is not a shortcut — we check it before you pay and refuse rather than charge you.</span></label>',
 
-    '<div class="sh" style="margin-top:18px">What you are buying</div>',
+    // Above the tier, and that order is the argument. The tier is how many runs
+    // you are buying and can be bought again tomorrow; this is the one thing on
+    // the form that is settled forever the moment the button is pressed, and it
+    // should be read while the visitor is still deciding rather than after they
+    // have already reached for the price.
+    '<div class="sh" style="margin-top:18px">How you appear on the board</div>',
+    bylineChoice(view),
+    bylineTerms(),
+
+    '<div class="sh" style="margin-top:22px">What you are buying</div>',
     `<div class="tiers">${tierChoices(view)}</div>`,
 
     '<button class="act" type="submit">Take my $5 →</button>',
@@ -788,6 +918,14 @@ function renderFormOnly(view: SubmitPageView): string {
     `<textarea name="pitch" maxlength="${PITCH_LIMIT}">${escapeHtml(view.values.pitch)}</textarea></label>`,
     '<label><span class="sh">Category</span>',
     `<select name="category" required>${categoryOptions(view)}</select></label>`,
+    // The choice carries across a refusal, checked as it was left. Re-rendering
+    // the form with the named card silently re-selected would flip a decision
+    // somebody made, on the one field where that is not recoverable — and it
+    // would do it on the page they reached by being told they were not charged.
+    '<div class="sh" style="margin-top:18px">How you appear on the board</div>',
+    bylineChoice(view),
+    '<span class="hint">Chosen once, before anything is scored, and frozen there. ' +
+      'A robot withholds your name and your address; every cut, reason, juror and cluster stays public.</span>',
     `<div class="tiers">${tierChoices(view)}</div>`,
     '<button class="act" type="submit">Try again →</button>',
     '</form>',

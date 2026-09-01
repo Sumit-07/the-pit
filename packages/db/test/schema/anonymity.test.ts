@@ -254,6 +254,63 @@ describe('a seeded listing is anonymous (DECISIONS.md, S4-source)', () => {
     expect(inserted.rows[0]?.anonymous).toBe(true);
   });
 
+  it('freezes the choice on the PAID row the submission path now creates', async () => {
+    // The shape this feature ships. Everything above proves the rule on a SEEDED
+    // row, which `products_seeded_is_anonymous` already forced into anonymity;
+    // this is the row a customer chose for themselves on `/submit`, and it is the
+    // only one whose owner has a motive to flip it after reading a number.
+    //
+    // Asserted against the database with no handler in between, on purpose. The
+    // route refusing is one code path among several — a script, an admin console,
+    // a migration written in a hurry — and the damage from any bypass is silent:
+    // a board that has been quietly flattered does not look broken.
+    const categoryId = await insertCategory(database.pg, freshSlug('paidfrozen'));
+    const inserted = await database.pg.query<{ id: string }>(
+      `INSERT INTO products
+         (category_id, engine_id, name, url, normalized_url, description, description_hash,
+          source, status, anonymous, submitted_by_email)
+       VALUES ($1, 0, 'Ashgrove Ledger', 'https://ashgrove.dev', 'ashgrove.dev', 'd', $2, 'paid',
+               'pending', true, 'payer@example.com')
+       RETURNING id`,
+      [categoryId, '0'.repeat(64)],
+    );
+    const productId = inserted.rows[0]?.id;
+    if (productId === undefined) throw new Error('the paid row was not inserted');
+
+    // The move the customer would want to make after a good score, and the one
+    // they would want after a bad one. Both refused, unclaimed.
+    const revealed = await expectRejection(database.pg, 'UPDATE products SET anonymous = false WHERE id = $1', [
+      productId,
+    ]);
+    expect(revealed).toMatch(/frozen/);
+
+    const hidden = await expectRejection(
+      database.pg,
+      `UPDATE products SET anonymous = true WHERE id = $1`,
+      [productId],
+    );
+    // Already true, so this one is a no-op rather than a violation — the flip that
+    // matters is asserted on a NAMED paid row instead.
+    expect(hidden).toBeNull();
+
+    const named = await database.pg.query<{ id: string }>(
+      `INSERT INTO products
+         (category_id, engine_id, name, url, normalized_url, description, description_hash,
+          source, status, anonymous, submitted_by_email)
+       VALUES ($1, 1, 'Named Co', 'https://named.example', 'named.example', 'd', $2, 'paid',
+               'pending', false, 'payer@example.com')
+       RETURNING id`,
+      [categoryId, '0'.repeat(64)],
+    );
+    const namedId = named.rows[0]?.id;
+    if (namedId === undefined) throw new Error('the named paid row was not inserted');
+
+    const hiding = await expectRejection(database.pg, 'UPDATE products SET anonymous = true WHERE id = $1', [
+      namedId,
+    ]);
+    expect(hiding).toMatch(/frozen/);
+  });
+
   it('lets a claimed seeded row be named — the founder turning up is the point', async () => {
     const categoryId = await insertCategory(database.pg, freshSlug('claimseed'));
     const account = await insertAccount(database.pg, `founder-${(counter += 1)}@example.com`);

@@ -199,6 +199,23 @@ export interface PaidListing {
    * `types.ts` and `products_anonymity_immutable`. Absent means named.
    */
   readonly anonymous?: boolean;
+  /**
+   * The listing's REAL name and address, when the run was shown a designation.
+   *
+   * `lib/payments/enqueue.ts` redacts an anonymous submission before the event is
+   * sent, so by the time a `ProductSet` reaches `writeProducts` the bought row
+   * carries `Unit Kilo-427` and a blank URL. Storing that would be storing the
+   * mask: `products` holds the truth and every read path redacts on the way out
+   * (`pg-catalog.ts`), which is what lets a verified owner later choose to be
+   * named — the one transition `products_anonymity_immutable` allows. A row that
+   * had forgotten who it was would have nothing to reveal, and would also lose
+   * `normalized_url`, which `brief §2.5`'s per-product cap keys on.
+   *
+   * Absent on a named placement: the product already carries both, and a second
+   * copy would be two answers to one question.
+   */
+  readonly name?: string;
+  readonly url?: string;
 }
 
 /**
@@ -350,13 +367,22 @@ export class PgPipelineStore implements PipelineStore {
       .values(
         set.products.map((product) => {
           const bought = this.paid !== undefined && this.paid.engineId === product.id;
+          /**
+           * The bought row is written under its REAL identity even when the run
+           * was shown a designation. See `PaidListing.name`: `products` stores the
+           * truth and the read paths redact, which is the only arrangement in
+           * which a verified owner can later choose to be named — and the only one
+           * that keeps `normalized_url` pointing at the address the cap keys on.
+           */
+          const name = bought ? this.paid?.name ?? product.name : product.name;
+          const url = bought ? this.paid?.url ?? product.url : product.url;
           return {
             id: deterministicUuid('product', this.slug, String(product.id)),
             categoryId,
             engineId: product.id,
-            name: product.name,
-            url: product.url,
-            normalizedUrl: normalizeUrl(product.url),
+            name,
+            url,
+            normalizedUrl: normalizeUrl(url),
             description: product.description,
             descriptionHash: digest(product.description),
             source: bought ? ('paid' as const) : ('seeded' as const),

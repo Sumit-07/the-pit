@@ -227,6 +227,46 @@ describe('GET /submit renders with no DATABASE_URL', () => {
     expect(page.body).toContain('Your pitch');
   });
 
+  it('carries the byline control, with “under your name” pre-selected', async () => {
+    // The choice `products.anonymity` has been frozen against since `0009` and
+    // that nothing offered to a customer until now. It renders on the page that
+    // takes the money, on a deployment with nothing wired: the control reads no
+    // row and the designation it illustrates is generated from a seed, so adding
+    // it must not have put a database back on this render path.
+    const page = await renderSubmit();
+
+    const radios = [...page.body.matchAll(/<input type="radio" name="anonymous" value="([a-z]+)"( checked)?>/g)];
+    expect(radios.map((match) => match[1])).toEqual(['named', 'anonymous']);
+    // The default, stated on the page rather than inherited from an unchecked box.
+    expect(radios[0]?.[2]).toBe(' checked');
+    expect(radios[1]?.[2]).toBeUndefined();
+  });
+
+  it('says what stays public, that the choice is frozen, and how it can be undone', async () => {
+    // The copy is load-bearing here in a way it is not elsewhere on the form: this
+    // is a decision made once, before the buyer knows their result, that no later
+    // code path will offer to change. A control without these four sentences would
+    // be a control that took an irreversible choice on an unstated basis.
+    const page = await renderSubmit();
+    const text = page.body.replaceAll('&#39;', "'").replaceAll('&amp;', '&');
+
+    // 1. what is withheld, and what is not.
+    expect(text).toContain('Everything a reader uses stays public either way');
+    for (const kept of ['score', 'cut', 'reason', 'juror', 'cluster', 'demand']) {
+      expect(text.toLowerCase()).toContain(kept);
+    }
+    expect(text).toContain('your name and your URL');
+    // 2. that it cannot be changed later, and why.
+    expect(text).toContain('cannot be changed later');
+    // 3. the robot, and that the designation is stable.
+    expect(text).toMatch(/Unit [A-Za-z]+-\d{3}/);
+    expect(text).toContain('never changes');
+    // 4. the one door back.
+    expect(text).toContain('GitHub');
+    // And it does not read as shame.
+    expect(text).toContain('not hiding');
+  });
+
   it('prefills from the query string without needing anything wired', async () => {
     // The "pitch this" link from a board lands here. It is a read of `req.url`
     // and nothing else, and it must survive the unwired case too.

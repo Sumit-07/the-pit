@@ -307,6 +307,21 @@ export interface SubmissionDraftRow {
    * alone, the other would be a claim they never made.
    */
   readonly pitch: string | null;
+  /**
+   * Published without a name or a URL, chosen on the form before anybody scored
+   * anything.
+   *
+   * Not optional and not nullable. Every other field on this row is text somebody
+   * typed; this one is a decision, and "the buyer did not say" is not one of its
+   * values — the form always sends a value and the route defaults an absent one to
+   * `false` explicitly, so by the time a draft reaches here the answer exists.
+   * Making it optional would let a writer omit it and publish a name by accident,
+   * which is the one mistake on this path that cannot be taken back.
+   *
+   * `products.anonymous` is where it lands and where it freezes
+   * (`products_anonymity_immutable`).
+   */
+  readonly anonymous: boolean;
   readonly cycleId: string;
   readonly tier: 'single' | 'triple';
   readonly attemptNumber: number;
@@ -345,6 +360,7 @@ export function createPostgresSubmissionStore(db: Database): PostgresSubmissionS
           description: draft.description,
           descriptionHash: draft.descriptionHash,
           pitch: draft.pitch,
+          anonymous: draft.anonymous,
           cycleId: draft.cycleId,
           tier: draft.tier,
           attemptNumber: draft.attemptNumber,
@@ -373,6 +389,7 @@ export function createPostgresSubmissionStore(db: Database): PostgresSubmissionS
           description: submissions.description,
           descriptionHash: submissions.descriptionHash,
           pitch: submissions.pitch,
+          anonymous: submissions.anonymous,
           cycleId: submissions.cycleId,
           tier: submissions.tier,
           attemptNumber: submissions.attemptNumber,

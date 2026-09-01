@@ -274,6 +274,10 @@ describe('the submission draft', () => {
     // The founder's own words, beside the site's. Nullable, and null here so the
     // round trip below proves the column survives "they said nothing" too.
     pitch: null,
+    // The byline, chosen on the form before anything was scored. `false` here so
+    // the round trip below proves the ordinary, named case survives the column;
+    // the anonymous case has its own test beneath it.
+    anonymous: false,
     cycleId: '2026-06-01',
     tier: 'single' as const,
     attemptNumber: 1,
@@ -295,11 +299,40 @@ describe('the submission draft', () => {
       description: 'Runs your jobs.',
       descriptionHash: 'a'.repeat(64),
       pitch: null,
+      anonymous: false,
       cycleId: '2026-06-01',
       tier: 'single',
       attemptNumber: 1,
       repitchOf: null,
     });
+  });
+
+  it('round-trips the anonymity choice, which is the one field nobody can change later', async () => {
+    // `products.anonymous` is the source of truth and `products_anonymity_immutable`
+    // freezes it, but the value has to REACH that column, and this row is the only
+    // thing standing between the form and the webhook. A store that dropped the
+    // flag here would publish a paying customer under a name they asked us to
+    // withhold, and every test downstream of this one would still pass.
+    const store = createPostgresSubmissionStore(db);
+    const id = await store.create({ ...draft, anonymous: true });
+
+    expect((await store.find(id))?.anonymous).toBe(true);
+  });
+
+  it('defaults a draft written before the column existed to named', async () => {
+    // The backfill, asserted at the table rather than at the store: `0010` adds
+    // the column NOT NULL DEFAULT false, so a row inserted by a writer that does
+    // not know about it is named — which is what the form those submissions came
+    // through actually promised.
+    const inserted = await pg.query<{ anonymous: boolean }>(
+      `insert into submissions
+         (category_slug, name, url, normalized_url, description, description_hash, cycle_id, tier, attempt_number)
+       values ('developer-tools', 'Runlet', 'https://runlet.dev/', 'runlet.dev', 'Runs your jobs.', $1, '2026-06-01', 'single', 1)
+       returning anonymous`,
+      ['a'.repeat(64)],
+    );
+
+    expect(inserted.rows[0]?.anonymous).toBe(false);
   });
 
   it('round-trips a pitch that WAS written, kept apart from the description', async () => {

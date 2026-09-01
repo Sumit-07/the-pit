@@ -145,6 +145,32 @@ export interface PlacementPayer {
   email: string;
   /** 1-based. `brief §2.4`: "Show the attempt count publicly." */
   attemptNumber: number;
+  /**
+   * The buyer chose at submission to be published without their name or URL.
+   *
+   * It travels with the PAYER rather than with the product because the product on
+   * this event is already redacted — `lib/payments/enqueue.ts` blanks the address
+   * and swaps in the designation before the event is sent, so no juror is ever
+   * given a name it could write into a reason. This field is what tells the
+   * catalogue write that the blank it can see is a CHOICE and not a missing value,
+   * and it is what `products.anonymous` is written from.
+   *
+   * Absent means named, which is the ordinary case and what every event written
+   * before the choice existed meant.
+   */
+  anonymous?: boolean;
+  /**
+   * The real name and address, when `anonymous` withheld them from the product.
+   *
+   * `products` stores the truth and redacts on the way out — that is what
+   * `pg-catalog.ts` reads, and it is the only reason the one legal transition
+   * (`anonymous -> named`, on a listing whose owner has been verified) has
+   * anything to reveal. A row that had stored its own designation would have
+   * forgotten who it was.
+   *
+   * Absent on a named placement, where the product carries both already.
+   */
+  listing?: { name: string; url: string };
 }
 
 export const inngest = new Inngest({ id: 'the-pit' });
@@ -412,7 +438,18 @@ export async function executePlacement(
     data.payer === undefined
       ? categoryStore
       : bindings.store(category.category, versions, {
-          paid: { engineId: data.product.id, email: data.payer.email },
+          paid: {
+            engineId: data.product.id,
+            email: data.payer.email,
+            // The choice, and the identity the run was not shown. `writeProducts`
+            // needs both: `products.anonymous` is the choice, and `products.name`
+            // and `products.url` are the truth this run has been reading a
+            // designation in place of.
+            ...(data.payer.anonymous === undefined ? {} : { anonymous: data.payer.anonymous }),
+            ...(data.payer.listing === undefined
+              ? {}
+              : { name: data.payer.listing.name, url: data.payer.listing.url }),
+          },
         });
   const [results, ranking] = await Promise.all([categoryStore.readResults(), categoryStore.readRanking()]);
 
@@ -459,6 +496,7 @@ export async function executePlacement(
           email: data.payer.email,
           engineId: data.product.id,
           attemptNumber: data.payer.attemptNumber,
+          ...(data.payer.anonymous === undefined ? {} : { anonymous: data.payer.anonymous }),
         };
 
   const deps: PipelineDeps = {
