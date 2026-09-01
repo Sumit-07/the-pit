@@ -99,6 +99,16 @@ export default async function Home(): Promise<ReactNode> {
           THE <i>PIT</i>
         </a>
         <span className="navr">
+          {/*
+            `/how-it-works` sits before the boards on every nav in the app. It is
+            the page a first-time reader needs before the CTA means anything —
+            the mechanism the homepage's three panels only gesture at — and
+            `brief` Part 5's rule that no rank is promised anywhere is easier to
+            keep when the explanation has a home of its own to keep it in.
+          */}
+          <a className="navlink" href="/how-it-works">
+            how it works
+          </a>
           <a className="navlink" href="/boards">
             boards
           </a>
@@ -234,6 +244,20 @@ export default async function Home(): Promise<ReactNode> {
             </div>
           </div>
         </div>
+        {/*
+          The three panels say WHO judges and how much each one moves. They do not
+          say what a deduction is, why the six are meant to disagree, why a harsh
+          juror cannot outvote a lenient one, or why most products never face a
+          buyer at all — and a reader deciding whether to spend five dollars is
+          entitled to all of that before the CTA rather than after the verdict. It
+          is one link because `brief` Part 6 keeps the board on most of this page;
+          the page it points at is where the mechanism is written out.
+        */}
+        <p className="lede">
+          That is who judges. <a href="/how-it-works">How this works</a> is the mechanism behind them:
+          where the number comes from, what it cannot promise, and why no model on this site is ever asked
+          for a rank.
+        </p>
       </section>
 
       <div className="closer">

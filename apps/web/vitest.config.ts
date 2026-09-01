@@ -25,5 +25,18 @@ export default defineConfig({
   test: {
     include: ['test/**/*.test.ts'],
     environment: 'node',
+    /*
+     * Vitest's default is 5s, and several tests here legitimately need more than
+     * that: they render a whole board — 48 products with their full ledgers and
+     * their favicons — or replay a seeded category through the anonymity checks.
+     * Alone each finishes in about four seconds, which means the default turned
+     * them into timeouts as soon as the suite ran hot enough for the workers to
+     * contend. A timeout that fires on CPU contention rather than on a hang is a
+     * flake, and a flake in a suite this size is worse than a slow test: it
+     * teaches everyone to re-run. Nothing in this suite waits on a network or a
+     * real database, so a genuine hang still fails here — it just fails at 20s.
+     */
+    testTimeout: 20_000,
+    hookTimeout: 60_000,
   },
 });

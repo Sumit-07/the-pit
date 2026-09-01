@@ -1551,6 +1551,34 @@ section {
 }
 
 /*
+ * The one-line introduction a section gets, mirroring `lib/theme.ts`'s `.lede`
+ * for the surfaces that are HTML strings. It was only ever declared there, so a
+ * React surface that used the class got an unstyled paragraph; the two copies
+ * are meant to be the same theme (see the head of `test/theme-drift.test.ts`).
+ */
+.lede {
+  font-size: 14.5px;
+  line-height: 1.62;
+  color: var(--dim);
+  margin-top: 10px;
+  max-width: 68ch;
+}
+.lede b {
+  color: var(--ink);
+  font-weight: 600;
+}
+/* Underlined rather than coloured: the two colours in this system mean taken and
+   survived, and a link is neither. */
+.lede a {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+}
+.lede a:hover {
+  border-bottom-color: var(--ink);
+}
+
+/*
  * Seven cells since Median health joined them, which is why this is flex and no
  * longer a fixed grid: seven does not divide by three or by two, and a grid
  * whose gaps ARE the rules leaves an orphan slot on the last row as a bare strip
@@ -1742,6 +1770,147 @@ footer {
   color: var(--dimmer);
 }
 
+/* ---------- how this works: the numbered ledger ---------- */
+/*
+ * The method, drawn the way this app already draws a list of findings: one raised
+ * surface, hairline-divided rows, a mono label in the gutter. It is the ledger
+ * idiom the verdict page and the category board already use, which is the point —
+ * the page that explains the mechanism should look like the pages that show it,
+ * not like a marketing section pasted in front of them.
+ *
+ * The step number is a LABEL and not a rank, so it is mono in `--dimmer` and
+ * carries neither hue. `--cut` and `--held` mean taken and survived on every
+ * surface in this system (`lib/theme.ts`), and there is nothing on this page for
+ * either of them to be about.
+ */
+/* The reading column. `.wrap` is 1020px because a board is a table; this page is
+   prose, and 1020px of 14px text is a line nobody finishes. */
+.wrap.hiw {
+  max-width: 900px;
+}
+.steps {
+  margin-top: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  box-shadow: var(--lip), var(--e1);
+}
+.step {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 0 18px;
+  padding: 18px 20px 19px;
+}
+.step + .step {
+  border-top: 1px solid var(--hair);
+}
+.step .n {
+  grid-row: 1 / span 2;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--dimmer);
+  padding-top: 2px;
+}
+.step h3 {
+  grid-column: 2;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.012em;
+  color: var(--ink);
+}
+.step p {
+  grid-column: 2;
+  margin-top: 7px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--dim);
+}
+.step p b {
+  color: var(--ink);
+  font-weight: 600;
+}
+/*
+ * Wide: the claim and its explanation sit side by side, so a reader can run down
+ * the left-hand column and read only the eight sentences, or take one row across.
+ * That is the same affordance the category board's ledger gives, and it is what
+ * stops a 900px column from being a 460px paragraph with 440px of nothing beside
+ * it.
+ */
+@media (min-width: 860px) {
+  .step {
+    grid-template-columns: 46px minmax(0, 250px) minmax(0, 1fr);
+    column-gap: 24px;
+  }
+  .step .n {
+    grid-row: 1;
+  }
+  .step h3 {
+    grid-row: 1;
+  }
+  .step p {
+    grid-column: 3;
+    grid-row: 1;
+    margin-top: 0;
+  }
+}
+
+/*
+ * The three warnings take the same shape as the steps: the label on the left,
+ * the sentence on the right. Scoped to this page, because `.blk` is the shared
+ * block on four other surfaces and none of them wants a grid.
+ */
+.hiw .blk p {
+  max-width: 70ch;
+}
+@media (min-width: 860px) {
+  .hiw .blk {
+    display: grid;
+    grid-template-columns: minmax(0, 250px) minmax(0, 1fr);
+    column-gap: 24px;
+    align-items: start;
+  }
+  .hiw .blk .sect {
+    margin-bottom: 0;
+    padding-top: 2px;
+  }
+  /* A block whose label was left off still puts its prose in the reading column
+     rather than in the label's 250px gutter. */
+  .hiw .blk p {
+    grid-column: 2;
+  }
+}
+
+/* The closing action. Same control as the hero's, in the plain register the
+   surfaces behind the homepage keep. */
+.actrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 20px;
+  margin-top: 34px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+.actrow .terms {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--dimmer);
+  letter-spacing: 0.02em;
+}
+.actrow .terms a {
+  color: var(--dim);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+}
+.actrow .terms a:hover {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+
 /* ---------- responsive ---------- */
 @media (max-width: 900px) {
   .fgrid {
@@ -1784,6 +1953,13 @@ footer {
   }
 }
 @media (max-width: 480px) {
+  /* The gutter costs more than it earns at this width: the number goes above
+     the heading rather than squeezing the paragraph into 20 characters. */
+  .step {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    padding: 16px 15px 17px;
+  }
   .stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

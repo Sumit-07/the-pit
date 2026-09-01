@@ -421,7 +421,8 @@ function document_(title: string, body: string, wide = false): string {
     '</head>',
     `<body><div class="wrap${wide ? ' wide' : ''}">`,
     '<nav><a class="mark" href="/">THE P<i>I</i>T</a>',
-    '<span class="navr"><a href="/boards">Boards</a><a href="/account">Account</a></span></nav>',
+    '<span class="navr"><a href="/how-it-works">How this works</a>' +
+      '<a href="/boards">Boards</a><a href="/account">Account</a></span></nav>',
     body,
     '</div>',
     // At the end of the body, so they bind to markup that already exists and so

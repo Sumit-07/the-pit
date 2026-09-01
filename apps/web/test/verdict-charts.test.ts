@@ -24,7 +24,7 @@ import {
   CUT_RAMP,
   cutMatrix,
   demandChart,
-  lossBars,
+  lossChart,
   rampLabel,
   rampStep,
 } from '@/lib/verdict/charts';
@@ -300,28 +300,36 @@ describe('the matrix, rendered', () => {
   });
 });
 
-describe('loss per metric, with the spread', () => {
-  it('plots the merged cut and the cross-juror spread on one axis', async () => {
+describe('what each metric kept, with the spread', () => {
+  it('plots the merged score that SURVIVED and the cross-juror spread on one axis', async () => {
     const verdict = await seeded('developer-tools', 'Sequo');
-    const bars = lossBars(verdict);
+    const { bars, polarity } = lossChart(verdict);
 
+    // The direction, asserted before the numbers: this figure was turned round to
+    // match the two radials above it, and every assertion below only means
+    // anything if it stayed round.
+    expect(polarity).toBe('more-is-better');
     expect(bars).toHaveLength(verdict.metrics.length);
     for (const [index, bar] of bars.entries()) {
       const metric = verdict.metrics[index];
       expect(metric).toBeDefined();
       expect(bar.metric).toBe(metric?.metric);
+      // What the bar draws is the score, not the loss.
+      expect(bar.held).toBeCloseTo(metric?.score ?? 0, 10);
       expect(bar.cuts).toBeCloseTo(100 - (metric?.score ?? 0), 10);
+      // The two halves are exactly one track, with nothing left over.
+      expect(bar.held + bar.cuts).toBeCloseTo(100, 10);
       expect(bar.spread).toBe(metric?.spread);
-      // The whisker is the cut plus or minus one standard deviation, clamped to
-      // the axis it is drawn on.
-      expect(bar.low).toBeCloseTo(Math.max(0, bar.cuts - bar.spread), 10);
-      expect(bar.high).toBeCloseTo(Math.min(100, bar.cuts + bar.spread), 10);
+      // The whisker is the SCORE plus or minus one standard deviation, clamped to
+      // the axis it is drawn on — the mirror of the interval it used to be.
+      expect(bar.low).toBeCloseTo(Math.max(0, bar.held - bar.spread), 10);
+      expect(bar.high).toBeCloseTo(Math.min(100, bar.held + bar.spread), 10);
     }
   });
 
   it('marks the metric the panel split widest on, and only that one', async () => {
     const verdict = await seeded('developer-tools', 'Sequo');
-    const bars = lossBars(verdict);
+    const { bars } = lossChart(verdict);
 
     const widest = Math.max(...bars.map((bar) => bar.spread));
     for (const bar of bars) expect(bar.widest).toBe(bar.spread === widest);
@@ -331,13 +339,20 @@ describe('loss per metric, with the spread', () => {
     expect(bars.find((bar) => bar.widest)?.metric).toBe('Durability');
   });
 
-  it('draws the bar at the cut and the whisker at the spread, in the html', async () => {
+  it('draws the head at what survived, the remainder at the cut, and the whisker at the spread', async () => {
     const verdict = await seeded('developer-tools', 'Sequo');
-    const bars = lossBars(verdict);
+    const { bars } = lossChart(verdict);
     const html = renderVerdictPage(verdict);
 
     for (const bar of bars) {
-      expect(html).toContain(`<i class="lbfill" style="width:${bar.cuts.toFixed(2)}%"></i>`);
+      // The head is the score. The old chart drew `bar.cuts` here, so a revert
+      // fails this line rather than merely looking different.
+      expect(html).toContain(`<i class="lbfill" style="width:${bar.held.toFixed(2)}%"></i>`);
+      // And the cut is the rest of the same track, starting where the head ends.
+      expect(html).toContain(
+        `<i class="lbcut" style="left:${bar.held.toFixed(2)}%;width:${bar.cuts.toFixed(2)}%"></i>`,
+      );
+      expect(html).not.toContain(`<i class="lbfill" style="width:${bar.cuts.toFixed(2)}%"></i>`);
       if (bar.spread <= 0) continue;
       expect(html).toContain(
         `<i class="lbwhisk" style="left:${bar.low.toFixed(2)}%;width:${(bar.high - bar.low).toFixed(2)}%"></i>`,
@@ -362,7 +377,7 @@ describe('loss per metric, with the spread', () => {
     );
     const html = renderVerdictPage(verdict);
 
-    expect(lossBars(verdict)[0]?.spread).toBe(0);
+    expect(lossChart(verdict).bars[0]?.spread).toBe(0);
     expect(html).not.toContain('<i class="lbwhisk"');
     expect(html).toContain('every juror scored it identically');
   });
@@ -471,9 +486,11 @@ describe('frozen, not recomputed', () => {
 
     const verdict = parseVerdict({ ...row, payload });
     const html = renderVerdictPage(verdict);
-    const bar = lossBars(verdict).find((entry) => entry.metric === first?.metric);
+    const bar = lossChart(verdict).bars.find((entry) => entry.metric === first?.metric);
 
     expect(bar?.cuts).toBe(96);
-    expect(html).toContain('<i class="lbfill" style="width:96.00%"></i>');
+    expect(bar?.held).toBe(4);
+    expect(html).toContain('<i class="lbfill" style="width:4.00%"></i>');
+    expect(html).toContain('<i class="lbcut" style="left:4.00%;width:96.00%"></i>');
   });
 });

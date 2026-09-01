@@ -28,9 +28,9 @@
  *    pointing the same way: conviction, where further out is more of it.
  * 3. `cutMatrix` — **where exactly.** Magnitude across two categorical dimensions
  *    (juror × metric), which is a heatmap and takes a sequential ramp.
- * 4. `lossBars` — **how deep, and did the panel agree.** Magnitude on one
+ * 4. `lossChart` — **what was left, and did the panel agree.** Magnitude on one
  *    dimension with an interval, which is a sorted horizontal bar with a spread
- *    whisker; the category median now rides on the same axis as a tick.
+ *    whisker; the category median rides on the same axis as a tick.
  *
  * ## The radar objections, and which of them this satisfies
  *
@@ -54,8 +54,33 @@
  *    and the category median are both known at delivery and are now frozen, so the
  *    chart has the overlay that is a radial's only real justification.
  *
- * `lossBars` stays. It is the better form for "how deep, on one linear axis with
+ * `lossChart` stays. It is the better form for "how much, on one linear axis with
  * an interval", and the radial does not answer that question.
+ *
+ * ## One direction for the whole page, and the one figure exempt from it
+ *
+ * A reader scrolls this page from top to bottom and should not have to re-learn
+ * which way a bigger mark points on the way down. So **every figure with a linear
+ * axis plots what SURVIVED**: the radials plot the health each juror left and the
+ * conviction each buyer gave, and `lossChart` plots the merged score each metric
+ * kept, with the cut drawn as the remainder of the same hundred. Bigger is better,
+ * three sections running, and the paint follows from that — `lib/theme.ts` spends
+ * `--held` on what survived and `--cut` on what was taken, so the plotted half is
+ * `--held` and the remainder is `--cut`.
+ *
+ * **`cutMatrix` is the deliberate exception and must stay as it is.** It is a
+ * damage matrix, not an axis: each cell is what one juror took off one metric, and
+ * a heatmap's ramp encodes magnitude by darkness. Inverting it to plot health
+ * would make the heaviest damage the palest cell — damage would read as absence,
+ * which is the opposite of what a reader of a damage matrix is looking for — and
+ * it would put the surviving quantity on the `--cut` ramp or force a second
+ * five-step ramp in the other hue. The grid has no direction to be inconsistent
+ * with: its two dimensions are both categorical, so nothing about it "points" the
+ * way a bar or a spoke does. It is registered below as `more-is-worse`, which is
+ * the honest declaration, and the paint test holds it to `--cut`. Do not "fix" it.
+ *
+ * `FIGURE_PAINT` writes that down as data rather than as prose, so a third chart
+ * cannot be plotted backwards and painted `--held` with nothing noticing.
  *
  * ## Which way the radials point, and why it is health and not cuts
  *
@@ -80,6 +105,125 @@
  */
 
 import type { Verdict, VerdictComparison, VerdictDeduction, VerdictMetric } from './model';
+
+// --- polarity: which way a figure points, and what that obliges it to wear ------
+
+/**
+ * Which way a figure's marks grow.
+ *
+ * `more-is-better` — a longer bar, a wider polygon, a bigger number is a BETTER
+ * card. `more-is-worse` — the mark grows with the damage.
+ *
+ * This is a property of the figure and not of its caption. A caption can say
+ * anything; the polygon and the bar are what a reader actually reads, and the two
+ * have already disagreed on this page once.
+ */
+export type Polarity = 'more-is-better' | 'more-is-worse';
+
+/**
+ * The hue a polarity obliges, which is not a preference either.
+ *
+ * `lib/theme.ts` spends exactly two colours and each names one half of the same
+ * hundred: `--held` is what survived, `--cut` is what was taken. So a mark that
+ * grows as the product does better is drawing the surviving half and must wear
+ * `--held`; a mark that grows with the damage is drawing the taken half and must
+ * wear `--cut`. `test/verdict-polarity.test.ts` reads both sides — the builder's
+ * declared polarity and the CSS the page actually ships — and fails when they
+ * disagree.
+ */
+export const PAINT_FOR: Readonly<Record<Polarity, '--held' | '--cut'>> = {
+  'more-is-better': '--held',
+  'more-is-worse': '--cut',
+};
+
+/** The other one. A figure's complement wears the hue its measure does not. */
+export function opposite(polarity: Polarity): Polarity {
+  return polarity === 'more-is-better' ? 'more-is-worse' : 'more-is-better';
+}
+
+/** Every figure this module builds, by the name of the function that builds it. */
+export type FigureName = 'juryRadial' | 'buyerRadial' | 'cutMatrix' | 'lossChart' | 'demandChart';
+
+/** What one figure plots, which way, and the selectors that paint it. */
+export interface FigurePaint {
+  readonly figure: FigureName;
+  /** The direction the figure's own quantity grows in. Its builder returns this too. */
+  readonly polarity: Polarity;
+  /**
+   * The selectors in `verdict/page.ts` that paint the quantity the figure
+   * measures. Empty for a figure that carries neither hue.
+   */
+  readonly measure: readonly string[];
+  /**
+   * The selectors that paint its complement — the other half of the same hundred,
+   * which by construction wears the other hue.
+   */
+  readonly complement: readonly string[];
+  /**
+   * The selectors that carry no magnitude of either kind and must therefore wear
+   * NEITHER hue: uncertainty, reference ticks, roster proportions, chrome.
+   */
+  readonly neither: readonly string[];
+  readonly why: string;
+}
+
+/**
+ * The page's figures, their direction, and the paint that follows from it.
+ *
+ * The list exists because the failure it guards is silent. A chart plotted the
+ * wrong way round still renders, still validates, still passes every test that
+ * asks whether a width was drawn — the inverted jury radial shipped exactly that
+ * way. Writing the direction down beside the selectors that paint it turns "this
+ * chart points the wrong way" into a failing assertion rather than something a
+ * reader notices three sections later.
+ *
+ * A new figure that paints either hue and is not listed here fails the
+ * exhaustiveness check in `test/verdict-polarity.test.ts`, so the registry cannot
+ * quietly fall behind the page.
+ */
+export const FIGURE_PAINT: readonly FigurePaint[] = [
+  {
+    figure: 'juryRadial',
+    polarity: 'more-is-better',
+    measure: ['.rj .rself', '.rj .rdot', '.rj .rkey i.rself'],
+    complement: [],
+    neither: ['.rp', '.rpdot', '.rring', '.rspoke'],
+    why: 'plots the health each juror left standing, so further out is a better card',
+  },
+  {
+    figure: 'buyerRadial',
+    polarity: 'more-is-better',
+    measure: ['.rb .rself', '.rb .rdot', '.rb .rkey i.rself'],
+    complement: [],
+    neither: ['.rp', '.rpdot', '.rring', '.rspoke'],
+    why: 'plots the conviction behind a first choice, which is a thing the product won',
+  },
+  {
+    figure: 'lossChart',
+    polarity: 'more-is-better',
+    measure: ['.lbfill'],
+    complement: ['.lbcut'],
+    neither: ['.lbwhisk', '.lbmed'],
+    why: 'plots the merged score each metric KEPT, with the cut as the remainder of the same hundred',
+  },
+  {
+    figure: 'cutMatrix',
+    polarity: 'more-is-worse',
+    measure: ['.mxc.k1', '.mxc.k2', '.mxc.k3', '.mxc.k4', '.mxc.k5'],
+    complement: [],
+    neither: ['.mxc.ksub'],
+    // The exception, stated where the check can see it. See the module comment.
+    why: 'a damage matrix: darker is a deeper cut, because inverting it would make damage read as absence',
+  },
+  {
+    figure: 'demandChart',
+    polarity: 'more-is-better',
+    measure: [],
+    complement: [],
+    neither: ['.dfill', '.dtrack'],
+    why: 'the Floor meters are proportions of a panel roster, not shares of the hundred the two hues divide',
+  },
+];
 
 // --- the sequential ramp -------------------------------------------------------
 
@@ -177,6 +321,15 @@ export interface MatrixRow {
 
 /** The whole grid. */
 export interface CutMatrix {
+  /**
+   * `more-is-worse`, and the one figure on this page that is.
+   *
+   * Declared rather than implied, so the exception is a value the paint test reads
+   * rather than a convention the next reader has to infer. The module comment gives
+   * the argument: a heatmap of damage encodes magnitude as darkness, and inverting
+   * it would make the heaviest cut the palest cell.
+   */
+  readonly polarity: Polarity;
   /** Column order: the ledger's, heaviest loss first. */
   readonly metrics: readonly string[];
   /** Row order: harshest juror first. */
@@ -259,6 +412,8 @@ export function cutMatrix(verdict: Verdict): CutMatrix {
       .sort((a, b) => b.points - a.points)[0] ?? null;
 
   return {
+    // Deliberate, documented, and not a drift. See the module comment.
+    polarity: 'more-is-worse',
     metrics,
     rows,
     heaviest,
@@ -309,6 +464,15 @@ export type RadialMark = 'no answer' | '2nd choice' | null;
 
 /** One radial, ready to draw. */
 export interface Radial {
+  /**
+   * `more-is-better` on both radials, carried as a field rather than as a comment.
+   *
+   * The chart interface used to say nothing about which way it pointed, which is
+   * how a health polygon and a cuts polygon could be the same type: a third radial
+   * could be plotted backwards, painted `--held`, and pass every existing test.
+   * `FIGURE_PAINT` and `test/verdict-polarity.test.ts` close that.
+   */
+  readonly polarity: Polarity;
   /** Juror roles or persona names, in the frozen installed order. */
   readonly axes: readonly string[];
   readonly self: RadialSeries;
@@ -484,6 +648,7 @@ export function juryRadial(verdict: Verdict): Radial | null {
   );
 
   return {
+    polarity: 'more-is-better',
     axes,
     self: { label: verdict.name, values, role: 'self' },
     context,
@@ -540,6 +705,7 @@ export function buyerRadial(verdict: Verdict): Radial | null {
   );
 
   return {
+    polarity: 'more-is-better',
     axes,
     self: { label: verdict.name, values, role: 'self' },
     context,
@@ -551,19 +717,37 @@ export function buyerRadial(verdict: Verdict): Radial | null {
   };
 }
 
-// --- per-metric loss, with the cross-juror spread ------------------------------
+// --- per-metric survival, with the cross-juror spread --------------------------
 
-/** One metric's bar. All four numbers are on the same 0-100 axis. */
+/** One metric's bar. Every number on it is on the same 0-100 axis. */
 export interface LossBar {
   readonly metric: string;
-  /** `100 - score`, the merged loss. */
+  /**
+   * **What the bar plots**: the merged score this metric KEPT, 0-100.
+   *
+   * The same quantity the health meter's head and both radials draw, so the whole
+   * page points one way — further along the track is a better card. It used to
+   * plot `cuts`, which was not wrong on its own and was wrong three sections under
+   * a radial that had just been turned round to plot health: a reader scrolling
+   * from one to the other had to reverse their reading of the page silently.
+   */
+  readonly held: number;
+  /**
+   * `100 - held`, the merged loss, drawn as the REMAINDER of the same track.
+   *
+   * Not a second bar and not a second scale: the track is the hundred points the
+   * product walked in with, the `--held` part is what survived it, and this is
+   * exactly the rest. It stays a first-class number because `brief` Part 5 fixes
+   * `cuts` as the connective word, and the readout, the tooltip and the label all
+   * still state it.
+   */
   readonly cuts: number;
   readonly score: number;
   /** Cross-juror population std of the six scores, as frozen. */
   readonly spread: number;
-  /** `cuts - spread`, clamped to the axis. */
+  /** `held - spread`, clamped to the axis. The low end of the whisker. */
   readonly low: number;
-  /** `cuts + spread`, clamped to the axis. */
+  /** `held + spread`, clamped to the axis. */
   readonly high: number;
   readonly jurors: number;
   /** How many jurors took anything here. */
@@ -573,44 +757,70 @@ export interface LossBar {
   /**
    * What the middle product on this board lost on this metric, frozen at delivery.
    *
-   * `null` on a verdict delivered before the comparison was frozen. It is drawn as
-   * a tick on the same axis as the bar rather than a second bar: it is a reference
-   * value, not a second measure, and `anti-patterns.md`'s first entry is about
-   * exactly the temptation to give it its own scale.
+   * `null` on a verdict delivered before the comparison was frozen. Kept because
+   * the readout states the loss in words; the TICK is drawn at `categoryHeld`,
+   * because a reference value has to sit on the axis it qualifies.
    */
   readonly categoryCuts: number | null;
+  /**
+   * `100 - categoryCuts` — what the middle product KEPT here, and where the tick goes.
+   *
+   * It is drawn as a tick on the same axis as the bar rather than a second bar: it
+   * is a reference value, not a second measure, and `anti-patterns.md`'s first entry
+   * is about exactly the temptation to give it its own scale. Turning the bar round
+   * without turning this round with it would put the reference on the mirror image
+   * of the axis it is meant to qualify.
+   */
+  readonly categoryHeld: number | null;
+}
+
+/** The per-metric figure, with the direction it reads in attached to it. */
+export interface LossChart {
+  /** `more-is-better`: the bar is what survived. `FIGURE_PAINT` holds the paint to it. */
+  readonly polarity: Polarity;
+  readonly bars: readonly LossBar[];
 }
 
 /**
- * Loss per metric with the panel's disagreement drawn on the same axis.
+ * What survived per metric, with the panel's disagreement drawn on the same axis.
  *
  * `spread` is the population standard deviation of the six jurors' scores, and
- * `cuts` is `100 - mean(score)`, so the interval `cuts ± spread` is the same
- * interval as `score ∓ spread` reflected — one axis, no second scale, which is
- * what `anti-patterns.md`'s first entry demands.
+ * `held` is `mean(score)`, so the interval `held ± spread` is the interval the six
+ * actually landed in — one axis, no second scale, which is what
+ * `anti-patterns.md`'s first entry demands. It is the mirror of the old
+ * `cuts ∓ spread` and the same width, because reflecting an axis does not change a
+ * standard deviation.
+ *
+ * `cuts` is taken as `100 - held` rather than read off the payload's own `cuts`
+ * field, which is the same number: it makes the two halves of the drawn track sum
+ * to exactly the width of the track, with nothing left over and nothing overlapping,
+ * which is the one thing a part-to-whole bar has to get right.
  *
  * The widest-spread metric is marked rather than every bar being annotated. It is
  * the most actionable line on the page: a deep cut the six agreed on is a fact
  * about the product, and a deep cut they split over is a fact about how it reads.
  */
-export function lossBars(verdict: Verdict): readonly LossBar[] {
+export function lossChart(verdict: Verdict): LossChart {
   const widest = Math.max(0, ...verdict.metrics.map((metric) => metric.spread));
   const categoryByMetric = new Map(
     (verdict.comparison?.median.metrics ?? []).map((entry) => [entry.metric, entry.cuts]),
   );
 
-  return verdict.metrics.map((metric) => {
-    const cuts = clamp(metric.cuts);
+  const bars = verdict.metrics.map((metric) => {
+    const held = clamp(metric.score);
     const cutters = new Set(metric.deductions.map((deduction) => deduction.role)).size;
     const category = categoryByMetric.get(metric.metric);
+    const categoryCuts = category === undefined ? null : clamp(category);
     return {
-      categoryCuts: category === undefined ? null : clamp(category),
+      categoryCuts,
+      categoryHeld: categoryCuts === null ? null : 100 - categoryCuts,
       metric: metric.metric,
-      cuts,
+      held,
+      cuts: 100 - held,
       score: metric.score,
       spread: metric.spread,
-      low: clamp(cuts - metric.spread),
-      high: clamp(cuts + metric.spread),
+      low: clamp(held - metric.spread),
+      high: clamp(held + metric.spread),
       jurors: metric.jurors,
       cutters,
       // Ties would mark two bars, which is correct: they are equally split.
@@ -618,6 +828,8 @@ export function lossBars(verdict: Verdict): readonly LossBar[] {
       widest: widest > 0 && metric.spread === widest,
     };
   });
+
+  return { polarity: 'more-is-better', bars };
 }
 
 function clamp(value: number): number {
@@ -650,6 +862,16 @@ export interface DemandPart {
 
 /** What the Floor did, ready to draw. Only ever built for a Floor that convened. */
 export interface DemandChart {
+  /**
+   * `more-is-better`, declared for the same reason the other figures declare it.
+   *
+   * Its meters wear neither hue: a conviction and a capture are proportions of a
+   * panel roster, not shares of the hundred points `--held` and `--cut` divide
+   * between them, so they are drawn in ink. `FIGURE_PAINT` records that, and the
+   * paint test holds these marks to carrying no hue at all rather than leaving
+   * them unchecked.
+   */
+  readonly polarity: Polarity;
   readonly rows: readonly DemandRow[];
   /** Buyers who named it, first or second. */
   readonly named: number;
@@ -698,6 +920,7 @@ export function demandChart(verdict: Verdict): DemandChart | null {
   const named = floor.firstPicks + floor.secondPicks;
 
   return {
+    polarity: 'more-is-better',
     rows,
     named,
     roster: floor.rosterSize,

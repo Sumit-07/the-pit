@@ -128,7 +128,8 @@ function document_(title: string, body: string): string {
     '</head>',
     '<body><div class="wrap">',
     '<nav><a class="mark" href="/">THE P<i>I</i>T</a>',
-    '<span class="navr"><a href="/boards">Boards</a></span></nav>',
+    '<span class="navr"><a href="/how-it-works">How this works</a>' +
+      '<a href="/boards">Boards</a></span></nav>',
     body,
     '</div></body>',
     '</html>',

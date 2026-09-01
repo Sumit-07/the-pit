@@ -63,6 +63,9 @@ export default async function BoardPage({
           THE <i>PIT</i>
         </a>
         <span className="navr">
+          <a className="navlink" href="/how-it-works">
+            how it works
+          </a>
           <a className="navlink" href="/boards">
             all boards
           </a>

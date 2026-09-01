@@ -59,6 +59,9 @@ export default async function Boards(): Promise<ReactNode> {
           THE <i>PIT</i>
         </a>
         <span className="navr">
+          <a className="navlink" href="/how-it-works">
+            how it works
+          </a>
           <span className="navlink">boards</span>
         </span>
       </nav>

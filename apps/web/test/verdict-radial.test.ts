@@ -21,7 +21,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { buyerRadial, juryRadial, jurorHealth, jurorMeanCut, lossBars } from '@/lib/verdict/charts';
+import { buyerRadial, juryRadial, jurorHealth, jurorMeanCut, lossChart } from '@/lib/verdict/charts';
 import { parseComparison, parseVerdict, type Verdict } from '@/lib/verdict/model';
 import { renderVerdictPage, wrapAxisLabel } from '@/lib/verdict/page';
 
@@ -251,13 +251,19 @@ describe('every plotted value derives from the payload', () => {
 
   it('puts the frozen category median on the loss bars, on the bar’s own axis', async () => {
     const verdict = await withPeers('developer-tools');
-    const bars = lossBars(verdict);
+    const { bars } = lossChart(verdict);
     const medians = new Map(
       (verdict.comparison?.median.metrics ?? []).map((entry) => [entry.metric, entry.cuts]),
     );
 
     expect(medians.size).toBeGreaterThan(0);
-    for (const bar of bars) expect(bar.categoryCuts, bar.metric).toBe(medians.get(bar.metric));
+    for (const bar of bars) {
+      expect(bar.categoryCuts, bar.metric).toBe(medians.get(bar.metric));
+      // The bar's own axis is now what SURVIVED, so the tick has to be inverted
+      // with it or the reference sits on the mirror image of the axis it
+      // qualifies.
+      expect(bar.categoryHeld, bar.metric).toBe(100 - (medians.get(bar.metric) as number));
+    }
   });
 
   it('exposes the same arithmetic the freezer used, so self and peers share a scale', async () => {
@@ -423,7 +429,9 @@ describe('a verdict with no frozen comparison draws no overlay', () => {
     expect(html).not.toContain('Peer 1');
     expect(html).not.toContain('Which outline is which');
     // And the loss bars carry no median tick rather than one at an invented place.
-    expect(lossBars(verdict).every((bar) => bar.categoryCuts === null)).toBe(true);
+    expect(lossChart(verdict).bars.every((bar) => bar.categoryCuts === null && bar.categoryHeld === null)).toBe(
+      true,
+    );
     expect(html).not.toContain('lbmed" style');
   });
 

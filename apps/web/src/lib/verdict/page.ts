@@ -37,10 +37,18 @@
  *   product fills its shape instead of drawing a speck. Side by side when there
  *   are two; the one chart takes the whole row when there is one.
  * - **The juror × metric heatmap.** Magnitude across two categorical dimensions,
- *   so a sequential ramp on the one hue the theme has. It answers *where*, and
- *   every cell carries the juror's own sentence.
- * - **Loss per metric with the cross-juror spread**, on one shared 0–100 axis,
- *   now with the frozen category median as a tick on the same axis.
+ *   so a sequential ramp on `--cut`. It answers *where*, and every cell carries
+ *   the juror's own sentence. It is the one figure here that plots what was TAKEN
+ *   rather than what survived, deliberately; `matrixFigure` argues it in full.
+ * - **What each metric kept, with the cross-juror spread**, on one shared 0–100
+ *   axis: the `--held` head is the merged score, the `--cut` remainder is the loss,
+ *   and the frozen category median is a tick on the same axis.
+ *
+ * Every figure with an axis therefore points the same way — further out, further
+ * along, is a better card — so the page does not reverse under a reader scrolling
+ * it. `charts.ts`'s `FIGURE_PAINT` records each figure's direction beside the
+ * selectors that paint it, and `test/verdict-polarity.test.ts` fails when the two
+ * disagree.
  * - **The Floor**, as a conviction bar per buyer who named you — or, for the
  *   majority of products, the stated fact that no buyer was ever shown it.
  *
@@ -106,7 +114,7 @@ import {
   cutMatrix,
   demandChart,
   juryRadial,
-  lossBars,
+  lossChart,
   rampLabel,
   type CutMatrix,
   type MatrixCell,
@@ -608,25 +616,43 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
     that is merely a fact wears in this theme. */
 .lbname em{display:block;font-style:normal;font-family:var(--mono);font-size:9.5px;
   letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-top:3px}
-/* Gridlines: solid hairlines one step off the surface, at the quartiles, never dashed. */
 .lbtrack{position:relative;height:12px;background:var(--sunk);
-  box-shadow:inset 0 1px 2px rgb(var(--shade-c) / .55);
+  box-shadow:inset 0 1px 2px rgb(var(--shade-c) / .55)}
+/* Gridlines at the quartiles, solid hairlines, never dashed — and drawn OVER the
+   two halves rather than as the track's own background. The bar fills the whole
+   track now (survived plus taken is the hundred), so a gridline behind it would
+   be covered on every row it is meant to help read. */
+.lbtrack::after{content:"";position:absolute;inset:0;pointer-events:none;
   background-image:repeating-linear-gradient(90deg,transparent 0,transparent calc(25% - 1px),
-    rgb(var(--ink-c) / .11) calc(25% - 1px),rgb(var(--ink-c) / .11) 25%)}
-.lbfill{position:absolute;left:0;top:0;bottom:0;background:var(--cut)}
+    rgb(var(--ink-c) / .16) calc(25% - 1px),rgb(var(--ink-c) / .16) 25%)}
+/* The two halves of one hundred, and the whole reason this figure was turned
+   round. The head is what the metric KEPT and wears --held, the hue that means
+   survived; the remainder is what came off and wears --cut. That is the health
+   meter's own construction at the top of the card, and it is now the same
+   direction the two radials above it read in. */
+.lbfill{position:absolute;left:0;top:0;bottom:0;background:var(--held)}
+.lbcut{position:absolute;top:0;bottom:0;background:var(--cut)}
 /* The category median, on the SAME axis as the bar it qualifies — a reference
    value, not a second measure, so it is a tick and never a second track. Grey,
-   because it is context: the emphasis series is the bar. */
+   because it is context: the emphasis series is the bar. The dark edge is not
+   decoration: the tick now crosses two painted halves rather than an empty track,
+   and a grey line without one disappears into whichever half it lands on. */
 .lbmed{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;
-  background:rgb(var(--ink-c) / .36)}
-/* The whisker is uncertainty, not loss, so it is ink and never the accent. */
-.lbwhisk{position:absolute;top:50%;height:1px;margin-top:-1px;background:rgb(var(--ink-c) / .90)}
+  background:rgb(var(--ink-c) / .55);box-shadow:0 0 0 1px rgb(var(--shade-c) / .45)}
+/* The whisker is uncertainty — neither survived nor taken — so it is ink and
+   never either accent. */
+.lbwhisk{position:absolute;top:50%;height:1px;margin-top:-1px;background:rgb(var(--ink-c) / .90);
+  z-index:1}
 .lbwhisk::before,.lbwhisk::after{content:"";position:absolute;top:-4px;width:1px;height:9px;
   background:rgb(var(--ink-c) / .90)}
 .lbwhisk::before{left:0}
 .lbwhisk::after{right:0}
+/* The readout leads with the same quantity the bar does — the health this metric
+   kept, in --held, exactly as the meter's caption does — and states the cut
+   underneath it, so Part 5's connective word stays on the surface. */
 .lbval{font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums;
   color:var(--ink);text-align:right;line-height:1.3}
+.lbval .held{font-size:11.5px}
 .lbval em{display:block;font-style:normal;font-size:10px;color:var(--dimmer)}
  /* The axis has to share the ROW's grid, not the card's width: its ticks mean
     nothing unless 0 and 100 sit on the ends of the track they scale. Drawn as a
@@ -670,6 +696,13 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
   .pitch{margin-left:0}
   .lbrow{grid-template-columns:minmax(0,1fr) minmax(66px,auto);row-gap:7px}
   .lbtrack{grid-column:1 / -1;order:3}
+  /* The track goes full width here, so the axis has to as well: left on the
+     three-column template its ticks scaled a middle column that no longer
+     exists, and 0/25/50/75/100 sat over the wrong points of the bar. The two
+     empty cells that align the axis with the label and value columns on a wide
+     screen have nothing to align to once the row has stacked. */
+  .lbaxis{grid-template-columns:minmax(0,1fr)}
+  .lbaxis > span:first-child,.lbaxis > span:last-child{display:none}
 }
 /*
  * Below this width the grid has to scroll, and a scroll container clips an
@@ -1392,9 +1425,29 @@ function matrixTable(matrix: CutMatrix, verdict: Verdict): string {
  * whole panel is legible at once and a reader can run their eye down a column to
  * see one metric's damage or across a row to see one juror's.
  *
- * The ramp is one hue, the theme's only hue, in five validated steps — see
- * `charts.ts`. The columns are the ledger's order, heaviest merged loss first, so
- * the leftmost column is where the panel took the most.
+ * The ramp is `--cut` in five validated steps — see `charts.ts`. The columns are
+ * the ledger's order, heaviest merged loss first, so the leftmost column is where
+ * the panel took the most.
+ *
+ * ## This figure plots CUTS, and that is the exception, on purpose
+ *
+ * Every other figure on this page plots what survived: the meter's head, both
+ * radials, and the per-metric bars, which were turned round to match them. This
+ * one was left alone, and it must stay left alone.
+ *
+ * A heatmap encodes magnitude as darkness, and the magnitude here is damage. Plot
+ * health instead and the heaviest cut on the card becomes the palest cell in the
+ * grid — damage would read as absence, which is the one reading a damage matrix
+ * must not support — and the surviving quantity would either ride the `--cut`
+ * ramp, saying "taken" about what was kept, or need a second five-step ramp in the
+ * other hue, which is a second colour scale for one page. The grid also has no
+ * direction to be inconsistent with: both of its dimensions are categorical, so
+ * nothing on it "points" the way a bar or a spoke does. The consistency the rest
+ * of the page owes a reader is about axes, and this figure has none.
+ *
+ * `charts.ts` declares it `more-is-worse` and `test/verdict-polarity.test.ts`
+ * holds it to `--cut`, so the exception is checked rather than merely intended.
+ * Do not "fix" it.
  */
 function matrixFigure(verdict: Verdict): string {
   const matrix = cutMatrix(verdict);
@@ -1458,7 +1511,31 @@ function matrixFigure(verdict: Verdict): string {
 }
 
 /**
- * Loss per metric, with the spread the six disagreed by, on one axis.
+ * What survived per metric, with the spread the six disagreed by, on one axis.
+ *
+ * ## Which way it points, and why it was turned round
+ *
+ * The bar is **what the metric kept** — the merged score, out of the hundred it
+ * started on — and the cut is the remainder of the same track. It used to plot the
+ * cut, and that was not wrong on its own: a longer bar meant a deeper loss, the
+ * caption said so, and every number beside it agreed. It became wrong when the
+ * jury radial three sections above was turned round to plot the health each juror
+ * left. Two figures on one page pointing opposite ways make a reader reverse their
+ * reading halfway down, and nothing on the page warns them to. So this one turned
+ * to match: further along the track is a better card, on the meter, on both
+ * radials and here.
+ *
+ * The paint follows the direction rather than the other way round. `lib/theme.ts`
+ * spends `--held` on what survived and `--cut` on what was taken, so the plotted
+ * half is `--held` and the remainder is `--cut` — the health meter's construction,
+ * one section down. `charts.ts`'s `FIGURE_PAINT` writes that pairing down and
+ * `test/verdict-polarity.test.ts` fails if the direction and the paint ever
+ * disagree again.
+ *
+ * The heatmap above is deliberately NOT turned round; `charts.ts` gives the
+ * argument at length.
+ *
+ * ## Why a bar and not a radar
  *
  * This is the chart the founder asked for as a radar, and it is a bar on purpose.
  * `references/anti-patterns.md` rules out the radar twice over — its area grows as
@@ -1473,11 +1550,11 @@ function matrixFigure(verdict: Verdict): string {
  * which is the thing a polygon has nowhere to put.
  *
  * `spread` is the population standard deviation of the six jurors' own scores,
- * frozen with the rest. The whisker is `cuts ± spread` and it is ink, not accent:
- * it is disagreement, not damage.
+ * frozen with the rest. The whisker is `held ± spread` and it is ink, not either
+ * accent: it is disagreement, which is neither damage nor survival.
  */
 function lossFigure(verdict: Verdict): string {
-  const bars = lossBars(verdict);
+  const { bars } = lossChart(verdict);
   if (bars.length === 0) return '';
 
   const rows = bars
@@ -1493,31 +1570,37 @@ function lossFigure(verdict: Verdict): string {
         bar.spread <= 0
           ? 'every juror scored it identically'
           : `the six landed within &plusmn;${n1(bar.spread)} of ${n1(bar.score)}`;
-      // The frozen category median, as a tick on the bar's own axis. `null` on a
-      // verdict issued before comparisons were frozen — those bars carry no tick
-      // rather than a tick at some invented place.
+      // The frozen category median, as a tick on the bar's own axis — which is
+      // now the axis of what was KEPT, so the tick sits at what the middle
+      // product kept. `null` on a verdict issued before comparisons were frozen:
+      // those bars carry no tick rather than a tick at some invented place.
       const median =
-        bar.categoryCuts === null
+        bar.categoryHeld === null
           ? ''
-          : `<i class="lbmed" style="left:${pct(bar.categoryCuts)}"></i>`;
+          : `<i class="lbmed" style="left:${pct(bar.categoryHeld)}"></i>`;
       const against =
-        bar.categoryCuts === null
+        bar.categoryCuts === null || bar.categoryHeld === null
           ? ''
-          : `<i>The middle product on this board lost ${n1(bar.categoryCuts)} here.</i>`;
+          : `<i>The middle product on this board kept ${n1(bar.categoryHeld)} here, losing ${n1(bar.categoryCuts)}.</i>`;
       return [
         '<div class="lbrow" tabindex="0" role="img" ',
         `aria-label="${escapeHtml(
-          `${metricLabel(bar.metric)}: ${n1(bar.cuts)} in cuts, cross-juror spread ${n1(bar.spread)}, ` +
-            `${bar.cutters} of ${bar.jurors} jurors cut here` +
-            (bar.categoryCuts === null ? '' : `, category median ${n1(bar.categoryCuts)}`),
+          `${metricLabel(bar.metric)}: ${n1(bar.held)} of 100 held, ${n1(bar.cuts)} in cuts, ` +
+            `cross-juror spread ${n1(bar.spread)}, ${bar.cutters} of ${bar.jurors} jurors cut here` +
+            (bar.categoryHeld === null ? '' : `, category median held ${n1(bar.categoryHeld)}`),
         )}">`,
         `<span class="lbname" title="${escapeHtml(bar.metric)}">${escapeHtml(metricLabel(bar.metric))}${flag}</span>`,
-        `<span class="lbtrack"><i class="lbfill" style="width:${pct(bar.cuts)}"></i>${whisker}${median}</span>`,
-        `<span class="lbval">&minus;${n1(bar.cuts)}<em>&plusmn;${n1(bar.spread)}</em></span>`,
+        // Order matters: the kept head, then the cut that fills the rest of the
+        // hundred, then the marks that sit over both of them.
+        `<span class="lbtrack"><i class="lbfill" style="width:${pct(bar.held)}"></i>` +
+          `<i class="lbcut" style="left:${pct(bar.held)};width:${pct(bar.cuts)}"></i>` +
+          `${whisker}${median}</span>`,
+        `<span class="lbval"><b class="held">${n1(bar.held)}</b>` +
+          `<em>&minus;${n1(bar.cuts)} &plusmn;${n1(bar.spread)}</em></span>`,
         '<span class="tip" aria-hidden="true">',
         `<b>&minus;${n1(bar.cuts)} on ${escapeHtml(metricLabel(bar.metric))}</b>`,
         `<em>${bar.cutters} of ${bar.jurors} jurors cut here</em>`,
-        `<i>Merged score ${n1(bar.score)} / 100 &mdash; ${agreement}.</i>`,
+        `<i>Kept ${n1(bar.held)} of 100 &mdash; ${agreement}.</i>`,
         against,
         '</span>',
         '</div>',
@@ -1545,10 +1628,12 @@ function lossFigure(verdict: Verdict): string {
     '<span></span></div>',
     '</div>',
     `<figcaption class="figcap">${note}`,
-    'Bars are the merged cut, 100 minus the mean of the six. The ink whisker is one ',
-    'cross-juror standard deviation either side of it, on the same axis.',
-    bars.some((bar) => bar.categoryCuts !== null)
-      ? ' The grey tick is what the middle product on this board lost on the same metric, frozen when this was issued.'
+    'Each track is one metric&rsquo;s hundred points. The green head is what survived &mdash; the ',
+    'merged score, the mean of the six &mdash; and the red remainder is what came off. Longer green ',
+    'is a better card, the same way round as the meter and both radials above. The ink whisker is ',
+    'one cross-juror standard deviation either side of the score, on the same axis.',
+    bars.some((bar) => bar.categoryHeld !== null)
+      ? ' The grey tick is what the middle product on this board kept on the same metric, frozen when this was issued.'
       : '',
     '</figcaption>',
     '</figure>',
@@ -1798,7 +1883,7 @@ ${FONTS}
 
 <nav>
   <a class="mark" href="${escapeHtml(origin)}/">THE <i>PIT</i></a>
-  <span class="navr">verdict &middot; permanent &middot; public</span>
+  <span class="navr"><a href="${escapeHtml(origin)}/how-it-works">How this works</a>verdict &middot; permanent &middot; public</span>
 </nav>
 
 <article class="vcard">
@@ -1853,8 +1938,8 @@ ${radialsSection(verdict, origin)}
 </section>
 
 <section>
-  <h2>Where it landed, and whether they agreed</h2>
-  <p class="lede">Being weak and having ${escapeHtml(labels.jury)} <i>agree</i> you were weak are two findings. The bar is the loss; the whisker is how far apart they were.</p>
+  <h2>What each metric kept, and whether they agreed</h2>
+  <p class="lede">Being weak and having ${escapeHtml(labels.jury)} <i>agree</i> you were weak are two findings. The green head is what survived and the red is what came off; the whisker is how far apart the six were.</p>
   ${lossFigure(verdict)}
 </section>
 
@@ -1874,7 +1959,8 @@ ${floorSection(verdict)}
   <br>
   This page was frozen when it was issued and never recomputed &mdash; the comparison shapes above
   included. The board is rebuilt on every placement, which is why every rank here carries a date and a
-  count. <a href="${escapeHtml(origin)}/">thepit.show</a>
+  count. <a href="${escapeHtml(origin)}/how-it-works">How this works</a> &middot;
+  <a href="${escapeHtml(origin)}/">thepit.show</a>
 </footer>
 
 </div>
@@ -1904,7 +1990,7 @@ export function renderVerdictNotFound(slug: string, options: RenderOptions = {})
 <div class="wrap">
 <nav>
   <a class="mark" href="${escapeHtml(origin)}/">THE <i>PIT</i></a>
-  <span class="navr">verdict</span>
+  <span class="navr"><a href="${escapeHtml(origin)}/how-it-works">How this works</a></span>
 </nav>
 <div class="notfound">
 No verdict has been issued at <b>${escapeHtml(slug)}</b>.<br><br>
