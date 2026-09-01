@@ -416,7 +416,11 @@ export function buildSeedRows(input: SeedInput): SeedRows {
       jobId: null,
       accountId,
       attemptNumber: null,
-      payload: verdictPayload(publicRanking, row, input.categorySnapshotVersion, seededAt),
+      // The installed jury travels with the payload, not with the reader. It is
+      // versioned and revisable (`01 §4` Step 2), so a page that read the
+      // current file would describe jurors who are not the ones who cut this
+      // product — `verdict-panel.ts` carries the argument in full.
+      payload: verdictPayload(publicRanking, row, input.categorySnapshotVersion, seededAt, { jury }),
       productCount: publicRanking.ranking.length,
       deliveredAt: seededAt,
     };

@@ -12,10 +12,22 @@
  * follows both.
  *
  * It also means the page has no client JavaScript at all, and the figures below
- * are held to that: the heatmap's hover readouts, the bar tooltips and the table
- * views are CSS and native `<details>`, so a copy saved to disk is as interactive
- * as the served page. `test/verdict-page.test.ts` asserts the absence of a
- * `<script` tag, which is the rule stated as a test rather than as a habit.
+ * are held to that: the heatmap's hover readouts, the bar tooltips, the spoke
+ * biographies and the table views are CSS, native focus and native `<details>`,
+ * so a copy saved to disk is as interactive as the served page.
+ * `test/verdict-page.test.ts` asserts the absence of a `<script` tag, which is
+ * the rule stated as a test rather than as a habit.
+ *
+ * ## One rail
+ *
+ * Every block on this page — the card, each section's heading and lede, every
+ * figure and every ledger block — sits on the same left and right edges, and
+ * their inner surfaces inset by the same 18px. That was not true: the radial pair
+ * broke 120px out of the column on both sides, `.well2` inset its content by 14px
+ * where `.blk` and `.well` inset by 18 and `.ledger` by 17, and the radial grid
+ * left no gap under its own lede where every other figure leaves 16. A founder
+ * reading the page called the alignment strange without naming a number, which is
+ * what four different rails inside one 784px measure look like.
  *
  * ## What is on it, and why each figure is the figure it is
  *
@@ -34,8 +46,9 @@
  *   question six bars answer worse. Both plot a quantity where **further out is
  *   better** — the health each juror left standing, the conviction each buyer
  *   put behind a first choice — so both are painted `--held`, and a strong
- *   product fills its shape instead of drawing a speck. Side by side when there
- *   are two; the one chart takes the whole row when there is one.
+ *   product fills its shape instead of drawing a speck. One chart per row, with
+ *   the words that explain it in the column beside it; hovering, tabbing to or
+ *   tapping a spoke says who that juror or buyer is, out of the frozen panel.
  * - **The juror × metric heatmap.** Magnitude across two categorical dimensions,
  *   so a sequential ramp on `--cut`. It answers *where*, and every cell carries
  *   the juror's own sentence. It is the one figure here that plots what was TAKEN
@@ -116,6 +129,7 @@ import {
   juryRadial,
   lossChart,
   rampLabel,
+  type AxisMandate,
   type CutMatrix,
   type MatrixCell,
   type Radial,
@@ -226,7 +240,7 @@ const CSS = `${TOKENS}${BASE}
 
 /* ---------- the card ---------- */
 .vcard{background:var(--card);border:1px solid var(--line);border-radius:var(--r3);
-  box-shadow:var(--lip),var(--e3);margin-top:14px;overflow:hidden}
+  box-shadow:var(--lip),var(--e3);margin-top:16px;overflow:hidden}
 /* The card's masthead is --rise, the top of the stack: the verdict's own rim,
    with the cut rule under it as the first step down. */
 .vtop{background:var(--rise);color:var(--ink);padding:20px 24px 22px;position:relative;
@@ -319,8 +333,11 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
 .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
 
 /* ---------- the evidence ---------- */
+/* .blk's padding and .blk's top margin: a ledger block is a raised card like
+   every other raised card, and it used to inset by 17 and stack at 14 while they
+   inset by 18 and stack at 16. */
 .ledger{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
-  box-shadow:var(--lip),var(--e1);padding:15px 17px 13px;margin-top:14px}
+  box-shadow:var(--lip),var(--e1);padding:16px 18px 14px;margin-top:16px}
 .ledger-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
 .ledger-h .mt{font-size:14.5px;font-weight:600;letter-spacing:-.01em}
 .ledger-h .sc{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11px;
@@ -356,9 +373,18 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
  * (2.10:1) and fails it against --card (1.80:1). It is also the theme's existing
  * idiom, the meter track: a groove of points that were taken.
  */
+/*
+ * The padding is .well's and .blk's, to the pixel, and that is the
+ * alignment fix rather than a preference. This surface used to inset its
+ * content by 14px while every other block on the page inset by 18 and the
+ * ledger by 17, so a heatmap column, a ledger deduction and a cluster paragraph
+ * each started on a different vertical — three inner rails inside one 784px
+ * measure, off by four pixels, which is exactly the kind of drift that reads as
+ * "strange" without being nameable. One rail now.
+ */
 .fig{margin-top:16px}
 .well2{background:var(--sunk);border:1px solid var(--hair);border-radius:var(--r2);
-  padding:14px;box-shadow:inset 0 2px 5px rgb(var(--shade-c) / .5)}
+  padding:16px 18px;box-shadow:inset 0 2px 5px rgb(var(--shade-c) / .5)}
 .figcap{font-family:var(--mono);font-size:10.5px;line-height:1.6;color:var(--dimmer);
   letter-spacing:.02em;margin-top:10px}
 .figcap b{color:var(--dim);font-weight:500}
@@ -371,8 +397,12 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
  * spec asks for — the separation is the well showing through, never a stroke
  * drawn around a cell.
  */
+/* The row-header column is sized for the line it actually holds — a juror's role
+   above "-333 . gave 33.4 / 100", which is 143px of mono at 10px. At 1.2fr it
+   came out 144 and broke that line after the slash on every long row, so the
+   grid's rows were unevenly tall and the second lines hung under the first. */
 .mxgrid{display:grid;gap:2px;
-  grid-template-columns:minmax(104px,1.2fr) repeat(var(--cols),minmax(52px,1fr))}
+  grid-template-columns:minmax(150px,1.35fr) repeat(var(--cols),minmax(52px,1fr))}
 .mxch{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.06em;
   text-transform:uppercase;color:var(--dimmer);line-height:1.3;padding:0 3px 6px;
   align-self:end;text-align:center;overflow-wrap:anywhere}
@@ -409,7 +439,8 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
   color:var(--dimmer);margin:2px 0 7px}
 .tip i{display:block;font-style:normal;margin-top:7px}
 .mxc:hover .tip,.mxc:focus .tip,.mxc:focus-visible .tip,
-.lbrow:hover .tip,.lbrow:focus .tip,.lbrow:focus-visible .tip{opacity:1;visibility:visible}
+.lbrow:hover .tip,.lbrow:focus .tip,.lbrow:focus-visible .tip,
+.rspot:hover .tip,.rspot:focus .tip,.rspot:focus-visible .tip{opacity:1;visibility:visible}
 .tip.tr{left:auto;right:-2px}
 .tip.tu{top:auto;bottom:calc(100% + 7px)}
 .mxkey{display:flex;flex-wrap:wrap;gap:7px 15px;margin-top:12px;
@@ -452,44 +483,75 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
  * floor would be a fifth colour rather than context.
  */
 /*
- * The size, which was the founder's actual complaint: "the radial graphs look
- * very small". Three things make them bigger and none of them is a truncated
- * axis.
+ * The size and the shape of the block, which is one problem and not two.
  *
- * 1. The plot spends more of its own frame: R 86 -> 112 inside a box 336 -> 372
- *    wide, so the polygon is 60% of the figure's width where it was 51%.
- * 2. The pair breaks out of the 820px column on a wide screen. The heading and
- *    the prose stay in the measure; the figures do not have to.
- * 3. A SOLO verdict — 32 of 48 Developer Tools rows and 26 of 44 Health rows, so
- *    the majority case, not an edge case — draws one radial and used to leave the
- *    second grid column empty beside it. It now takes the whole row and puts its
- *    caption and its table twin in the space the missing chart was wasting.
+ * The founder's first complaint was that the radials read as small (R 86 in a
+ * 336-wide box: a 182px polygon). The answer then was to enlarge them and to let
+ * the PAIR break 120px out of the 820px column on either side, which produced a
+ * 285px polygon inside a 503px frame, two frames wide, on a band 1024px across —
+ * the only element on the page that did not sit on the same left and right rails
+ * as its own heading. The second complaint followed from the first: they sit side
+ * by side and dominate.
+ *
+ * Both complaints are true and they are answered by the same change, which is a
+ * proportion change and not a size dial:
+ *
+ * 1. **One chart per row, with the words that explain it beside it.** This is
+ *    the layout the page already had for a SOLO verdict — the majority case —
+ *    and it is now the only layout, so a full-Floor page and a solo page are
+ *    built the same way. The caption, the table twin, the peer identities and
+ *    the panel biographies live in the second column instead of stacking under
+ *    the chart, so the row is spent on reading matter rather than on air.
+ * 2. **No breakout.** The figures sit on the page's own 784px measure, the same
+ *    rails as every heading, every lede and every other figure.
+ * 3. **The polygon keeps its size.** Two of them side by side inside one column
+ *    could not: two 285px plots plus their four label gutters need more than the
+ *    whole measure, which is exactly why the old layout had to break out of it.
+ *    One per row, the chart column is ~477px wide and the plot is ~279px — the
+ *    same figure the enlargement produced, in 24% less width. A bad product's
+ *    polygon (mean health 15.4 draws a radius of 0.154R) is therefore no smaller
+ *    than it was, which was the whole point of enlarging them.
+ *
+ * The frame also spends more of itself on the plot than it did: RAD below is
+ * 352 wide for a 224 plot where it was 372, so the polygon is 64% of the figure's
+ * width rather than 60%.
  */
-.rgrid{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
-@media (min-width:760px){.rgrid.rpair{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}}
-@media (min-width:1180px){.rgrid{margin-inline:-120px}}
+/* margin-top matches .fig and .blk, which is the gap every other figure on
+   this page leaves under its lede. This grid left none, so the one section whose
+   figures broke the rail also started higher than the rest. */
+.rgrid{display:grid;gap:22px;margin-top:16px;grid-template-columns:minmax(0,1fr)}
 /*
- * The solo layout. The chart takes the wide column and the words that explain it
- * take the narrow one, so the row is used rather than half-filled. Below the
- * breakpoint it stacks back into the ordinary single-column figure, which is the
- * same component the pair renders.
+ * The one layout, applied to every radial. The chart takes the wide column and
+ * the words take the narrow one; below the breakpoint it stacks into a plain
+ * single-column figure. A solo verdict and a paired one differ in how many rows
+ * there are and in nothing else, which is why there is no second rule here.
  */
-@media (min-width:860px){
-  .rgrid.rsolo .rfig{display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,.56fr);
-    grid-template-areas:"t t" "chart cap" "chart tbl" "chart .";gap:0 26px;align-content:start}
-  .rsolo .rtitle{grid-area:t}
-  .rsolo .well2{grid-area:chart}
-  .rsolo .figcap{grid-area:cap;margin-top:0;font-size:11.5px;line-height:1.75}
-  .rsolo .rtv{grid-area:tbl;align-self:start;margin-top:14px}
+@media (min-width:900px){
+  .rfig{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(228px,1fr);
+    grid-template-areas:"t t" "chart side";gap:0 26px;align-items:start}
+  .rtitle{grid-area:t}
+  .rfig > .well2{grid-area:chart}
+  .rside{grid-area:side}
+  .rside > .rkey{margin-top:0}
+  .rside > .figcap{font-size:11.5px;line-height:1.75}
 }
+/* The legend stacks in this column rather than running across a chart's width,
+   so each entry gets its own line and a long call sign no longer has to be
+   clipped to nineteen characters to fit beside the next one. */
+.rside .rkey{display:grid;gap:7px;font-size:10.5px}
+.rside .rkey em{max-width:none}
 .rfig{margin:0}
 .rtitle{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.14em;
   text-transform:uppercase;color:var(--dimmer);margin-bottom:9px}
-.rwrap{display:block;width:100%}
-/* Capped, because a solo verdict at a window width between the two breakpoints
-   would otherwise spend 750px on one hexagon and 19px type on its axis labels.
-   Every layout below the cap fills its column. */
-.rwrap svg{display:block;width:100%;max-width:620px;height:auto;margin-inline:auto}
+/*
+ * The wrapper is the SVG's own box, not a band it floats in the middle of, and
+ * that is load-bearing rather than tidy: the spoke hotspots below are HTML
+ * positioned in PERCENTAGES of the viewBox, so the element they are positioned
+ * against has to be exactly the element the viewBox is drawn into. Capped,
+ * because one hexagon is not worth 700px and 19px axis labels.
+ */
+.rwrap{position:relative;display:block;width:100%;max-width:560px;margin-inline:auto}
+.rwrap svg{display:block;width:100%;height:auto}
 /* Gridlines: solid hairlines one step off the surface, never dashed. */
 .rring{fill:none;stroke:rgb(var(--ink-c) / .13);stroke-width:1}
 .rring.rout{stroke:rgb(var(--ink-c) / .22)}
@@ -510,6 +572,9 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
    allowed to stand in for, so it is the loudest text in the plot. */
 .rax .rv{fill:var(--ink);font-weight:600;font-size:11.2px}
 .rax.rmk .rv{fill:var(--dimmer);font-weight:500}
+/* A runner-up's qualifier, on its own line under the zero it qualifies. On the
+   value line it was fourteen characters of 11.2px type in a 72-unit gutter. */
+.rax .rvm{fill:var(--dimmer);font-size:9.2px;font-weight:500}
 /* The context shapes: one grey, three line styles. No fill — the filled polygon
    is the emphasis series and nothing else on the chart may claim that weight. */
 .rp{fill:none;stroke:rgb(var(--ink-c) / .36);stroke-width:1.6;
@@ -584,6 +649,63 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
 .rkey span[tabindex]:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
 .rp,.rpdot,.rself{transition:opacity .18s ease}
 @media (prefers-reduced-motion:reduce){.rp,.rpdot,.rself{transition:none}}
+
+/* ---------- who the spoke belongs to ---------- */
+/*
+ * A spoke names a juror or a buyer and used to say nothing about either. The
+ * mandate behind it is frozen in the payload (model.ts's VerdictPanel) and
+ * revealed here.
+ *
+ * It is an HTML button laid over the axis label rather than anything inside the
+ * SVG, and that is the whole reason .rwrap is a positioned box the drawing
+ * exactly fills: a <title> inside an SVG is a browser tooltip nobody can style
+ * and no keyboard reaches, and a foreignObject is a scroll container waiting to
+ * clip its own contents. A button is focusable, is tappable on a touch screen
+ * (which a hover is not), and carries the page's existing .tip.
+ *
+ * The hotspot is transparent and carries no mark of its own: the axis label
+ * underneath is the affordance, and a box drawn around six labels would be six
+ * more rectangles on a chart that already has rings and spokes.
+ */
+.rspot{position:absolute;display:block;padding:0;margin:0;background:none;border:0;
+  border-radius:2px;font:inherit;color:inherit;cursor:help;-webkit-appearance:none;appearance:none}
+.rspot:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.rspot:hover,.rspot:focus,.rspot:focus-visible{z-index:8}
+.rspot .tip{cursor:auto}
+/* Wider than a heatmap readout because a mandate is prose, and clamped so it
+   stays a tooltip: the full text of every field is in the panel list below the
+   chart, which is where a reader who wants all of it goes. */
+.rbio{width:272px;max-width:272px}
+.rbio b{color:var(--ink);text-transform:none;font-family:var(--sans);font-size:13px;
+  letter-spacing:-.01em}
+.rbio i{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;
+  margin-top:6px;font-style:normal;font-size:12px;line-height:1.5;color:var(--dim)}
+/* Who they are gets two lines and what they weigh gets three: the readout is a
+   glance at the person behind a number, and the untruncated mandate is two
+   inches below it in the panel list. */
+.rbio i:first-of-type{-webkit-line-clamp:2}
+.rbk{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--dimmer);margin-right:6px}
+/*
+ * The same content, in the DOM, with no pointer involved.
+ *
+ * The page already ships a table twin for every figure because identity by
+ * colour or by shape is not identity; a biography that existed only on hover
+ * would be the same defect in prose — invisible to a screen reader, unreachable
+ * on a phone, and gone from a printed copy. This list is the twin, and it is
+ * where the untruncated mandate lives.
+ */
+.rbios{margin-top:12px}
+.rbios ul{list-style:none;margin-top:8px;display:grid;gap:11px}
+/* Overriding .rwho's own row rules on purpose: this list shares that control's
+   summary and nothing else. .rwho li is a single-line flex row for a peer's call
+   sign; a mandate is three paragraphs and has to be a block that wraps. */
+.rbios li{display:block;font-family:var(--sans);font-size:12px;line-height:1.5;
+  color:var(--dim);white-space:normal;border-top:1px solid var(--hair);padding-top:10px}
+.rbios li:first-child{border-top:0;padding-top:0}
+.rbios li b{display:block;font-family:var(--sans);color:var(--ink);font-weight:600;
+  font-size:12.5px;white-space:normal;margin-bottom:4px}
+.rbios li i{display:block;font-style:normal;margin-top:5px}
 
 /* ---------- the table view: identity is never colour alone ---------- */
 .tv{margin-top:12px}
@@ -715,6 +837,10 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
   .mxscroll{overflow-x:auto}
   .mxgrid{min-width:440px}
   .tip{display:none}
+  /* The spoke hotspots go with the readouts they carry, rather than staying as
+     six invisible tab stops that reveal nothing. The panel list under each chart
+     is the twin here, exactly as the table view is for the heatmap. */
+  .rspot{display:none}
 }
 `;
 
@@ -805,34 +931,61 @@ function pct(value: number): string {
  * at 0° or 180°, so the furthest a label reaches horizontally is `R * cos 30°`
  * plus its own width — which is what `W` is sized for.
  */
-const RAD = { W: 372, H: 350, CX: 186, CY: 172, R: 112 } as const;
+const RAD = { W: 360, H: 334, CX: 180, CY: 155, R: 112 } as const;
 
 /**
  * How far out the axis labels sit, as a multiple of `R`, and the type metrics
  * the box was sized against.
  *
- * The plot is 30% larger than it was (`R` 86 -> 112) inside a box only 11% wider,
- * because the founder's complaint was that the charts read as small and the
- * honest fix is to spend a larger share of the frame on the polygon rather than
- * on air around the labels. The share went from 51% of the width to 60%. The rest
- * of the size comes from the layout below: a solo verdict now spends the whole
- * row on its one chart instead of leaving the second grid column empty.
+ * `R` is unchanged at 112 and must stay there: the enlargement that produced it
+ * was the answer to "the radial graphs look very small", and a bad product draws
+ * its polygon at a fraction of `R` — mean health 15.4 is a radius of 0.154R — so
+ * shrinking the plot is the one change that would take back the thing the
+ * enlargement bought.
+ *
+ * What did move is the AIR around it. The frame was 372 wide and 350 tall for a
+ * 224 plot because the labels were pushed out to 1.11R. At 1.07R the box is 360
+ * by 334 for the same plot, so the polygon is 62% of the figure's width where it
+ * was 60% and 67% of its height where it was 64% — the enlargement's own
+ * argument, applied to the frame rather than to the radius.
+ *
+ * The margins are measured against the widest thing either box has to hold: a
+ * 12-character label line at `AXIS_FS` with `.rax`'s own `letter-spacing`, which
+ * is 71.8 units and not the 66.2 a bare advance would predict — `monoWidth`
+ * carries the tracking for the same reason.
  */
-const AXIS_OUT = 1.11;
+const AXIS_OUT = 1.07;
 /** Label type size, and the baseline step between wrapped lines. */
 const AXIS_FS = 9.2;
 const AXIS_LH = 10.4;
 /** The direct-labelled figure under each axis name: the one number per spoke. */
 const VALUE_DY = 12.4;
+/** Type size of that figure, and of the qualifier that can sit under it. */
+const VALUE_FS = 11.2;
+/**
+ * The line a `2nd choice` axis gets under its zero, and the step down to it.
+ *
+ * It used to be printed on the value line itself as `0 · 2nd choice`, fourteen
+ * characters at 11.2px — 94 units wide against a label gutter of 72. On the
+ * bottom axis, which is centred, it merely looked loose; on a diagonal axis it
+ * would have run out of the viewBox and been clipped by it. A runner-up is a
+ * fact about the axis and not a longer number, so it gets its own line.
+ */
+const MARK_FS = 9.2;
+const MARK_DY = 11;
 
 /**
  * Characters per label line, and how many lines a label may take.
  *
  * Measured, not guessed: the labels are IBM Plex Mono at `AXIS_FS`, whose advance
- * is 0.6em, so a line of `AXIS_CHARS` costs `AXIS_CHARS * AXIS_FS * 0.6` =
- * 66.2px. The tightest position is an axis at 30° off horizontal, where the label
- * starts at `CX + AXIS_OUT * R * cos 30` = 295.7 and has `W - that` = 76px to
- * grow into. Twelve characters leaves a margin for the wider glyphs.
+ * is 0.6em and `.rax` tracks a further 0.05em, so a line of `AXIS_CHARS` costs
+ * `AXIS_CHARS * AXIS_FS * 0.65` = 71.8px. The tightest position is an axis at 30°
+ * off horizontal, where the label starts at `CX + AXIS_OUT * R * cos 30` = 283.8
+ * and has `W - that` = 76.2px to grow into.
+ *
+ * Twelve is a floor, not a preference: the longest single word on either
+ * installed panel is `Raghunathan`, eleven characters, and a narrower line would
+ * hard-break a buyer's surname across two lines rather than wrap it.
  */
 const AXIS_CHARS = 12;
 const AXIS_LINES = 3;
@@ -919,6 +1072,83 @@ export function wrapAxisLabel(text: string): string[] {
   return kept;
 }
 
+/**
+ * Everything about one axis's LABEL, computed once.
+ *
+ * The drawn label and the hotspot laid over it are two renderings of the same
+ * rectangle, and a hotspot that had its own arithmetic would drift off the words
+ * it belongs to the first time either changed. So both read this.
+ */
+interface AxisBox {
+  /** The anchor point the `<text>` is placed at, in viewBox units. */
+  readonly x: number;
+  readonly y: number;
+  readonly anchor: 'start' | 'middle' | 'end';
+  /** Which side of the plot this axis is on, for placing the readout. */
+  readonly right: boolean;
+  readonly below: boolean;
+  readonly lines: readonly string[];
+  /** The figure printed under the name: a number, or `no answer`, or `0`. */
+  readonly figure: string;
+  /** The qualifier under the figure, on its own line. `''` when there is none. */
+  readonly mark: string;
+  /** The rectangle the label occupies, in viewBox units. */
+  readonly box: { readonly left: number; readonly top: number; readonly width: number; readonly height: number };
+}
+
+/**
+ * Mono advance is 0.6em and `.rax` tracks a further 0.05em, applied after every
+ * character including the last. Dropping the tracking underestimates a
+ * 12-character label by 5.5 units, which is most of the margin the box has.
+ */
+function monoWidth(text: string, size: number): number {
+  return text.length * size * 0.65;
+}
+
+function axisBox(radial: Radial, index: number, count: number): AxisBox {
+  const [ax, ay] = radialPoint(index, count, 100);
+  const dx = ax - RAD.CX;
+  const dy = ay - RAD.CY;
+  const vertical = Math.abs(dx) < 1;
+  const anchor = vertical ? 'middle' : dx > 0 ? 'start' : 'end';
+  const x = RAD.CX + dx * AXIS_OUT;
+  const y = RAD.CY + dy * AXIS_OUT + (vertical ? (dy < 0 ? -13 : 18) : 0);
+
+  const lines = wrapAxisLabel(radial.axes[index] as string);
+  const value = radial.self.values[index];
+  const flag = radial.marks[index];
+  const figure = flag === 'no answer' || value === null || value === undefined ? 'no answer' : n1(value);
+  const mark = flag === '2nd choice' ? '2nd choice' : '';
+
+  const width = Math.max(
+    ...lines.map((line) => monoWidth(line, AXIS_FS)),
+    monoWidth(figure, VALUE_FS),
+    mark === '' ? 0 : monoWidth(mark, MARK_FS),
+  );
+  // The first baseline, which `labels` below shifts up by half a line per extra
+  // line so a wrapped name stays centred on its own spoke.
+  const first = y - (lines.length - 1) * (AXIS_LH / 2);
+  const last = first + (lines.length - 1) * AXIS_LH + VALUE_DY + (mark === '' ? 0 : MARK_DY);
+  const pad = 3;
+
+  return {
+    x,
+    y,
+    anchor,
+    right: dx > 0.5,
+    below: dy > 0.5,
+    lines,
+    figure,
+    mark,
+    box: {
+      left: (anchor === 'start' ? x : anchor === 'end' ? x - width : x - width / 2) - pad,
+      top: first - AXIS_FS * 0.82 - pad,
+      width: width + pad * 2,
+      height: last - first + AXIS_FS * 0.82 + 3.2 + pad * 2,
+    },
+  };
+}
+
 /** The class that carries a context series' line style. Peers cycle, the median is fixed. */
 const PEER_STYLES = ['rp1', 'rp2', 'rp3', 'rp4'] as const;
 
@@ -973,6 +1203,127 @@ function identityList(context: readonly { entry: RadialSeries; style: string; la
     `<ul>${items}</ul>`,
     '<p class="figcap">A product chooses at submission whether to be named. An anonymous one keeps every ',
     'cut and every reason public and withholds only its name and its address.</p>',
+    '</details>',
+  ].join('');
+}
+
+// --- who the spoke belongs to ------------------------------------------------------
+
+/**
+ * What the roster disclosure is called on this figure.
+ *
+ * Phrased so the register carries without the grammar breaking: `brief` Part 4
+ * lets a B2B board say `The Panel` where a consumer board says `The Six`, and
+ * `The Floor` is singular where `The Buyers` is plural. "Who they are" agrees
+ * with all four; "who … are" does not.
+ */
+function mandateTitle(kind: 'jury' | 'buyers', labels: { jury: string; floor: string }): string {
+  return `${kind === 'jury' ? labels.jury : labels.floor}: who they are`;
+}
+
+/**
+ * One mandate as the rows a readout and a list both print.
+ *
+ * The two renderings differ in their chrome and not in their content: the
+ * tooltip clamps each field to three lines in CSS, the list prints them whole.
+ * Nothing is truncated in the markup, so the untruncated text is in the document
+ * either way — which is what makes the clamp a display decision rather than a
+ * page that quietly drops half of what it froze.
+ */
+function mandateRows(mandate: AxisMandate): { readonly name: string; readonly rows: readonly [string, string][] } {
+  return mandate.kind === 'juror'
+    ? {
+        name: mandate.role,
+        rows: [
+          ['', mandate.who],
+          ['Cares most', mandate.caresMost],
+          ['Punishes', mandate.biasedAgainst],
+        ],
+      }
+    : {
+        name: mandate.name,
+        rows: [
+          ['', mandate.description],
+          ...(mandate.needs.length === 0
+            ? []
+            : ([['Needs', mandate.needs.join(' · ')]] as [string, string][])),
+          ['On price', `${mandate.priceSensitivity} sensitivity`],
+        ],
+      };
+}
+
+function mandateBody(mandate: AxisMandate): string {
+  return mandateRows(mandate)
+    .rows.map(
+      ([key, text]) =>
+        `<i>${key === '' ? '' : `<span class="rbk">${escapeHtml(key)}</span>`}${escapeHtml(text)}</i>`,
+    )
+    .join('');
+}
+
+/**
+ * The readout laid over one axis label: who this juror or buyer is.
+ *
+ * A `<button>` and not a `<span tabindex>`, because a button is what a touch
+ * screen focuses on a tap — a readout that existed only on `:hover` would be
+ * unreachable on a phone — and because it is what a screen reader announces as
+ * something to activate. The readout itself is `aria-hidden` like every other
+ * `.tip` on this page: the accessible copy is the panel list under the chart,
+ * which carries the same text untruncated and needs no pointer at all.
+ *
+ * `''` when the frozen payload has no mandate for this axis. There is no
+ * fallback text and no empty control: a verdict delivered before the panel was
+ * frozen simply has a spoke with a name on it, which is what it has always had.
+ */
+function spokeButton(box: AxisBox, mandate: AxisMandate | null, axis: string): string {
+  if (mandate === null) return '';
+  const flip = [box.right ? 'tr' : '', box.below ? 'tu' : ''].filter((part) => part !== '').join(' ');
+  const style =
+    `left:${pct((box.box.left / RAD.W) * 100)};top:${pct((box.box.top / RAD.H) * 100)};` +
+    `width:${pct((box.box.width / RAD.W) * 100)};height:${pct((box.box.height / RAD.H) * 100)}`;
+  return [
+    `<button type="button" class="rspot" style="${style}" `,
+    `aria-label="${escapeHtml(`Who ${axis} is`)}">`,
+    `<span class="tip rbio${flip === '' ? '' : ` ${flip}`}" aria-hidden="true">`,
+    `<b>${escapeHtml(mandateRows(mandate).name)}</b>`,
+    `<em>${escapeHtml(box.figure)}${box.mark === '' ? '' : ` &middot; ${escapeHtml(box.mark)}`} &middot; ${escapeHtml(
+      mandate.kind === 'juror' ? 'health left' : 'conviction',
+    )}</em>`,
+    mandateBody(mandate),
+    '</span></button>',
+  ].join('');
+}
+
+/**
+ * The panel, in the DOM, with no pointer involved.
+ *
+ * The twin of the spoke readouts, for the same reason every figure here has a
+ * table twin: a fact reachable only by hovering is a fact half the readers of
+ * this page cannot reach — on a phone there is no hover, in a screen reader
+ * there is no pointer, and a downloaded copy printed to paper has neither.
+ *
+ * `''` when the verdict froze no mandates, which is every verdict delivered
+ * before the panel was frozen. No control, no empty list, and nothing invented.
+ */
+function mandateList(radial: Radial, title: string): string {
+  const present = radial.axes
+    .map((axis, index) => ({ axis, mandate: radial.mandates[index] ?? null }))
+    .filter((entry): entry is { axis: string; mandate: AxisMandate } => entry.mandate !== null);
+  if (present.length === 0) return '';
+
+  const items = present
+    .map(
+      ({ mandate }) =>
+        `<li><b>${escapeHtml(mandateRows(mandate).name)}</b>${mandateBody(mandate)}</li>`,
+    )
+    .join('');
+
+  return [
+    '<details class="rwho rbios">',
+    `<summary>${escapeHtml(title)} (${present.length})</summary>`,
+    `<ul>${items}</ul>`,
+    '<p class="figcap">Frozen when this verdict was issued. A jury is versioned and a mandate can be ',
+    'revised, so this is the panel that judged this product rather than whoever is installed today.</p>',
     '</details>',
   ].join('');
 }
@@ -1057,6 +1408,8 @@ function radialFigure(
   radial: Radial,
   kind: 'jury' | 'buyers',
   title: string,
+  /** What the roster disclosure is called: `The Panel`, `The Buyers`, `The Six`. */
+  panelTitle: string,
   caption: string,
   origin: string,
 ): string {
@@ -1126,34 +1479,36 @@ function radialFigure(
     })
     .join('');
 
-  // Labels sit outside the outer ring, anchored by which side of the chart their
-  // axis is on, so a long juror name grows away from the plot rather than over it.
-  const labels = radial.axes
-    .map((axis, index) => {
-      const [ax, ay] = radialPoint(index, count, 100);
-      const dx = ax - RAD.CX;
-      const dy = ay - RAD.CY;
-      const anchor = Math.abs(dx) < 1 ? 'middle' : dx > 0 ? 'start' : 'end';
-      const x = RAD.CX + dx * AXIS_OUT;
-      const y = RAD.CY + dy * AXIS_OUT + (Math.abs(dx) < 1 ? (dy < 0 ? -13 : 18) : 0);
-      const lines = wrapAxisLabel(axis);
-      const value = radial.self.values[index];
-      const mark = radial.marks[index];
-      const figure =
-        mark === 'no answer' || value === null || value === undefined
-          ? 'no answer'
-          : mark === '2nd choice'
-            ? `0 · 2nd choice`
-            : n1(value);
-      const tspans = lines
-        .map((line, lineIndex) => `<tspan x="${c(x)}" dy="${lineIndex === 0 ? 0 : AXIS_LH}">${escapeHtml(line)}</tspan>`)
+  // One pass per axis, shared by the drawn label and by the hotspot laid over it,
+  // so the two cannot come apart. Labels sit outside the outer ring, anchored by
+  // which side of the chart their axis is on, so a long juror name grows away
+  // from the plot rather than over it.
+  const boxes = radial.axes.map((_, index) => axisBox(radial, index, count));
+
+  const labels = boxes
+    .map((box, index) => {
+      const tspans = box.lines
+        .map(
+          (line, lineIndex) =>
+            `<tspan x="${c(box.x)}" dy="${lineIndex === 0 ? 0 : AXIS_LH}">${escapeHtml(line)}</tspan>`,
+        )
         .join('');
+      const mark =
+        box.mark === ''
+          ? ''
+          : `<tspan class="rvm" x="${c(box.x)}" dy="${MARK_DY}">${escapeHtml(box.mark)}</tspan>`;
       return (
-        `<text class="rax${mark === null ? '' : ' rmk'}" x="${c(x)}" y="${c(y - (lines.length - 1) * (AXIS_LH / 2))}" ` +
-        `text-anchor="${anchor}">${tspans}` +
-        `<tspan class="rv" x="${c(x)}" dy="${VALUE_DY}">${escapeHtml(figure)}</tspan></text>`
+        `<text class="rax${radial.marks[index] === null ? '' : ' rmk'}" x="${c(box.x)}" ` +
+        `y="${c(box.y - (box.lines.length - 1) * (AXIS_LH / 2))}" text-anchor="${box.anchor}">${tspans}` +
+        `<tspan class="rv" x="${c(box.x)}" dy="${VALUE_DY}">${escapeHtml(box.figure)}</tspan>${mark}</text>`
       );
     })
+    .join('');
+
+  // The spoke readouts, over the labels rather than inside the drawing. Empty for
+  // a verdict whose payload froze no panel.
+  const spokeReadouts = boxes
+    .map((box, index) => spokeButton(box, radial.mandates[index] ?? null, radial.axes[index] as string))
     .join('');
 
   const legend = [
@@ -1174,7 +1529,7 @@ function radialFigure(
     (context.length === 0
       ? ', with nothing overlaid'
       : `, overlaid with ${context.map(({ label }) => label).join(' and ')}`) +
-    '. Every figure is in the table below this chart.';
+    '. Every figure is in the table that accompanies this chart.';
 
   return [
     `<figure class="rfig ${kind === 'jury' ? 'rj' : 'rb'}">`,
@@ -1190,12 +1545,24 @@ function radialFigure(
     dots,
     labels,
     '</svg>',
+    // Laid over the drawing, in the same box, so a spoke's name is something a
+    // pointer, a tab key and a fingertip can all reach.
+    spokeReadouts,
     '</span>',
-    `<div class="rkey">${legend}</div>`,
-    identityList(context, origin),
     '</div>',
+    // Every word the chart needs, in its own column beside it rather than
+    // stacked under it — the legend included, so the well holds the drawing and
+    // nothing else. That is where the height came back from: the legend, the
+    // peer identities, the caption and the table twin used to stack under each
+    // chart and now sit in the space the polygon's own frame was spending on
+    // air. On a narrow screen the grid collapses and they stack again.
+    '<div class="rside">',
+    `<div class="rkey">${legend}</div>`,
     `<p class="figcap">${caption}</p>`,
+    identityList(context, origin),
+    mandateList(radial, panelTitle),
     radialTable(radial, title, context),
+    '</div>',
     '</figure>',
   ].join('');
 }
@@ -1257,6 +1624,18 @@ function radialsSection(verdict: Verdict, origin: string): string {
       ? ' Your own shape sits on the centre point: not one of them made this their first choice.'
       : '';
 
+  /**
+   * Whether either chart can say who its axes are.
+   *
+   * Used only to decide whether the lede promises a biography. A page that told
+   * the reader to hover a spoke and then had nothing behind it would be worse
+   * than one that said nothing — and every verdict delivered before the panel was
+   * frozen is exactly that page.
+   */
+  const hasMandates = [jury, buyers].some(
+    (radial) => radial !== null && radial.mandates.some((mandate) => mandate !== null),
+  );
+
   const juryFigure =
     jury === null
       ? ''
@@ -1264,10 +1643,10 @@ function radialsSection(verdict: Verdict, origin: string): string {
           jury,
           'jury',
           `${labels.jury} — who hurt you`,
+          mandateTitle('jury', labels),
           `${against(jury)}Each spoke is one juror, and the figure on it is the <b>health you had left</b> ` +
             'after that juror &mdash; 100 minus what they took. Further out is better, so a bigger shape is a ' +
             'better card and the dent is the juror who took the most. ' +
-            'The centre is 0 and the outer ring is 100; the rings between are 25, 50 and 75. ' +
             'Radius is the value, so read the figure on each spoke and compare the shapes &mdash; never the areas.',
           origin,
         );
@@ -1279,9 +1658,9 @@ function radialsSection(verdict: Verdict, origin: string): string {
           buyers,
           'buyers',
           `${labels.floor} — who wanted you`,
+          mandateTitle('buyers', labels),
           `${against(buyers)}Each spoke is one buyer; further out is more conviction behind a first choice, ` +
             'the same direction the panel chart reads. ' +
-            'The centre is 0 and the outer ring is 100; the rings between are 25, 50 and 75. ' +
             'A runner-up sits at zero and is marked &mdash; the run records conviction on a first pick and on nothing else.' +
             flat(buyers),
           origin,
@@ -1291,14 +1670,23 @@ function radialsSection(verdict: Verdict, origin: string): string {
   // buyer radial — nobody was ever shown it — and a heading promising one would
   // read as a section that failed to render.
   const heading = buyers === null ? 'Who hurt you' : 'Who hurt you, who wanted you';
+  // The scale is said ONCE here rather than in each caption, which is where it
+  // used to be: two figures repeating the same sentence about the same rings is
+  // two paragraphs of the reader's attention spent on one fact.
+  const scale =
+    ' The centre is 0 and the outer ring is 100; the rings between are 25, 50 and 75.' +
+    (hasMandates ? ' Hover or tab to a spoke to see who is on it.' : '');
   const lede =
-    buyers === null
+    (buyers === null
       ? `${escapeHtml(labels.jury)}, on fixed axes in the order the panel was installed. Your shape is the health you kept &mdash; further out is better; the outline is what you were judged against.`
-      : `${escapeHtml(labels.jury)} and ${escapeHtml(labels.floor)}, on fixed axes in the order the panel was installed. Both charts run the same way: further out is better. Your shape is filled; the outlines are what you were judged beside.`;
+      : `${escapeHtml(labels.jury)} and ${escapeHtml(labels.floor)}, on fixed axes in the order the panel was installed. Both charts run the same way: further out is better. Your shape is filled; the outlines are what you were judged beside.`) +
+    scale;
 
-  // One chart or two is a LAYOUT fact, not a styling afterthought: a solo verdict
-  // is the majority of rows, and a grid that keeps two columns for it prints a
-  // hole where the buyers chart would be. `rsolo` gives the one chart the row.
+  // One chart or two is a fact the class states; it is no longer a fork in the
+  // layout. Both charts are laid out the same way — chart in the wide column,
+  // words in the narrow one — so a solo verdict, which is the majority of rows,
+  // is the same component as a paired one rather than a special case with a hole
+  // where the second chart would be.
   const layout = juryFigure !== '' && buyersFigure !== '' ? 'rpair' : 'rsolo';
 
   return [

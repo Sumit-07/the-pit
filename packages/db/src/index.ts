@@ -60,8 +60,11 @@ export type {
 } from './delivery-store.js';
 export { createPostgresDeliveryStore, createPostgresVerdictStore } from './delivery-store.js';
 
-export type { RankedRow } from './verdict-payload.js';
+export type { RankedRow, VerdictPayloadContext } from './verdict-payload.js';
 export { verdictPayload, verdictPayloadFor, VerdictRowMissingError } from './verdict-payload.js';
+
+export type { FrozenBuyerMandate, FrozenJurorMandate, FrozenPanel } from './verdict-panel.js';
+export { freezePanel } from './verdict-panel.js';
 
 export type {
   FrozenComparison,

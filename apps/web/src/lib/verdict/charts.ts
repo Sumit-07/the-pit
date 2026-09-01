@@ -57,6 +57,24 @@
  * `lossChart` stays. It is the better form for "how much, on one linear axis with
  * an interval", and the radial does not answer that question.
  *
+ * ## Who is on each axis, and why that is frozen too
+ *
+ * A spoke names a juror or a buyer and used to say nothing more. `Radial.mandates`
+ * carries the person behind each axis — who they are, what they weigh heaviest,
+ * what they punish — so a reader meeting "The Seed Investor" can learn that he is
+ * scoring the POSITION rather than the product, which is the whole reason his
+ * number is what it is.
+ *
+ * It comes off `verdict.panel`, the frozen document, and never off
+ * `cjr/references/jurors/<slug>.json`. That is the same rule as the rest of this
+ * module for a slightly different reason: a jury is VERSIONED and a mandate can be
+ * revised (`01 §4` Step 2), so a permanent public URL that read the installed
+ * panel at render time would eventually describe jurors who are not the ones who
+ * cut this product. The mandate that judged you is part of your verdict.
+ * `packages/db/src/verdict-panel.ts` freezes it; `null` on every axis of a verdict
+ * frozen before that key existed, and the page draws those spokes with no
+ * biography rather than inventing one.
+ *
  * ## One direction for the whole page, and the one figure exempt from it
  *
  * A reader scrolls this page from top to bottom and should not have to re-learn
@@ -104,7 +122,7 @@
  * than enough room for that. `test/verdict-radial.test.ts` pins the zero.
  */
 
-import type { Verdict, VerdictComparison, VerdictDeduction, VerdictMetric } from './model';
+import type { Verdict, VerdictComparison, VerdictDeduction, VerdictMetric, VerdictPanel } from './model';
 
 // --- polarity: which way a figure points, and what that obliges it to wear ------
 
@@ -462,6 +480,38 @@ export interface RadialSeries {
 /** A per-axis fact that is not a magnitude — the thing a `0` on that axis is not. */
 export type RadialMark = 'no answer' | '2nd choice' | null;
 
+/**
+ * Who the person behind one axis is, from the FROZEN panel.
+ *
+ * A spoke names a juror or a buyer and, until this existed, said nothing about
+ * either: a reader met "The Seed Investor" and had no way to know that he scores
+ * the position rather than the product, which is exactly what makes his number
+ * mean something. The founder's ask was "the personality behind each axis, so I
+ * can have a better idea of the result".
+ *
+ * It comes off `verdict.panel` and nowhere else. `model.ts` and
+ * `packages/db/src/verdict-panel.ts` both carry the argument: a jury is versioned
+ * and a mandate can be revised, so reading the installed panel at render time
+ * would make an old verdict start describing jurors who are not the ones who cut
+ * it. `null` on every axis of a verdict frozen without a panel, and the page
+ * draws that spoke with no biography rather than inventing one.
+ */
+export type AxisMandate =
+  | {
+      readonly kind: 'juror';
+      readonly role: string;
+      readonly who: string;
+      readonly caresMost: string;
+      readonly biasedAgainst: string;
+    }
+  | {
+      readonly kind: 'buyer';
+      readonly name: string;
+      readonly description: string;
+      readonly needs: readonly string[];
+      readonly priceSensitivity: string;
+    };
+
 /** One radial, ready to draw. */
 export interface Radial {
   /**
@@ -479,6 +529,16 @@ export interface Radial {
   /** Peers first, then the category median. Empty when the payload carries no comparison. */
   readonly context: readonly RadialSeries[];
   readonly marks: readonly RadialMark[];
+  /**
+   * Who each axis is, one entry per axis, `null` where the frozen payload
+   * carries no mandate for that name.
+   *
+   * Positional against `axes`, but JOINED BY NAME rather than by position — a
+   * panel frozen in a different order than the axis order recovered from the
+   * board still finds the right person, and a juror the payload has no entry for
+   * gets `null` instead of somebody else's biography.
+   */
+  readonly mandates: readonly (AxisMandate | null)[];
   /**
    * What the reader is being compared against, for the caption.
    *
@@ -608,6 +668,46 @@ function contextSeries(
   return peers;
 }
 
+/**
+ * The juror mandates for a list of roles, in axis order.
+ *
+ * A lookup and never a fallback: a role the frozen panel has no entry for gets
+ * `null`, which is the difference between "this verdict did not freeze a
+ * biography" and "here is a biography we found lying around".
+ */
+export function jurorMandates(panel: VerdictPanel | null, axes: readonly string[]): (AxisMandate | null)[] {
+  const byRole = new Map((panel?.jurors ?? []).map((juror) => [juror.role, juror]));
+  return axes.map((role) => {
+    const juror = byRole.get(role);
+    return juror === undefined
+      ? null
+      : {
+          kind: 'juror' as const,
+          role: juror.role,
+          who: juror.who,
+          caresMost: juror.caresMost,
+          biasedAgainst: juror.biasedAgainst,
+        };
+  });
+}
+
+/** The buyer mandates for a list of persona names, in axis order. Same rule. */
+export function buyerMandates(panel: VerdictPanel | null, axes: readonly string[]): (AxisMandate | null)[] {
+  const byName = new Map((panel?.buyers ?? []).map((buyer) => [buyer.name, buyer]));
+  return axes.map((persona) => {
+    const buyer = byName.get(persona);
+    return buyer === undefined
+      ? null
+      : {
+          kind: 'buyer' as const,
+          name: buyer.name,
+          description: buyer.description,
+          needs: buyer.needs,
+          priceSensitivity: buyer.priceSensitivity,
+        };
+  });
+}
+
 function baselineOf(comparison: VerdictComparison | null, context: readonly RadialSeries[]): Radial['baseline'] {
   if (comparison === null || context.length === 0) return 'none';
   return context.some((series) => series.role === 'peer') ? 'peers' : 'category';
@@ -658,6 +758,7 @@ export function juryRadial(verdict: Verdict): Radial | null {
         ? ('no answer' as const)
         : null,
     ),
+    mandates: jurorMandates(verdict.panel, axes),
     baseline: baselineOf(comparison, context),
     unit: 'health left per metric, out of the 100 each juror starts you on',
     medianOver: comparison?.boardSize ?? 0,
@@ -710,6 +811,7 @@ export function buyerRadial(verdict: Verdict): Radial | null {
     self: { label: verdict.name, values, role: 'self' },
     context,
     marks: axes.map((persona) => (byPersona.get(persona)?.pick === 'second' ? ('2nd choice' as const) : null)),
+    mandates: buyerMandates(verdict.panel, axes),
     baseline: baselineOf(comparison, context),
     unit: 'conviction behind a first choice, 0–100',
     medianOver: comparison?.votedSize ?? 0,

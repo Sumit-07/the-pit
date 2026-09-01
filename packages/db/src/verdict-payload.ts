@@ -64,12 +64,20 @@
  * The table refuses UPDATE, so no verdict issued before that key existed will
  * ever grow one. `apps/web/src/lib/verdict/charts.ts` reads its absence as "there
  * is no comparison" and draws no overlay, which is the truth about those pages.
+ *
+ * `panel` is frozen for the same reason and with the same consequence.
+ * `verdict-panel.ts` carries the argument: a jury is versioned and a mandate can
+ * be revised, so a page that read the CURRENT panel file at render time would
+ * start describing jurors who are not the ones who cut this product. The mandate
+ * that judged you is part of your verdict. A verdict frozen before this key
+ * existed carries no biography and the page draws the spoke without one.
  */
 
-import type { Ranking } from '@the-pit/engine';
+import type { Jury, Ranking } from '@the-pit/engine';
 
 import type { PeerIdentityResolver } from './verdict-comparison.js';
 import { freezeComparison } from './verdict-comparison.js';
+import { freezePanel } from './verdict-panel.js';
 
 /** One row of a delivered board. `Ranking['ranking'][number]`, named. */
 export type RankedRow = Ranking['ranking'][number];
@@ -97,17 +105,33 @@ export class VerdictRowMissingError extends Error {
  * marks the job delivered (`brief §2.3`), so a verdict that claimed a different
  * time from the board it describes would be describing a board that never existed.
  */
-export function verdictPayload(
-  ranking: Ranking,
-  row: RankedRow,
-  categorySnapshotVersion: string,
-  issuedAt: Date,
+/** What only a caller holding the run's own artifacts can add to the document. */
+export interface VerdictPayloadContext {
   /**
    * Who the cluster peers may be named as. Optional so the delivery path is
    * untouched; `verdict-comparison.ts`'s default withholds every name, which is
    * the fail-safe direction for a document that can never be updated.
    */
-  identity?: PeerIdentityResolver,
+  readonly identity?: PeerIdentityResolver;
+  /**
+   * The installed jury, for the juror biographies frozen onto each spoke.
+   *
+   * Optional because there is no juror roster on a `Ranking` and only a caller
+   * that loaded `cjr/references/jurors/<slug>.json` has one — the seed builder
+   * does; the paid delivery path holds a store and a board and does not. A
+   * payload frozen without it carries no juror biography, and
+   * `apps/web/src/lib/verdict/page.ts` draws the spoke without one rather than
+   * reading the current file, which would describe a panel that has since moved.
+   */
+  readonly jury?: Jury;
+}
+
+export function verdictPayload(
+  ranking: Ranking,
+  row: RankedRow,
+  categorySnapshotVersion: string,
+  issuedAt: Date,
+  context: VerdictPayloadContext = {},
 ): Record<string, unknown> {
   return {
     category: ranking.category,
@@ -136,7 +160,8 @@ export function verdictPayload(
     weights: ranking.weights,
     metrics: ranking.metrics,
     demand_roster_size: ranking.personas.length,
-    comparison: freezeComparison(ranking, row, identity),
+    comparison: freezeComparison(ranking, row, context.identity),
+    panel: freezePanel(ranking, context.jury),
     verdict: row,
   };
 }

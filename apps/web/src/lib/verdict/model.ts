@@ -188,6 +188,54 @@ export interface VerdictComparison {
   readonly votedSize: number;
 }
 
+// --- the frozen panel -----------------------------------------------------------
+
+/**
+ * One juror's mandate, as the verdict froze it.
+ *
+ * Frozen and never looked up, for the reason `packages/db/src/verdict-panel.ts`
+ * states: a jury is versioned and a mandate can be revised (`01 §4` Step 2 bumps
+ * `prompt_version` by hand on any edit), so a page that read
+ * `cjr/references/jurors/<slug>.json` at render time would eventually describe
+ * jurors who are not the ones who cut this product. The mandate that judged you
+ * is part of your verdict, and this module can no more reach the current panel
+ * than it can reach the current ranking.
+ *
+ * Every field is model-written prose and none of it is escaped here — escaping is
+ * a property of the output encoding and happens once, in `page.ts`.
+ */
+export interface VerdictJurorMandate {
+  /** The roster key: the same string every deduction's `role` carries. */
+  readonly role: string;
+  readonly who: string;
+  readonly caresMost: string;
+  readonly biasedAgainst: string;
+}
+
+/** One buyer's mandate, as the verdict froze it. */
+export interface VerdictBuyerMandate {
+  /** The roster key: the same string every pick's `persona` carries. */
+  readonly name: string;
+  readonly description: string;
+  readonly needs: readonly string[];
+  /** `low` / `medium` / `high`, verbatim from the installed panel. */
+  readonly priceSensitivity: string;
+}
+
+/**
+ * The panel that produced this verdict.
+ *
+ * `jurors` is empty on a payload frozen by a caller that held no installed jury
+ * — the paid delivery path holds a store and a board and never the panel file —
+ * and the whole thing is `null` on a verdict delivered before the key existed.
+ * Both mean the same thing to the page: draw the spoke, print no biography, and
+ * invent nothing.
+ */
+export interface VerdictPanel {
+  readonly jurors: readonly VerdictJurorMandate[];
+  readonly buyers: readonly VerdictBuyerMandate[];
+}
+
 /** The cluster the product was judged inside. */
 export interface VerdictCluster {
   readonly id: string;
@@ -274,6 +322,14 @@ export interface Verdict {
    * payload carries in a shape this parser cannot read.
    */
   readonly comparison: VerdictComparison | null;
+  /**
+   * The mandate that judged this product, frozen at delivery.
+   *
+   * `null` on a verdict delivered before the panel was frozen, and carrying an
+   * empty `jurors` list on one frozen without an installed jury. The page prints
+   * what is there and nothing where there is nothing.
+   */
+  readonly panel: VerdictPanel | null;
 
   readonly weights: RankingWeights;
   readonly versions: {
@@ -566,6 +622,59 @@ export function parseComparison(raw: unknown): VerdictComparison | null {
   };
 }
 
+// --- the frozen panel -----------------------------------------------------------
+
+/** A non-empty string, or `null`. The only shape a mandate field may take. */
+function prose(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+/**
+ * Read the frozen panel, or decide there is not one.
+ *
+ * `null` rather than a throw, for the same reason `parseComparison` returns one:
+ * a biography is an annotation on a spoke, and a page that refused to render a
+ * paid, permanent verdict because a prose field was malformed would take the
+ * whole category down to protect a tooltip. Two states reach the page and both
+ * are the same page — the one with a spoke and no biography.
+ *
+ * An entry missing any of its fields is DROPPED rather than partially rendered.
+ * A juror described as "who: —" reads as a juror with no character, which is a
+ * claim; a juror with no entry reads as a spoke this verdict did not freeze one
+ * for, which is the truth.
+ */
+export function parsePanel(raw: unknown): VerdictPanel | null {
+  if (!isRecord(raw)) return null;
+
+  const jurors: VerdictJurorMandate[] = [];
+  for (const entry of Array.isArray(raw['jurors']) ? raw['jurors'] : []) {
+    if (!isRecord(entry)) continue;
+    const role = prose(entry['role']);
+    const who = prose(entry['who']);
+    const caresMost = prose(entry['cares_most']);
+    const biasedAgainst = prose(entry['biased_against']);
+    if (role === null || who === null || caresMost === null || biasedAgainst === null) continue;
+    jurors.push({ role, who, caresMost, biasedAgainst });
+  }
+
+  const buyers: VerdictBuyerMandate[] = [];
+  for (const entry of Array.isArray(raw['buyers']) ? raw['buyers'] : []) {
+    if (!isRecord(entry)) continue;
+    const name = prose(entry['name']);
+    const description = prose(entry['description']);
+    const priceSensitivity = prose(entry['price_sensitivity']);
+    if (name === null || description === null || priceSensitivity === null) continue;
+    const needs = (Array.isArray(entry['needs']) ? entry['needs'] : [])
+      .map((need) => prose(need))
+      .filter((need): need is string => need !== null);
+    buyers.push({ name, description, needs, priceSensitivity });
+  }
+
+  // A panel key carrying neither roster is not a panel. Returning an empty one
+  // would let the page render a "who the panel is" control with nothing behind it.
+  return jurors.length === 0 && buyers.length === 0 ? null : { jurors, buyers };
+}
+
 /**
  * Read one frozen verdict.
  *
@@ -663,6 +772,7 @@ export function parseVerdict(row: StoredVerdict): Verdict {
     cluster,
     floor: parseFloor(slug, verdict, cluster, payload),
     comparison: parseComparison(payload['comparison']),
+    panel: parsePanel(payload['panel']),
 
     weights: {
       merit: requireNumber(slug, weights['merit'], 'weights.merit'),

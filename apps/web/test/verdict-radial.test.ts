@@ -519,19 +519,62 @@ describe('a solo cluster compares against the category, and says so', () => {
     expect((soloHtml.match(/<figure class="rfig /g) ?? []).length).toBe(1);
     expect(soloHtml).not.toContain('<figure class="rfig rb"');
 
-    // The class is not decoration: it carries a layout that spends the row.
-    // `rsolo` gives the chart one column and its words the other, and the
-    // two-column PAIR rule is scoped so it can never apply to a lone figure.
-    expect(soloHtml).toContain('.rgrid.rsolo .rfig{display:grid');
-    expect(soloHtml).toContain('.rgrid.rpair{grid-template-columns:minmax(0,1fr) minmax(0,1fr)');
-    expect(soloHtml).not.toMatch(/\.rgrid\{[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/);
-
-    // And a verdict that HAS both charts still gets the pair layout, so the fix
-    // is a branch rather than a change of the default.
+    // A verdict that HAS both charts still gets both, and the class still says
+    // which page this is.
     const paired = await withPeers('developer-tools');
     const pairedHtml = renderVerdictPage(paired);
     expect(pairedHtml).toContain('<div class="rgrid rpair">');
     expect((pairedHtml.match(/<figure class="rfig /g) ?? []).length).toBe(2);
+  });
+
+  it('lays every radial out the same way, on the page’s own rails', async () => {
+    // The layout used to fork: a solo verdict put its chart in one column and
+    // its words in the other, and a PAIR put two charts side by side in a band
+    // that broke 120px out of the 820px column on either side. That band was the
+    // only element on the page not aligned to its own heading — and a founder
+    // reading it said so. One rule now, for one figure or two, and it is the
+    // rule the majority case already used.
+    const paired = await withPeers('developer-tools');
+    const solo = parseVerdict(await seededVerdictNamed('developer-tools', 'Carillon'));
+
+    for (const html of [renderVerdictPage(paired), renderVerdictPage(solo)]) {
+      // Chart in the wide column, the words that explain it in the narrow one.
+      expect(html).toContain('.rfig{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(228px,1fr)');
+      expect(html).toContain('grid-template-areas:"t t" "chart side"');
+      // The grid itself stacks its figures and never columns them, so two charts
+      // are two rows rather than a wider band.
+      expect(html).toContain('.rgrid{display:grid;gap:22px;margin-top:16px;grid-template-columns:minmax(0,1fr)}');
+      expect(html).not.toMatch(/\.rgrid[^{]*\{[^}]*minmax\(0,1fr\) minmax\(0,1fr\)/);
+      // And nothing in the radial CSS reaches outside the measure any more.
+      expect(html).not.toContain('.rgrid{margin-inline:-');
+      expect(html).not.toMatch(/margin-inline:-\d+px/);
+    }
+  });
+
+  it('keeps the polygon the size the enlargement made it', async () => {
+    // The founder's first complaint was that the radials read as small, and R
+    // went 86 -> 112 to answer it. The second complaint — that the pair takes
+    // too much room — must not be answered by taking that back. So the plot is
+    // still 112 of its own frame's radius, and the frame spends MORE of itself
+    // on the plot than it did: 224 of 360 where it was 224 of 372.
+    const html = renderVerdictPage(await withPeers('developer-tools'));
+    const box = /viewBox="0 0 (\d+) (\d+)"/.exec(html);
+    expect(box).not.toBeNull();
+
+    const width = Number(box?.[1]);
+    const rings = [...html.matchAll(/<polygon class="rring rout" points="([^"]+)"/g)].map((match) =>
+      (match[1] as string).split(' ').map((pair) => pair.split(',').map(Number) as [number, number]),
+    );
+    expect(rings.length, 'one outer ring per chart').toBe(2);
+
+    const outer = rings[0] as [number, number][];
+    const cx = outer.reduce((sum, [x]) => sum + x, 0) / outer.length;
+    const cy = outer.reduce((sum, [, y]) => sum + y, 0) / outer.length;
+    const radius = Math.hypot((outer[0] as [number, number])[0] - cx, (outer[0] as [number, number])[1] - cy);
+
+    expect(radius).toBeCloseTo(112, 1);
+    // The share of the frame the plot occupies, which is the number that went up.
+    expect((2 * radius) / width).toBeGreaterThan(0.62);
   });
 });
 
