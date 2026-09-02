@@ -29,6 +29,14 @@ import { loadSeedInput, SEEDED_SLUGS } from '../../src/seed/load.js';
 
 const WORKDIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'cjr');
 
+/**
+ * Whether the engine's own raw record sits beside both boards. `results.json` is
+ * git-ignored (`load.ts`'s header), so this is true on the machine that produced
+ * the runs and false in a fresh clone — and `buildSeedRows` takes its exact path
+ * or its reconstruct-from-the-board path accordingly.
+ */
+const hasRawRecords = SEEDED_SLUGS.every((slug) => existsSync(join(WORKDIR, 'runs', slug, 'results.json')));
+
 let pg: PGlite;
 let db: Database;
 
@@ -102,10 +110,17 @@ describe('the seeded database', () => {
 
   it('holds demand votes and can name the personas that cast them', async () => {
     expect(await count(`SELECT count(*) AS count FROM demand_votes`)).toBeGreaterThan(0);
-    // Both panels have six personas (`01 §4` Step 3's target).
+    // Both panels have six personas (`01 §4` Step 3's target), and the two share
+    // one name — Priya Raghunathan sits on both — so an exact seed names twelve
+    // (category, persona) pairs. Seeded from the board alone the count is eleven,
+    // and that is the documented lossiness rather than a collapsed pair: a `none`
+    // answer attaches to no product's picks and so leaves no trace in
+    // `ranking.json` (`build.ts`'s header), and in Health, Fitness & Wellness
+    // Marguerite Sallis answered `none` to all eight clusters, so nothing on the
+    // board records that she voted at all.
     expect(
       await count(`SELECT count(*) AS count FROM (SELECT DISTINCT category_id, persona_name FROM demand_votes) t`),
-    ).toBe(12);
+    ).toBe(hasRawRecords ? 12 : 11);
   });
 
   it('leaves the ledger and the auth tables empty — a seeded product was never bought', async () => {
@@ -210,8 +225,6 @@ describe('the seeded database', () => {
 });
 
 describe('the raw record survives the round trip through Postgres', () => {
-  const hasRawRecords = SEEDED_SLUGS.every((slug) => existsSync(join(WORKDIR, 'runs', slug, 'results.json')));
-
   it.skipIf(!hasRawRecords)('reads back the same score rows it wrote', async () => {
     const input = await loadSeedInput('developer-tools', WORKDIR);
     const built = buildSeedRows(input);
