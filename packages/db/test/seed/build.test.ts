@@ -484,7 +484,10 @@ describe('the frozen verdict pages (brief Part 6)', () => {
     const betaId = deterministicUuid('product', 'widget-tools', '1');
 
     const alpha = rows.verdicts.find((v) => v.productId === alphaId)?.payload as {
-      verdict: { scorecard: { deductions: { points: number; role: string }[] }[]; cluster: { id: string } };
+      verdict: {
+        scorecard: { deductions: { points: number; role: string }[] }[];
+        cluster: { id: string; label: string };
+      };
       product_count: number;
     };
     expect(alpha.verdict.scorecard[0]?.deductions.map((d) => [d.role, d.points])).toEqual([
@@ -492,7 +495,12 @@ describe('the frozen verdict pages (brief Part 6)', () => {
       ['The Release Engineer', 10],
       ['The Docs Writer', 50],
     ]);
-    expect(alpha.verdict.cluster.id).toBe('c1-widgets');
+    // A frozen page is redacted, and the redaction renumbers cluster ids to
+    // `c1`…`cN` so an id minted from a product name — `c9-invofox` — cannot
+    // publish the brand of a listing that withheld it. What the page carries is
+    // the cluster it was judged inside; the id is a join key and says nothing.
+    expect(alpha.verdict.cluster.id).toBe('c1');
+    expect(alpha.verdict.cluster.label).toBe('Widget shipping');
 
     const beta = rows.verdicts.find((v) => v.productId === betaId)?.payload as {
       verdict: { demand_detail: { picks: { persona: string; pick: string }[] } };

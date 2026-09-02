@@ -178,6 +178,62 @@ function mapStrings(value: unknown, transform: (text: string) => string): unknow
 }
 
 /**
+ * Positional cluster ids, in the order the document already lists them.
+ *
+ * ## The third leak, and why the prose scrub could never have caught it
+ *
+ * The uniqueness pass mints a cluster identifier from the idea the cluster is
+ * about, and when a cluster has one member that idea IS the product:
+ * `c9-invofox`, `c35-holdmylid`, `c1-ai-app-builder`, `c32-modulate`. Twenty of
+ * the 39 `developer-tools` ids spell out a seeded product that way.
+ *
+ * None of them was reachable by the substitutions above. An id is a lowercase
+ * hyphen-joined slug, so `holdmylid` does not match the full name pattern
+ * (`Hold-My-Lid`, whose hyphens and capitals are gone) and does not match the
+ * brand-head pattern either, which is deliberately case-SENSITIVE and
+ * word-BOUNDED for the reasons `brandHead` gives. A slug is precisely the form
+ * that survives both. The two ids that did get rewritten — the ones whose brand
+ * happens to be a single lowercase-identical token — were rewritten by accident,
+ * which is worse than not being rewritten at all: it made the field look handled.
+ *
+ * Rendered HTML shows `cluster.label`, so nothing on a page said it. The leak
+ * surface is the document itself — `GET /api/boards/<slug>` and the snapshot
+ * JSON in the bucket — which is exactly the surface this file exists to make
+ * safe, because "the identity appears nowhere" is a promise about what The Pit
+ * SERVES and not about what it happens to render today.
+ *
+ * ## Why positional rather than scrubbed
+ *
+ * A pattern-based fix would be a fourth needle chasing the same failure mode,
+ * and the mode is that an id is DERIVED FROM TEXT. So the derivation goes: every
+ * id becomes `c1`…`cN`, carrying no text at all, and a future name shape cannot
+ * reintroduce the bug. Nothing is lost — an id is a join key, and everything a
+ * reader is shown about a cluster lives in `label`, `size`, `uniqueness` and
+ * `reason`, none of which this touches.
+ *
+ * The order is the document's own: `ranking.clusters` first (the roster, already
+ * sorted by size), then any id a row names that the roster omits, in row order.
+ * That is stable for a given document, which is what makes the rewrite idempotent
+ * — a second pass over `c1`…`cN` assigns each id the token it already carries.
+ */
+function positionalClusterIds(ranking: Ranking): ReadonlyMap<string, string> {
+  const order: string[] = [];
+  const seen = new Set<string>();
+  const note = (id: unknown): void => {
+    if (typeof id !== 'string' || id === '' || seen.has(id)) return;
+    seen.add(id);
+    order.push(id);
+  };
+
+  for (const cluster of ranking.clusters ?? []) note(cluster.cluster_id);
+  for (const row of ranking.ranking ?? []) note(row.cluster?.id);
+
+  const out = new Map<string, string>();
+  for (const [index, id] of order.entries()) out.set(id, `c${index + 1}`);
+  return out;
+}
+
+/**
  * The designations for a category's anonymous rows.
  *
  * Separated from `redactRanking` because the surfaces need the mapping without
@@ -257,7 +313,21 @@ export function redactRanking(
     }
   }
 
+  // Every cluster identifier in the document, and the positional token it
+  // becomes. Read off the input for the same reason the substitutions are:
+  // this is the last point at which the real ids exist on this path.
+  const clusterIds = positionalClusterIds(ranking);
+
   const scrub = (text: string): string => {
+    // A string that IS a cluster id is replaced whole, and nothing else is done
+    // to it. Exact equality rather than a pattern: it needs no boundary rules and
+    // cannot touch prose, and every reference to an id in this document is a
+    // field holding the id by itself — `clusters[].cluster_id` and
+    // `ranking[].cluster.id` are the two the schema has, and this covers any
+    // third a later schema adds without needing to be told about it.
+    const positional = clusterIds.get(text);
+    if (positional !== undefined) return positional;
+
     let out = text;
     for (const { pattern, replacement } of substitutions) out = out.replace(pattern, replacement);
     return out;

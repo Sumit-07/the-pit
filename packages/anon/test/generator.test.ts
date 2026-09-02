@@ -247,6 +247,62 @@ describe('the redaction', () => {
     expect(JSON.stringify(out)).not.toContain('ashgrove.example');
   });
 
+  it('turns a cluster id into a positional token, so it can spell nothing', () => {
+    // The uniqueness pass mints an id from the idea a cluster is about, and a
+    // cluster of one has the product for an idea — `c9-invofox`. A slug is the
+    // one form of a name that neither the full-name pattern nor the
+    // case-sensitive brand head matches, so the fix is to stop the id carrying
+    // text at all.
+    const input = ranking();
+    input.clusters = [
+      { cluster_id: 'c9-ashgrove', label: 'Notes', size: 2 },
+      { cluster_id: 'c4-runlet-deploy', label: 'Deploys', size: 1 },
+    ];
+    (input.ranking[0] as { cluster: { id: string } }).cluster.id = 'c4-runlet-deploy';
+    (input.ranking[1] as { cluster: { id: string } }).cluster.id = 'c9-ashgrove';
+
+    const out = redactRanking(input, [0, 1], 'developer-tools');
+
+    expect(out.clusters.map((cluster) => cluster.cluster_id)).toEqual(['c1', 'c2']);
+    expect(JSON.stringify(out)).not.toContain('ashgrove');
+    expect(JSON.stringify(out)).not.toContain('runlet');
+  });
+
+  it('moves every reference to an id with the id itself', () => {
+    // Positional or not, an id is a join key: the row's cluster must still be a
+    // cluster on the roster.
+    const input = ranking();
+    input.clusters = [
+      { cluster_id: 'c9-ashgrove', label: 'Notes', size: 2 },
+      { cluster_id: 'c4-runlet-deploy', label: 'Deploys', size: 1 },
+    ];
+    (input.ranking[0] as { cluster: { id: string } }).cluster.id = 'c4-runlet-deploy';
+    (input.ranking[1] as { cluster: { id: string } }).cluster.id = 'c9-ashgrove';
+
+    const out = redactRanking(input, [0, 1], 'developer-tools');
+    const roster = new Set(out.clusters.map((cluster) => cluster.cluster_id));
+
+    expect(out.ranking[0]?.cluster.id).toBe('c2');
+    expect(out.ranking[1]?.cluster.id).toBe('c1');
+    for (const row of out.ranking) expect(roster.has(row.cluster.id)).toBe(true);
+  });
+
+  it('numbers a cluster no row names, so the roster never loses one', () => {
+    // A cluster the panel scored and nobody was ranked into is still on the
+    // board's roster, and a rewrite that only walked the rows would drop it.
+    const input = ranking();
+    input.clusters = [
+      { cluster_id: 'c9-ashgrove', label: 'Notes', size: 2 },
+      { cluster_id: 'c2-empty', label: 'Nobody', size: 0 },
+    ];
+    (input.ranking[0] as { cluster: { id: string } }).cluster.id = 'c9-ashgrove';
+    (input.ranking[1] as { cluster: { id: string } }).cluster.id = 'c9-ashgrove';
+
+    const out = redactRanking(input, [0], 'developer-tools');
+    expect(out.clusters.map((cluster) => cluster.cluster_id)).toEqual(['c1', 'c2']);
+    expect(out.ranking.every((row) => row.cluster.id === 'c1')).toBe(true);
+  });
+
   it('leaves a row it was not given completely alone', () => {
     const out = redactRanking(ranking(), [0], 'developer-tools');
     const other = out.ranking.find((row) => row.id === 1);

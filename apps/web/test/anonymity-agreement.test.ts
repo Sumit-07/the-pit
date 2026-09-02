@@ -106,10 +106,16 @@ async function frozenVerdicts(slug: string): Promise<Map<number, { name: string;
  * the RAW document rather than imported from it — a leak test that derived its
  * needles from the redactor would pass by agreeing with the bug.
  */
+function brandHeadOf(name: string): string {
+  const head = name.split(/\s[—–|:·-]\s|[|:]/u)[0]?.trim() ?? '';
+  if (head === '' || head === name.trim() || head.length < 4) return '';
+  return head;
+}
+
 function identityTokens(name: string, url: string): string[] {
   const tokens = [name, url];
-  const head = name.split(/\s[—–|:·-]\s|[|:]/u)[0]?.trim() ?? '';
-  if (head !== '' && head !== name.trim() && head.length >= 4) tokens.push(head);
+  const head = brandHeadOf(name);
+  if (head !== '') tokens.push(head);
   const host = url.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/^www\./i, '').split(/[/?#]/u)[0] ?? '';
   if (host.length >= 4) tokens.push(host);
   return tokens;
@@ -197,6 +203,89 @@ describe.each(SEEDED_SLUGS)('%s: the two origins of a seeded board', (slug) => {
     }
 
     expect(leaks).toEqual([]);
+  });
+
+  it('publishes no cluster id that spells out a withheld brand', async () => {
+    // The third leak, and the one nothing rendered. A cluster identifier is
+    // minted from the idea the cluster is about, and a cluster of one has the
+    // product for an idea: `c9-invofox`, `c35-holdmylid`, `c1-ai-app-builder`.
+    // Twenty of the 39 `developer-tools` ids name a seeded product that way.
+    //
+    // The prose scrub could not reach them and the assertion above could not see
+    // them, both for the same reason: an id is a lowercase hyphen-joined SLUG.
+    // `holdmylid` is not the name `Hold-My-Lid` and not the case-sensitive,
+    // word-bounded brand head either, so neither the redactor's patterns nor
+    // `identityTokens` above matches it. The needles here are therefore
+    // separator-stripped on both sides — the id and the name reduced to bare
+    // letters and digits — which is the comparison the slug form actually calls
+    // for.
+    //
+    // The board's own HTML shows `cluster.label` and never the id, so this is an
+    // assertion about the DOCUMENT: `GET /api/boards/<slug>` and the snapshot
+    // JSON in the bucket serve it, and "the identity appears nowhere" is a
+    // promise about what The Pit serves.
+    const raw = await rawRanking(slug);
+    const document_ = await board(slug);
+    if (document_ === undefined) throw new Error(`${slug} has no board`);
+
+    const flatten = (text: string): string => text.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    const needles = new Set<string>();
+    for (const row of raw.ranking) {
+      for (const token of [row.name, brandHeadOf(row.name)]) {
+        const flat = flatten(token);
+        if (flat.length >= 4) needles.add(flat);
+      }
+    }
+    expect(needles.size).toBeGreaterThan(0);
+
+    const served = document_.ranking;
+    const frozen = [...(await frozenVerdicts(slug)).values()].map((entry) => entry.json).join('\n');
+
+    const ids = [
+      ...served.clusters.map((cluster) => cluster.cluster_id),
+      ...served.ranking.map((row) => row.cluster.id),
+    ];
+    expect(ids.length).toBeGreaterThan(0);
+
+    const leaks: string[] = [];
+    for (const id of ids) {
+      const flat = flatten(id);
+      for (const needle of needles) if (flat.includes(needle)) leaks.push(`${id} spells ${needle}`);
+    }
+    // And the frozen verdict payloads, which carry the same ids and are permanent.
+    for (const needle of needles) {
+      for (const match of frozen.matchAll(/"(?:cluster_id|id)":\s*"(c[^"]*)"/g)) {
+        if (flatten(match[1] ?? '').includes(needle)) leaks.push(`frozen verdict: ${match[1]} spells ${needle}`);
+      }
+    }
+
+    expect(leaks).toEqual([]);
+  });
+
+  it('still joins a row to its cluster after the ids are rewritten', async () => {
+    // The rewrite is positional, so the only way it can go wrong is by moving one
+    // side and not the other. Every id a row names must be on the roster, the
+    // roster must be the same size it was, and one raw id must map to exactly one
+    // served id — a many-to-one collapse would merge two clusters silently.
+    const raw = await rawRanking(slug);
+    const document_ = await board(slug);
+    if (document_ === undefined) throw new Error(`${slug} has no board`);
+
+    const served = document_.ranking;
+    expect(served.clusters.length).toBe(raw.clusters.length);
+
+    const roster = new Set(served.clusters.map((cluster) => cluster.cluster_id));
+    const mapping = new Map<string, string>();
+    for (const [index, row] of raw.ranking.entries()) {
+      const out = served.ranking[index];
+      if (out === undefined) throw new Error(`${slug}: row ${index} vanished`);
+      expect(roster.has(out.cluster.id)).toBe(true);
+      const already = mapping.get(row.cluster.id);
+      if (already !== undefined) expect(already).toBe(out.cluster.id);
+      mapping.set(row.cluster.id, out.cluster.id);
+    }
+    expect(new Set(mapping.values()).size).toBe(mapping.size);
   });
 
   it('still publishes every deduction, juror, score and cluster', async () => {
