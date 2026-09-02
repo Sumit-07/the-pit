@@ -358,7 +358,7 @@ describe('brief §2.4 + §2.5: the cap catches a shortener and its target as ONE
     expect(transport.sessionCount).toBe(1);
     expect(submissions.rows).toHaveLength(1);
     const page = await second.text();
-    expect(page).toContain('Nothing was charged');
+    expect(page).toContain('Not charged');
   });
 
   it('cycle-locks the target submitted after the short link, which is the same rule backwards', async () => {

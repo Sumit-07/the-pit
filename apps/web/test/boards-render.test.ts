@@ -122,12 +122,12 @@ describe('the ledger is in the document, open or not', () => {
   });
 
   it('names the jurors who did not answer instead of publishing a silent 50', () => {
-    expect(textOf(boardHtml())).toContain('no answer from The Docs Writer — substituted 50');
+    expect(textOf(boardHtml())).toContain('no answer from The Docs Writer — scored 50');
   });
 
-  it('surfaces an injection-alarm hit as logged, not dropped', () => {
+  it('surfaces an injection-alarm hit without narrating the alarm', () => {
     const html = boardHtml();
-    expect(html).toContain('logged, not dropped');
+    expect(html).toContain('Flagged');
     expect(textOf(html)).toContain("The Terminal Minimalist matched “prompt”");
   });
 
@@ -154,7 +154,7 @@ describe('a solo cluster is a stated property', () => {
 
   it('states the count at board level, on both surfaces', () => {
     expect(textOf(boardHtml())).toContain('Ranked on merit alone 1 / 3');
-    expect(textOf(homeHtml())).toContain('1 of 3 faced no substitute and rank on merit alone');
+    expect(textOf(homeHtml())).toContain('1 of 3 ranked on merit alone');
   });
 
   it('is stated as a property, never as a failure', () => {
@@ -198,16 +198,28 @@ describe('the board refuses to promise a rank', () => {
     expect(text).toContain(STAMP_NOTE);
   });
 
-  it('publishes the health numbers and the seeding caveat verbatim', () => {
+  it('publishes the health numbers', () => {
     const text = textOf(boardHtml());
     expect(text).toContain('Discrimination 0.74');
     expect(text).toContain('Avg metric spread 6.2');
-    expect(text).toContain(SAMPLE_CAVEAT);
   });
 
-  it('says the provenance is unknown rather than rendering a clean footer', () => {
+  // The caveat is the run's own engineering note — model ids, a CLI invocation,
+  // an unmet gate, in capitals. It was published under "Where these scores came
+  // from", which made the board read as disowned by the people who built it. It
+  // stays on the run record and off every public surface, and this is the guard
+  // that stops it coming back: `BoardView` still carries it, so nothing but a
+  // test keeps it from being interpolated into a footer again.
+  it('never publishes the seeding caveat, which is an engineering note', () => {
+    const text = textOf(boardHtml());
+    expect(text).not.toContain(SAMPLE_CAVEAT);
+    expect(text).not.toContain('Where these scores came from');
+  });
+
+  it('renders a board with no stored provenance identically', () => {
     const text = textOf(boardHtml(board({ caveat: undefined })));
-    expect(text).toContain('This run stored no seeding provenance');
+    expect(text).not.toContain('provenance');
+    expect(text).toContain('Discrimination 0.74');
   });
 });
 
@@ -244,7 +256,7 @@ describe('the homepage board', () => {
     const html = homeHtml();
     const text = textOf(html);
     expect(text).toContain('Cuts on the record');
-    expect(text).toContain('nothing here is a rank');
+    expect(text).toContain('deepest so far');
     // The line is now a figure, a pairing, a quote and the product it came off,
     // rather than one run-on sentence. All four are still the real ones.
     expect(text).toContain('Cron with a graph is a feature, not a product.');
@@ -312,7 +324,7 @@ describe('the board leads with health, and says what health is not', () => {
     for (const html of [boardHtml(), homeHtml()]) {
       expect(textOf(html)).toContain(HEALTH_NOTE);
     }
-    expect(HEALTH_NOTE).toContain('not the sort order');
+    expect(HEALTH_NOTE).toContain('100 minus cuts');
   });
 
   it('publishes the board’s own median health, computed from its rows', () => {

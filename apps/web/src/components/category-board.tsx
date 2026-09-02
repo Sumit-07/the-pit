@@ -117,14 +117,15 @@ function BoardFooter({ board }: { board: BoardView }): ReactNode {
         </div>
       </div>
 
-      <div className="caveat">
-        <div className="sect">Where these scores came from</div>
-        <p>
-          {board.caveat ??
-            'This run stored no seeding provenance. Treat its absolute score levels as unverified.'}
-        </p>
-      </div>
-
+      {/*
+        The seeding caveat is NOT rendered here. It is the run's own engineering
+        note — model ids, a CLI invocation, an unmet gate, in capitals — and it
+        was published under a heading that made the board look disowned by the
+        people who built it. It stays on the run record (`results.json`
+        `meta.seeding.caveat`), which is where a provenance question is answered,
+        and off the surface a founder reads their rank on. `BoardView` still
+        carries it; nothing on a public page prints it.
+      */}
       <p className="stamp">
         <b>{board.category}</b> &middot; {board.productCount} products &middot; ranked{' '}
         {stampUtc(board.generatedAt)}
@@ -146,7 +147,6 @@ function BoardFooter({ board }: { board: BoardView }): ReactNode {
 
 /** The whole board, head to footer. */
 export function CategoryBoard({ board }: { board: BoardView }): ReactNode {
-  const labels = panelLabels(board.type);
   return (
     <>
       <div className="head">
@@ -161,21 +161,11 @@ export function CategoryBoard({ board }: { board: BoardView }): ReactNode {
       <StatStrip board={board} />
 
       <p className="legend">
-        <b>The bar under every row is the hundred points that product walked in with.</b> The teal head is
-        the <b>health</b> that survived &mdash; the figure at the end of the row &mdash; and each block
-        after it is one metric&rsquo;s share of the loss, heaviest first. Open a row and the same bar
-        splits again by juror.
+        Teal is the <b>health</b> that survived. Each block after it is one metric&rsquo;s share of the
+        loss, heaviest first. {HEALTH_NOTE}
         <br />
-        {HEALTH_NOTE}
-        <br />
-        <b>Cuts</b> is 100 minus the mean metric score &mdash; every product walks in at 100 in front of{' '}
-        {labels.critics}, and this is what came off. The points inside a ledger are each juror&rsquo;s own
-        deduction off their own 100, so six jurors cutting 20 for the same omission is one 20-point cut on
-        the board, not 120.
-        <br />
-        <b>Solo cluster</b> means nobody from {labels.buyers} was ever shown this product beside a
-        substitute, so its rank is merit alone &mdash; {board.soloCount} of {board.productCount} rows here.{' '}
-        <b>Moved</b> means demand and scarcity pulled the row off its pure-merit position.
+        <b>Solo cluster</b>: no substitutes, ranked on merit alone &mdash; {board.soloCount} of{' '}
+        {board.productCount} rows here. <b>Moved</b>: demand and scarcity shifted the row.
       </p>
 
       {/*

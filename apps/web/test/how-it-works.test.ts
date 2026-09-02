@@ -308,7 +308,7 @@ describe('the mechanics it explains are the mechanics the engine runs', () => {
   it('states the per-juror z-normalisation, which is the guardrail nobody would guess', async () => {
     const text = prose;
     // `01 §6.1`: per-juror z happens BEFORE combining.
-    expect(text).toContain('z-normalised per juror per metric');
+    expect(text).toMatch(/normalised against everything else they scored/i);
     expect(text).toMatch(/harsh juror cannot outvote a lenient one/i);
   });
 
@@ -338,7 +338,7 @@ describe('the mechanics it explains are the mechanics the engine runs', () => {
     const text = prose;
     expect(text).toContain('No model ever sees or produces a rank');
     expect(text).toMatch(/ordinary code over stored rows/i);
-    expect(text).toMatch(/reproducible/i);
+    expect(text).toMatch(/re-run the stored responses and you get the same board/i);
   });
 });
 
@@ -349,7 +349,7 @@ describe('the three things it says to protect the reader', () => {
     // existing z-score changes.
     expect(text).toContain('Your number changes when other products are placed');
     expect(text).toMatch(/normalised against/i);
-    expect(text).toMatch(/timestamp and a product count/i);
+    expect(text).toMatch(/every verdict carries a date and a count/i);
   });
 
   it('says five dollars buys an evaluation and never a position', async () => {
@@ -357,14 +357,14 @@ describe('the three things it says to protect the reader', () => {
     expect(text).toContain('Money buys an evaluation, never a position');
     // `brief` Part 5's terms line, verbatim, from the constant.
     expect(text).toContain(COPY.terms);
-    expect(text).toMatch(/no boost, no featured slot, no exception/i);
+    expect(text).toMatch(/no boosts, no featured slots/i);
   });
 
   it('says disliking the result is not a failure', async () => {
     const text = prose;
     // `brief §2.3` puts this on the purchase page. It belongs here too.
     expect(text).toContain('Disliking the result is not a failure');
-    expect(text).toMatch(/free retries/i);
+    expect(text).toMatch(/broken runs retry free/i);
   });
 
   it('says what the board is today, honestly', async () => {
@@ -373,7 +373,7 @@ describe('the three things it says to protect the reader', () => {
     // scored by the same panel a paid submission faces.
     expect(text).toMatch(/seeded/i);
     expect(text).toMatch(/anonymously/i);
-    expect(text).toContain('exactly the same panel a paying submission faces');
+    expect(text).toMatch(/scored by the same panel/i);
   });
 });
 

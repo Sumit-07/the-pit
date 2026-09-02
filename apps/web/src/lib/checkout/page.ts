@@ -42,10 +42,12 @@
  *
  * ## Nothing here was paid for
  *
- * Every path through this file happens before a Dodo session exists. The word
- * that has to survive from `DECISIONS.md` S12 — "you have not been charged" — is
- * printed on the refusal, because a visitor who has just been refused after
- * clicking a button marked $5 has every reason to check their card statement.
+ * Every path through this file happens before a Dodo session exists. The fact
+ * that has to survive from `DECISIONS.md` S12 — that nothing was charged — is on
+ * the refusal, because a visitor refused after clicking a button marked $5 has
+ * every reason to check their card statement. It is said ONCE, as the eyebrow
+ * over the heading ("Not charged"), and the body does not repeat it: a page that
+ * insists three times reads like a page with something to be sorry about.
  */
 
 import { escapeHtml } from '@the-pit/auth';
@@ -205,6 +207,8 @@ const NAME_ID = 'f-name';
 const DESC_ID = 'f-description';
 const ICON_ID = 'site-icon';
 const STATE_ID = 'site-state';
+/** The button that takes the money. It names the price, so it has to be findable. */
+const PAY_ID = 'pay';
 
 /**
  * How long a pause in typing counts as "they have stopped".
@@ -233,8 +237,15 @@ const PASTE_MS = 60;
  * gets reported as a bug in the fetcher.
  */
 const NOT_A_URL = 'That does not look like a web address — try linear.app, or paste the full https:// one.';
-const KEEP_TYPING = 'Waiting for the rest of the address — something like linear.app.';
-const LIMITED = 'That is a lot of lookups in a few minutes. Give it a moment, or type the two fields in yourself.';
+/**
+ * Nothing at all while a host is still half-typed.
+ *
+ * Empty is a real state here and not an omission: `say('')` hides the line, which
+ * is the correct answer to "they are mid-word". The sentence that used to sit
+ * here narrated the field back at the person filling it in.
+ */
+const KEEP_TYPING = '';
+const LIMITED = 'Too many lookups. Try again in a minute.';
 
 /**
  * The autofill: read the page the visitor named, and offer what it says.
@@ -260,11 +271,11 @@ const LIMITED = 'That is a lot of lookups in a few minutes. Give it a moment, or
  *    visitor who typed their own name into the field WHILE the lookup was in
  *    flight keeps it. An autofill that clobbers the sentence you just finished
  *    is the single most annoying way to ship this, and the check is cheap.
- * 3. **It never returns silently.** Every path out of `look()` leaves a visible
- *    state: reading, found, nothing found, not an address, or — for an emptied
- *    field — deliberately blank with the icon gone. That is the rule the old
- *    version broke, and breaking it is what made a working endpoint look like
- *    dead markup.
+ * 3. **It never returns undecided.** Every path out of `look()` leaves a definite
+ *    state: reading, found, nothing found, not an address, or — for an emptied or
+ *    half-typed field — deliberately blank with the icon gone. Blank is a state
+ *    and not a fall-through; what the old version did was return before deciding,
+ *    which is what made a working endpoint look like dead markup.
  * 4. **It never blocks the submission.** Nothing here touches `submit`, nothing
  *    disables the button, and every failure is caught. The worst case is a form
  *    with an empty description that the visitor fills in by hand, which is
@@ -375,7 +386,7 @@ const AUTOFILL_SCRIPT = `(function(){
       if(fill(nameField,data.title))filled.push('name');
       if(fill(descField,data.description))filled.push('description');
       say(filled.length===0
-        ? 'Read '+where+'. Your own words were already there, so nothing was changed.'
+        ? 'Read '+where+'.'
         : 'Read '+where+' and filled in the '+filled.join(' and ')+'. Edit anything it got wrong.');
     }).catch(function(){
       if(mine!==seq)return;
@@ -436,6 +447,39 @@ const PANEL_SCRIPT = `(function(){
   show();
 })();`;
 
+/**
+ * Keep the price on the button equal to the price of the tier that is checked.
+ *
+ * The button used to say "Take my $5 →" unconditionally while the $15 tier sat
+ * three inches above it, selectable. That is a button that lies to a third of
+ * the people who read it, and it lies about the one thing on the page that is a
+ * number of dollars.
+ *
+ * Server-rendered first — `payLabel(selectedTier(view))` puts the right price
+ * there for the tier the form arrives with, including a `?tier=triple` link and
+ * a re-render after a refusal — so with scripting off the button is correct on
+ * arrival and this only keeps it correct as the radios move. The price itself
+ * comes off the radio's own `data-pay`, so there is one price table and it is
+ * `PRICE_TIERS`.
+ */
+const PAY_SCRIPT = `(function(){
+  var form=document.getElementById(${JSON.stringify(FORM_ID)});
+  var pay=document.getElementById(${JSON.stringify(PAY_ID)});
+  if(!form||!pay)return;
+  var radios=form.querySelectorAll('input[name="tier"]');
+  if(!radios.length)return;
+  function show(){
+    for(var i=0;i<radios.length;i++){
+      if(!radios[i].checked)continue;
+      var amount=radios[i].getAttribute('data-pay');
+      if(amount)pay.textContent='Take my '+amount+' \\u2192';
+      return;
+    }
+  }
+  for(var i=0;i<radios.length;i++)radios[i].addEventListener('change',show);
+  show();
+})();`;
+
 function document_(title: string, body: string, wide = false): string {
   return [
     '<!doctype html>',
@@ -457,6 +501,7 @@ function document_(title: string, body: string, wide = false): string {
     // At the end of the body, so they bind to markup that already exists and so
     // the form is on screen and usable before a byte of either has run.
     `<script>${AUTOFILL_SCRIPT}</script>`,
+    `<script>${PAY_SCRIPT}</script>`,
     // Only where there is something to switch between. `wide` is set exactly when
     // the panel column rendered, so the refusal page and a deployment with no
     // reference files ship no dead script at all.
@@ -550,6 +595,29 @@ function categoryOptions(view: SubmitPageView): string {
   return options.join('');
 }
 
+/**
+ * `500` -> `"$5"`, `1500` -> `"$15"`.
+ *
+ * Not `formatUsd`, deliberately. That one is the accounting spelling and always
+ * carries its cents; this is the price said out loud, on a button, in a sentence
+ * a person reads — and `brief` Part 5 says "$5 to enter", not "$5.00 to enter".
+ * A price with a fractional part on a whole-dollar tier reads as a form field.
+ */
+function price(amountCents: number): string {
+  const exact = formatUsd(amountCents);
+  return exact.endsWith('.00') ? exact.slice(0, -3) : exact;
+}
+
+/** The label on the pay button, for whichever tier is selected. */
+function payLabel(tier: PriceTier | undefined): string {
+  return tier === undefined ? 'Take it →' : `Take my ${price(tier.amountCents)} →`;
+}
+
+/** The tier the form is rendered with, which is the one the button must name. */
+function selectedTier(view: SubmitPageView): PriceTier | undefined {
+  return view.tiers.find((tier) => tier.id === view.values.tier) ?? view.tiers[0];
+}
+
 function tierChoices(view: SubmitPageView): string {
   return view.tiers
     .map((tier) => {
@@ -560,7 +628,10 @@ function tierChoices(view: SubmitPageView): string {
           : `${tier.attempts} runs, plus the off-board fit report.`;
       return [
         '<label class="tier">',
-        `<b><input type="radio" name="tier" value="${escapeHtml(tier.id)}"${checked}>`,
+        // `data-pay` carries this tier's price to the button. The alternative was
+        // a price table inlined into the script, which is the same two numbers
+        // written down twice — and the copy that drifts is always the second one.
+        `<b><input type="radio" name="tier" value="${escapeHtml(tier.id)}" data-pay="${escapeHtml(price(tier.amountCents))}"${checked}>`,
         `${escapeHtml(tier.label)}</b>`,
         `<span>${escapeHtml(detail)} ${escapeHtml(formatUsd(tier.amountCents))}</span>`,
         '</label>',
@@ -581,15 +652,14 @@ function tierChoices(view: SubmitPageView): string {
  * also the same control the tiers use, which is the honest comparison: this is a
  * purchase decision of that weight.
  *
- * ## The copy has to earn the choice
+ * ## The copy states the terms and stops
  *
  * Someone reading this is deciding, before they know their score, something they
- * cannot change. So the block below says four things plainly and in this order:
- * what stays public either way (nearly everything), that it is frozen and why,
- * what they will look like, and the one door back. The tone is deliberately not
- * apologetic — a founder buying an evaluation without a public byline is not
- * ashamed of anything, and copy that implied otherwise would be selling the
- * option it is describing.
+ * cannot change. The block below says the two things that bind — it is frozen
+ * after scoring, and GitHub verification names you on future boards only — and
+ * argues for neither. The card above it already says what is withheld. A founder
+ * buying an evaluation without a public byline is not ashamed of anything, and
+ * copy that defended the option would be selling it.
  *
  * The example robot is generated, not drawn: the same `anonSeed`/`robotSvg`/
  * `pseudonymFor` that the board and the verdict page use, so the specimen cannot
@@ -623,25 +693,13 @@ function bylineTerms(): string {
     // Labelled, because it is the subject of the sentence beside it rather than
     // decoration: a reader who cannot see it still needs to know what it is.
     robotSvg(EXAMPLE_SEED, { size: 40, label: `Example robot: ${EXAMPLE_DESIGNATION}` }),
-    `<span class="botcap"><b>${escapeHtml(EXAMPLE_DESIGNATION)}</b>An example. Yours is drawn from your ` +
-      'own listing and never changes — same robot, same designation, every board you appear on.</span>',
+    `<span class="botcap"><b>${escapeHtml(EXAMPLE_DESIGNATION)}</b>An example. Yours stays the same ` +
+      'everywhere.</span>',
     '</div>',
 
     '<div class="frozen">',
-    '<p><b>Everything a reader uses stays public either way.</b> The score, every cut, the reason for ' +
-      'each one and the juror who took it, your cluster, and the whole demand picture. Anonymity ' +
-      'withholds two things and only two: your name and your URL. A verdict nobody can check is the ' +
-      'thing this place exists to replace, so we do not withhold the verdict.</p>',
-    '<p><b>You are choosing now because it cannot be changed later.</b> Nobody has scored you yet, and ' +
-      'once the choice is written the database will not move it. That is on purpose: if a founder could ' +
-      'go anonymous after reading a bad verdict, the named half of every board would be the flattering ' +
-      'half and a name would stop meaning anything. Choosing before you know the answer costs the board ' +
-      'nothing, which is why you are allowed to.</p>',
-    '<p><b>There is one way back, and it is yours to take.</b> Prove the listing is yours through GitHub ' +
-      'and you can choose to be named. That is your consent about your own product, not a reaction to a ' +
-      'number — and it names you on future boards only. The verdict you were delivered keeps the ' +
-      'designation it was delivered under.</p>',
-    '<p>Picking the robot is not hiding. It is buying the evaluation without the public byline.</p>',
+    '<p>This can&rsquo;t be changed after scoring.</p>',
+    '<p>Verify with GitHub later to be named on future boards. Past verdicts keep the robot.</p>',
     '</div>',
   ].join('');
 }
@@ -722,9 +780,8 @@ function panelColumn(view: SubmitPageView): string {
   return [
     '<aside class="panelcol" aria-label="The panel you will face">',
     '<div class="sh">The panel you&rsquo;ll face</div>',
-    '<p class="pnote">This is the jury installed for the category you picked, read off the same files ' +
-      'that will score you. Everyone walks in at <b>100</b>; every mandate below takes points off it, ' +
-      'with a reason, in public. Change the category and this column changes with it.</p>',
+    '<p class="pnote">Everyone walks in at <b>100</b>; every mandate below takes points off it, ' +
+      'with a reason, in public.</p>',
     groups.join(''),
     '</aside>',
   ].join('');
@@ -745,12 +802,10 @@ export function renderSubmitPage(view: SubmitPageView): string {
     '<header class="page">',
     '<div class="sh">Throw it in</div>',
     '<h1>Five dollars. One honest verdict.</h1>',
-    '<p class="lede">Paste the URL, name it, say what it does. Pay. That is the whole form — ' +
-      '<b>no account, no login, no waiting on an email</b>. The panel does not know who paid and could not ' +
-      'rank you higher if it did.</p>',
+    '<p class="lede">Paste the URL, name it, say what it does. Pay. ' +
+      '<b>No account, no login, no email.</b></p>',
     view.signedIn
-      ? '<p class="lede"><span class="linked">Signed in</span> This pitch will be attached to your account, ' +
-        'and if the product is already listed under someone else we will tell you now rather than after you pay.</p>'
+      ? '<p class="lede"><span class="linked">Signed in</span> This pitch attaches to your account.</p>'
       : '',
     view.notice === undefined
       ? ''
@@ -775,9 +830,7 @@ export function renderSubmitPage(view: SubmitPageView): string {
     // it as one; both ends now accept either, and the hint says so.
     `<input type="url" name="url" id="${URL_ID}" required inputmode="url" autocomplete="url" placeholder="linear.app" value="${escapeHtml(view.values.url)}">`,
     '</span>',
-    '<span class="hint">We reduce this to an identity — no protocol, no www., no tracking parameters. ' +
-      'The same product under two spellings is the same product, so type it however you say it out loud: ' +
-      '<b>linear.app</b> is enough. We read the page while you type.</span>',
+    '<span class="hint">Type it however you say it: <b>linear.app</b> is enough.</span>',
     // `role="status"` + `aria-live="polite"`: the autofill announces itself to a
     // screen reader without stealing focus from the field being left.
     `<span class="look" id="${STATE_ID}" role="status" aria-live="polite" hidden></span></label>`,
@@ -788,7 +841,7 @@ export function renderSubmitPage(view: SubmitPageView): string {
     '<label><span class="sh">What the site says</span>',
     `<textarea name="description" id="${DESC_ID}" required maxlength="${view.descriptionLimit}">${escapeHtml(view.values.description)}</textarea>`,
     `<span class="hint">Up to ${view.descriptionLimit} characters, pre-filled from your own page when we can read it. ` +
-      'This is the text the panel reads, so correct it if your site undersells you. Everyone on the board gets the same room.</span></label>',
+      'This is the text the panel reads, so correct it if your site undersells you.</span></label>',
 
     '<label><span class="sh">Your pitch</span>',
     `<textarea name="pitch" maxlength="${PITCH_LIMIT}" placeholder="What does it actually do, and for whom?">${escapeHtml(view.values.pitch)}</textarea>`,
@@ -797,8 +850,7 @@ export function renderSubmitPage(view: SubmitPageView): string {
 
     '<label><span class="sh">Category</span>',
     `<select name="category" required>${categoryOptions(view)}</select>`,
-    '<span class="hint">Pick the one your buyers would search. Rank is computed inside a category, so a ' +
-      'wrong one is not a shortcut — we check it before you pay and refuse rather than charge you.</span></label>',
+    '<span class="hint">Pick the one your buyers would search.</span></label>',
 
     // Above the tier, and that order is the argument. The tier is how many runs
     // you are buying and can be bought again tomorrow; this is the one thing on
@@ -812,11 +864,11 @@ export function renderSubmitPage(view: SubmitPageView): string {
     '<div class="sh" style="margin-top:22px">What you are buying</div>',
     `<div class="tiers">${tierChoices(view)}</div>`,
 
-    '<button class="act" type="submit">Take my $5 →</button>',
+    `<button class="act" type="submit" id="${PAY_ID}">${escapeHtml(payLabel(selectedTier(view)))}</button>`,
     '</form>',
     '</section>',
 
-    '<section><h2>The terms, in full</h2>',
+    '<section><h2>Terms</h2>',
     `<ul class="terms">${PURCHASE_TERMS.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`,
     '</section>',
     '</div>',
@@ -878,9 +930,8 @@ export function renderRejectionPage(view: RejectionView): string {
       ? ''
       : `<span class="when">Next pitch: ${escapeHtml(stamp(view.nextRebuild.at))} — in ${escapeHtml(view.nextRebuild.humanized)}.</span>`,
     rejection.code === 'category_mismatch'
-      ? `<p>We would have filed it under <b>${escapeHtml(rejection.suggested)}</b>. You pick — we only refuse the obvious misses.</p>`
+      ? `<p>We&rsquo;d have filed it under <b>${escapeHtml(rejection.suggested)}</b>.</p>`
       : '',
-    '<p>Nothing was charged. No card was touched and no attempt was spent.</p>',
     '</div></section>',
 
     '<section><h2>Edit and try again</h2>',
@@ -924,8 +975,7 @@ function renderFormOnly(view: SubmitPageView): string {
     // would do it on the page they reached by being told they were not charged.
     '<div class="sh" style="margin-top:18px">How you appear on the board</div>',
     bylineChoice(view),
-    '<span class="hint">Chosen once, before anything is scored, and frozen there. ' +
-      'A robot withholds your name and your address; every cut, reason, juror and cluster stays public.</span>',
+    '<span class="hint">A robot withholds your name and URL. Nothing else.</span>',
     `<div class="tiers">${tierChoices(view)}</div>`,
     '<button class="act" type="submit">Try again →</button>',
     '</form>',

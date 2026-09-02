@@ -426,7 +426,7 @@ describe('the cycle lock fires BEFORE a checkout exists', () => {
     expect(page).toContain('2 Jun');
     // `brief §2.4` explicitly does NOT want the cap expressed as a number.
     expect(page).not.toContain('limit reached');
-    expect(page).toContain('Nothing was charged');
+    expect(page).toContain('Not charged');
   });
 
   it('reports the same countdown to an API caller', async () => {
@@ -587,7 +587,7 @@ describe('the category check, DECISIONS.md S12', () => {
     // The highest-leverage free lever in the system, refused for free.
     expectNothingBought();
     expect(page).toContain('developer-tools');
-    expect(page).toContain('Nothing was charged');
+    expect(page).toContain('Not charged');
   });
 
   it('blocks with the REAL classifier, over the two boards this branch actually has', async () => {
@@ -619,7 +619,7 @@ describe('the category check, DECISIONS.md S12', () => {
     expect(response.status).toBe(422);
     expectNothingBought();
     expect(page).toContain('health-fitness-wellness');
-    expect(page).toContain('Nothing was charged');
+    expect(page).toContain('Not charged');
   });
 
   it('lets a real developer tool through the real classifier', async () => {

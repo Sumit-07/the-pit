@@ -53,12 +53,9 @@
 /** The cap. Mirrored by `submissions_pitch_limit` in `packages/db`. */
 export const PITCH_LIMIT = 800;
 
-/** What the submitter is told when they go over it. Names the number, both ways. */
+/** What the submitter is told when they go over it. Both numbers, no lecture. */
 export function pitchTooLongMessage(length: number): string {
-  return (
-    `Your pitch is ${length} characters and the limit is ${PITCH_LIMIT} — about 130 words. ` +
-    'Trim it and try again; nothing was charged.'
-  );
+  return `Your pitch is ${length} characters. The limit is ${PITCH_LIMIT}.`;
 }
 
 export type PitchCheck =

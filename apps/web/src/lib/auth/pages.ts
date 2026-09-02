@@ -93,8 +93,7 @@ export function signInPage(): string {
     'Sign in',
     [
       '<h1>Sign in to The Pit</h1>',
-      '<p>We will send a link to the address on your receipt. ',
-      'There is no password — there never was one.</p>',
+      '<p>We will send a link to the address on your receipt.</p>',
       '<form method="post" action="/auth/request">',
       `<label for="email">Email</label>`,
       `<input id="email" name="email" type="email" autocomplete="email" required>`,
@@ -134,8 +133,7 @@ export function verifyButtonPage(token: string): string {
     'Confirm sign-in',
     [
       '<h1>One more press</h1>',
-      '<p>Mail scanners open every link in a message. ',
-      'This one does nothing until you press the button, so yours is still waiting for you.</p>',
+      '<p>Press to finish signing in.</p>',
       '<form method="post" action="/auth/verify">',
       `<input type="hidden" name="token" value="${escapeHtml(token)}">`,
       `<button type="submit" class="${BUTTON_CLASS}">Sign me in</button>`,
@@ -157,8 +155,7 @@ export function verifyRejectedPage(): string {
     'That link has expired',
     [
       '<h1>That link no longer works</h1>',
-      '<p>Sign-in links last 15 minutes and work once. ',
-      'Ask for a fresh one and it will be in your inbox in a moment.</p>',
+      '<p>Ask for a fresh one.</p>',
       `<p><a href="/auth/sign-in">Send me a new link</a></p>`,
     ].join(''),
   );
@@ -201,13 +198,9 @@ export function capabilityHandoffPage(input: { url: string; email: string }): st
       '<h1>Payment received</h1>',
       '<p>Your run starts the moment the payment settles.</p>',
       '<h2>Bookmark this — it is your account</h2>',
-      '<p>No password, no expiry. It is how you reach your ',
-      'remaining attempts, your history, and a re-pitch.</p>',
+      '<p>No password, no expiry. Anyone who has it can reach your account.</p>',
       `<p class="urlline"><a href="${safeUrl}">${safeUrl}</a></p>`,
-      `<p class="fine">We have also emailed it to ${escapeHtml(input.email)} as a backup. `,
-      'Treat the link like a key: anyone who has it can reach your account, and you can replace it from your account page at any time.</p>',
-      '<p class="fine">Your verdict page will be public and shareable on its own. ',
-      'You do not need this link to show anyone your results.</p>',
+      `<p class="fine">Also emailed to ${escapeHtml(input.email)}.</p>`,
     ].join(''),
   );
 }
@@ -227,8 +220,7 @@ export function capabilityUnavailablePage(): string {
     [
       '<h1>Payment received</h1>',
       '<p>Your run starts the moment the payment settles.</p>',
-      '<p>We cannot show your account link on this page any more — it is only ',
-      'shown for a short while after payment, so that a link left in a browser history does not become a way in.</p>',
+      '<p>Your account link isn’t shown here any more.</p>',
       '<p>It was emailed to the address on your receipt. If that has not arrived, ',
       'ask for a sign-in link instead.</p>',
       `<p><a href="/auth/sign-in">Email me a sign-in link</a></p>`,
@@ -249,8 +241,7 @@ export function capabilityRejectedPage(): string {
     'That link no longer works',
     [
       '<h1>That link no longer works</h1>',
-      '<p>Account links stop working when they are replaced. ',
-      'If you replaced yours, use the new one; otherwise sign in with the address on your receipt.</p>',
+      '<p>Account links stop working when they are replaced. Use your new one, or sign in by email.</p>',
       `<p><a href="/auth/sign-in">Email me a sign-in link</a></p>`,
     ].join(''),
   );
@@ -277,8 +268,7 @@ export function capabilityRotatedPage(url: string): string {
       '<p>The old one stopped working the moment this page loaded. ',
       'Replace your bookmark.</p>',
       `<p class="urlline"><a href="${safeUrl}">${safeUrl}</a></p>`,
-      '<p class="fine">Anyone still signed in on another device stays signed in until ',
-      'their session expires. Replacing the link stops new sign-ins through the old one.</p>',
+      '<p class="fine">Devices already signed in stay signed in.</p>',
     ].join(''),
   );
 }
@@ -324,9 +314,7 @@ export function oauthNoPurchasePage(input: {
       '<h1>No purchase found</h1>',
       checked,
       ignored,
-      '<p>There is no account here yet — accounts are made by a purchase, not by signing in. ',
-      'If you have paid, the receipt email has your account link in it; open that and connect GitHub afterwards, ',
-      'and this will work next time.</p>',
+      '<p>No account here yet. If you’ve paid, open the account link in your receipt and connect GitHub from there.</p>',
       `<p><a href="/auth/sign-in">Email me a sign-in link instead</a></p>`,
     ].join(''),
   );
@@ -338,8 +326,7 @@ export function oauthRejectedPage(): string {
     'That sign-in did not complete',
     [
       '<h1>That sign-in did not complete</h1>',
-      '<p>Either it took too long, or GitHub did not confirm it. ',
-      'Nothing has changed on your account.</p>',
+      '<p>Nothing changed on your account.</p>',
       `<p><a href="/auth/github/start">Try GitHub again</a></p>`,
       `<p><a href="/auth/sign-in">Email me a sign-in link instead</a></p>`,
     ].join(''),
@@ -363,7 +350,7 @@ export function oauthNotConfiguredPage(): string {
     'GitHub sign-in is not available',
     [
       '<h1>GitHub sign-in is not available</h1>',
-      '<p>It is not switched on here. The other two ways in still work.</p>',
+      '<p>Use email instead.</p>',
       `<p><a href="/auth/sign-in">Email me a sign-in link</a></p>`,
     ].join(''),
   );

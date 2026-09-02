@@ -159,7 +159,7 @@ export function HomeBoard({ boards, ticker, deepest }: HomeBoardProps): ReactNod
         </div>
         <div className="bfoot">
           <span>
-            {board.soloCount} of {board.productCount} faced no substitute and rank on merit alone
+            {board.soloCount} of {board.productCount} ranked on merit alone
           </span>
           {/* A literal ↗, not `&nearr;`: the JSX transform does not carry that entity. */}
           <a href={`/boards/${board.slug}`}>full board &middot; every cut ↗</a>
@@ -185,7 +185,7 @@ export function HomeBoard({ boards, ticker, deepest }: HomeBoardProps): ReactNod
       <div className="tickwrap">
         <div className="railhead">
           <span className="sh">Cuts on the record</span>
-          <span className="sh">nothing here is a rank &middot; deepest so far &minus;{deepest}</span>
+          <span className="sh">deepest so far &minus;{deepest}</span>
         </div>
         <ul className="tick">
           {Array.from({ length: Math.min(TICK_ROWS, ticker.length) }, (_, offset) => {

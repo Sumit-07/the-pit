@@ -209,9 +209,7 @@ describe('the backup email', () => {
     // worse with spam filters, and the domain's reputation is what stands
     // between this and a junk folder.
     expect(message.text.length).toBeGreaterThan(0);
-    // The copy says the customer has already seen this, so a message that never
-    // arrives has cost them nothing.
-    expect(message.text).toContain('the same link the page showed you after payment'.slice(0, 20));
+    expect(message.text).toContain('Bookmark this.');
   });
 
   it('mentions rotation, which is the only revocation the URL has', () => {
@@ -221,21 +219,8 @@ describe('the backup email', () => {
       url,
       accountId: 'acct_1',
     });
-    expect(message.text.toLowerCase()).toContain('rotate');
-    expect(message.html.toLowerCase()).toContain('rotate');
-  });
-
-  it('says the verdict page is public and separate', () => {
-    // `brief` Part 6: verdict URLs are public and must never be gated. A
-    // customer who thinks this link is needed to share their verdict will not
-    // share it.
-    const message = renderCapabilityEmail({
-      email: 'payer@example.com',
-      from: 'The Pit <no-reply@thepit.show>',
-      url,
-      accountId: 'acct_1',
-    });
-    expect(message.text).toContain('verdict page is public');
+    expect(message.text).toContain('Replace it from your account page.');
+    expect(message.html).toContain('Replace it from your account page.');
   });
 
   it('never puts the slug in the idempotency key', () => {

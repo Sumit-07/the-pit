@@ -119,7 +119,7 @@ function RowTags({ row }: { row: RowView }): ReactNode {
       {row.anonymous ? (
         <span
           className="tag anon"
-          title="Published without its name or URL, by a choice made at submission and frozen before scoring. Every cut, reason, score and cluster below is unchanged."
+          title="Name and URL withheld by choice at submission."
         >
           anonymous
         </span>
@@ -135,7 +135,7 @@ function RowTags({ row }: { row: RowView }): ReactNode {
         </span>
       ) : null}
       {row.flagged.length > 0 ? (
-        <span className="tag fl" title="A juror reason matched the injection alarm. Logged, never dropped.">
+        <span className="tag fl" title="Flagged for review.">
           flagged
         </span>
       ) : null}
@@ -332,7 +332,7 @@ export function RowNumbers({ row, set }: { row: RowView; set: NumberSet }): Reac
     <>
       <span
         className="cell health"
-        title="the mean metric score — what this card walked out with, of the 100 it walked in with"
+        title="100 minus cuts"
       >
         {/*
           Self-labelling, like every number in `.nums`. The board head's column
@@ -350,7 +350,7 @@ export function RowNumbers({ row, set }: { row: RowView; set: NumberSet }): Reac
         below 760px, where a phone gets the reason, the meter and the cuts.
       */}
       <span className="nums">
-        <span className="cell" title="100 minus the mean metric score — what came off this card">
+        <span className="cell" title="what came off this card">
           <span className="k">cuts</span>
           <span className="v cut">&minus;{Math.round(row.cuts)}</span>
         </span>
@@ -470,7 +470,7 @@ function MetricLedger({ metric }: { metric: MetricView }): ReactNode {
       ))}
       {metric.substituted.length > 0 ? (
         <div className="subst">
-          no answer from {metric.substituted.join(', ')} &mdash; substituted 50, and counted that way in the rank
+          no answer from {metric.substituted.join(', ')} &mdash; scored 50
         </div>
       ) : null}
     </div>
@@ -496,9 +496,7 @@ export function RowLedger({ row }: { row: RowView }): ReactNode {
         the board's column now shows.
       */}
       <p className="took">
-        <b>{row.name}</b> took {Math.round(row.cuts)} in cuts across {row.metrics.length}{' '}
-        {row.metrics.length === 1 ? 'metric' : 'metrics'}, from {row.deductionCount}{' '}
-        {row.deductionCount === 1 ? 'reason' : 'reasons'}, and walked out with{' '}
+        <b>{row.name}</b> took {Math.round(row.cuts)} in cuts and walked out with{' '}
         <b className="held">{Math.round(row.health)}</b> health.{' '}
         {/*
          * An anonymous listing withholds its address, and says so rather than
@@ -556,7 +554,7 @@ export function RowLedger({ row }: { row: RowView }): ReactNode {
         ) : (
           <>
             {row.demandDetail.picks.length === 0 ? (
-              <p>The panel convened but named no persona on this product.</p>
+              <p>Nobody named it.</p>
             ) : null}
             {row.demandDetail.picks.map((pick, index) => (
               <div className="pick" key={`${pick.persona}-${index}`}>
@@ -580,7 +578,7 @@ export function RowLedger({ row }: { row: RowView }): ReactNode {
 
       {row.flagged.length > 0 ? (
         <div className="blk">
-          <div className="sect">Injection alarm &middot; logged, not dropped</div>
+          <div className="sect">Flagged</div>
           {row.flagged.map((flag, index) => (
             <div className="flagnote" key={index}>
               {flag.source} matched &ldquo;{flag.matched}&rdquo; in: {flag.reason}

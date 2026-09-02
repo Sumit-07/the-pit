@@ -11,8 +11,8 @@
  * actual verification. Corporate mail scanners (Outlook Safe Links) follow GET
  * links and would burn single-use tokens."
  *
- * That is the reason the copy says "opens a page with a button" rather than
- * "signs you in". It also means the token in this URL is safe to be fetched by a
+ * That is the reason the copy says "press the button" rather than "signs you
+ * in". It also means the token in this URL is safe to be fetched by a
  * scanner, a link preview, an antivirus proxy, or a mail client prefetching for
  * offline reading — all of which will follow it, none of which will POST.
  *
@@ -74,22 +74,22 @@ export function renderMagicLinkEmail(input: MagicLinkMessageInput): OutboundEmai
   const text = [
     'Sign in to The Pit',
     '',
-    'Open this link and press the button on the page:',
+    'Press the button.',
     link,
     '',
     `The link stops working in ${TTL_MINUTES} minutes and works once.`,
     '',
-    'If you did not ask for this, nothing has happened to your account and you can ignore this message.',
+    'Didn’t ask for this? Ignore it.',
   ].join('\n');
 
   const html = [
     '<!doctype html>',
     `<html lang="en"><body style="${MAIL_BODY_STYLE}">`,
     '<h1 style="font-size:20px;margin:0 0 16px">Sign in to The Pit</h1>',
-    '<p style="margin:0 0 20px">Open this link and press the button on the page.</p>',
+    '<p style="margin:0 0 20px">Press the button.</p>',
     `<p style="margin:0 0 24px"><a href="${safeLink}" style="${MAIL_BUTTON_STYLE}">Open the sign-in page</a></p>`,
     `<p style="margin:0 0 8px;${MAIL_SMALL_STYLE}">The link stops working in ${TTL_MINUTES} minutes and works once.</p>`,
-    `<p style="margin:0;${MAIL_SMALL_STYLE}">If you did not ask for this, nothing has happened to your account and you can ignore this message.</p>`,
+    `<p style="margin:0;${MAIL_SMALL_STYLE}">Didn’t ask for this? Ignore it.</p>`,
     '</body></html>',
   ].join('');
 

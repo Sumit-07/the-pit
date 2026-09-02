@@ -78,7 +78,7 @@ describe('the homepage says them', () => {
     expect(text).not.toMatch(/\bwill rank\b/i);
     // The strip carries cuts already on the record; it does not announce arrivals
     // from a feed that does not exist yet.
-    expect(text).toContain('nothing here is a rank');
+    expect(text).toContain('deepest so far');
   });
 
   it('points the CTA at /submit, live, with no form embedded on this surface', async () => {
@@ -90,7 +90,7 @@ describe('the homepage says them', () => {
     expect(html).not.toContain('<input');
     expect(html).not.toContain('disabled=""');
     expect(html).toMatch(/<a class="cta" href="\/submit"[^>]*>/);
-    expect(textOf(html)).toContain('the door’s open');
+    expect(textOf(html)).toContain('$5. Five minutes. Public forever.');
   });
 
   it('shows the board itself, above the three panels', async () => {

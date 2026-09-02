@@ -15,6 +15,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { HEALTH_NOTE } from '@/lib/boards/copy';
 import { parseVerdict } from '@/lib/verdict/model';
 import { BASE, TOKENS } from '@/lib/theme';
 import { renderVerdictNotFound, renderVerdictPage, stampedRank, stampTime } from '@/lib/verdict/page';
@@ -361,11 +362,11 @@ describe('the two hues, on the one page that draws both halves', () => {
   it('carries the health note wherever it shows the health figure', async () => {
     const html = await renderSeeded('developer-tools', 'Sequo');
 
-    // `lib/boards/copy.ts`: the canvas ranks BY health and this board does not.
-    // A health figure without this sentence publishes a sort rule the engine
-    // does not run — so the note travels with the number, on every surface.
-    expect(html).toContain('It is not the sort order');
-    expect(html).toContain('ranked by core, which blends merit with demand');
+    // The note travels with the number, on every surface that shows it. Asserted
+    // through the constant rather than as a literal: `HEALTH_NOTE` is shared with
+    // both board surfaces, and a copy edit there should not have to be made twice
+    // here. What this guards is that the note is PRESENT, not how it is worded.
+    expect(html).toContain(HEALTH_NOTE);
   });
 });
 

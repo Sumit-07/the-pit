@@ -582,8 +582,10 @@ export async function handleCheckoutCreate(request: Request, deps: CheckoutHandl
           renderRejectionPage({
             rejection: {
               code: 'invalid_url',
-              message:
-                'We could not open a checkout just now. Nothing was charged — try again in a moment.',
+              // Said once. The eyebrow over this heading already reads "Not
+              // charged", and a body that repeated it would be the third place
+              // on one screen that insists nobody took the money.
+              message: 'We could not open a checkout just now. Try again in a moment.',
             },
             nextRebuild: null,
             form,

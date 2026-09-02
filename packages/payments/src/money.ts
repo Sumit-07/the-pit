@@ -90,9 +90,11 @@ export const PRICE_TIERS: readonly PriceTier[] = [TIER_SINGLE, TIER_TRIPLE];
  */
 export const PURCHASE_TERMS: readonly string[] = [
   'An attempt is spent only when a verdict is delivered to you.',
-  'If a run fails — timeout, rate limit, crashed worker — the retry is free and costs no attempt.',
-  'A run that finished but came back incomplete is a failure too. We retry it rather than show you a partial verdict.',
-  'Disliking the result is not a failure. The panel is the same for everyone and the score stands.',
+  // The money rule is the second half of this line, not the first: a free retry
+  // that quietly burned the attempt would be free of charge and not free. An
+  // incomplete verdict is a failure by the same rule and needs no line of its own.
+  'Failed runs retry free and cost no attempt.',
+  'Disliking the result is not a failure.',
   'Attempts never expire.',
   'A new attempt replaces your previous listing. We never keep whichever score came out better.',
 ];

@@ -136,19 +136,13 @@ export default async function Home(): Promise<ReactNode> {
           <span className="terms" id="terms">
             {COPY.terms}
             <br />
-            <i>the door&rsquo;s open</i>
+            <i>$5. Five minutes. Public forever.</i>
           </span>
         </div>
       </div>
 
       {boards.length === 0 ? (
-        <div className="empty">
-          No board has been published yet.
-          <br />
-          <br />
-          A board is written only for a DELIVERED run. Seed a category, rank it, and this page reads the
-          snapshot on its next rebuild &mdash; it computes nothing at read time and never will.
-        </div>
+        <div className="empty">No boards yet.</div>
       ) : (
         <>
           {/*
@@ -245,18 +239,13 @@ export default async function Home(): Promise<ReactNode> {
           </div>
         </div>
         {/*
-          The three panels say WHO judges and how much each one moves. They do not
-          say what a deduction is, why the six are meant to disagree, why a harsh
-          juror cannot outvote a lenient one, or why most products never face a
-          buyer at all — and a reader deciding whether to spend five dollars is
-          entitled to all of that before the CTA rather than after the verdict. It
-          is one link because `brief` Part 6 keeps the board on most of this page;
-          the page it points at is where the mechanism is written out.
+          The three panels say WHO judges and how much each one moves. The
+          mechanism behind them is written out on `/how-it-works`, and this is the
+          link to it — named and not explained. The page does not argue for the
+          method on the way past; the method has its own page.
         */}
         <p className="lede">
-          That is who judges. <a href="/how-it-works">How this works</a> is the mechanism behind them:
-          where the number comes from, what it cannot promise, and why no model on this site is ever asked
-          for a rank.
+          That is who judges. <a href="/how-it-works">How this works.</a>
         </p>
       </section>
 

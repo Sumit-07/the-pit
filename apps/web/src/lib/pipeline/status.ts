@@ -32,6 +32,7 @@
 
 import type { PhaseName, PhaseVersions } from '@the-pit/engine';
 
+import { customerMessage } from './errors';
 import { readStoredPhase, type StoredPhase } from './resume';
 import type { SnapshotSink } from './snapshot';
 import type { PipelineStore } from './store';
@@ -121,17 +122,17 @@ export async function readRunStatus(input: StatusInput): Promise<RunStatus> {
   const steps: StepStatus[] = PIPELINE_STEPS.map((step) => {
     if (step === 'rank') {
       return ranking === undefined || !currentRanking
-        ? { step, state: 'pending', detail: 'waiting for every phase to land' }
+        ? { step, state: 'pending' }
         : {
             step,
             state: 'done',
             calls: 0,
-            detail: `${ranking.ranking.length} product(s) ranked offline from the stored votes`,
+            detail: `${ranking.ranking.length} ${ranking.ranking.length === 1 ? 'product' : 'products'} ranked`,
           };
     }
     if (step === 'deliver') {
       return snapshot === undefined || !currentSnapshot
-        ? { step, state: 'pending', detail: 'the board is republished once the run is whole' }
+        ? { step, state: 'pending' }
         : { step, state: 'done', calls: 0, detail: `board republished ${snapshot.generated_at}` };
     }
     return describePhase(step, phases.get(step) ?? { state: 'absent' });
@@ -154,7 +155,7 @@ export async function readRunStatus(input: StatusInput): Promise<RunStatus> {
       : {
           failure: {
             step: failed.step,
-            message: failed.detail ?? 'the phase failed with no stated cause',
+            message: failed.detail ?? 'That step failed.',
             retryable: failed.retryable === true,
           },
         }),
@@ -167,21 +168,20 @@ function describePhase(step: PipelineStep, stored: StoredPhase<unknown>): StepSt
     case 'absent':
       return { step, state: 'pending' };
     case 'unstamped':
-      return {
-        step,
-        state: 'pending',
-        detail: 'a stored result carries no version stamp, so it will be re-run rather than trusted',
-      };
+      return { step, state: 'pending' };
     case 'stale':
       // Deliberately `pending`. See the module header: this is work that has not
       // survived, and showing it as done makes the remaining time a lie.
       return { step, state: 'pending', detail: `re-running: ${stored.moved.join(' and ')}` };
     case 'failed':
+      // `customerMessage`, never `failure.message`: the raw text names providers,
+      // tool calls and schema fields, and it was reaching the page a customer
+      // watches. The stored failure keeps every word for the support queue.
       return {
         step,
         state: 'failed',
         retryable: stored.result.failure.retryable,
-        detail: stored.result.failure.message,
+        detail: customerMessage(stored.result.failure),
         calls: stored.result.cost.calls,
       };
     case 'reusable': {
@@ -191,10 +191,7 @@ function describePhase(step: PipelineStep, stored: StoredPhase<unknown>): StepSt
           step,
           state: 'skipped',
           calls: result.cost.calls,
-          detail:
-            result.skipped === 'no_sets'
-              ? 'no cluster held two or more products, so there was no forced choice to put to anybody — a complete run, not a missing one (DECISIONS.md S11)'
-              : 'no customer panel is installed for this category (01 §5.3)',
+          detail: result.skipped === 'no_sets' ? 'complete' : 'no buyer panel for this category',
         };
       }
       return { step, state: 'done', calls: result.cost.calls };

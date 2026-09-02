@@ -60,10 +60,7 @@ export default async function StatusPage({
       */}
       <RunProgress initial={lookup.status} />
       <p>
-        <small>
-          Everyone walks in at 100. Fewest cuts wins. Disliking the result is not a failure — only a run
-          that never finished is.
-        </small>
+        <small>Everyone walks in at 100. Fewest cuts wins.</small>
       </p>
     </main>
   );

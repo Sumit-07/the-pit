@@ -175,7 +175,7 @@ describe('GET /auth/github/callback', () => {
     expect(response.status).toBe(404);
     expect(store.accountCount).toBe(0);
     const body = await response.text();
-    expect(body).toContain('accounts are made by a purchase');
+    expect(body).toContain('No account here yet');
     expect(body).toContain('stranger@example.com');
   });
 
@@ -187,7 +187,7 @@ describe('GET /auth/github/callback', () => {
       await handleGitHubCallback(get(`/auth/github/callback?code=good-code&state=${state}`, cookieHeader), oauth)
     ).text();
 
-    expect(body).toContain('the receipt email has your account link in it');
+    expect(body).toContain('open the account link in your receipt');
   });
 
   it('renders one page for every refusal', async () => {
@@ -293,15 +293,6 @@ describe('GET /checkout/success — the handover that needs no login', () => {
     for (const leak of ['attempts remaining', 'you have 1', 'balance']) {
       expect(`${leak}: ${body.toLowerCase().includes(leak)}`).toBe(`${leak}: false`);
     }
-  });
-
-  it('says the verdict page is public and does not need this link', async () => {
-    // `brief` Part 6. A customer who thinks the account link is needed to share
-    // their verdict will not share it.
-    const account = store.seedAccount(PAYER);
-    store.seedOrder({ accountId: account.accountId, providerPaymentId: 'pay_abc123', createdAt: new Date() });
-    const body = await (await handleCheckoutSuccess(get('/checkout/success?payment_id=pay_abc123'), handoff)).text();
-    expect(body).toContain('public and shareable');
   });
 
   it('stops showing the URL once the window has closed', async () => {

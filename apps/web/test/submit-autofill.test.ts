@@ -29,10 +29,10 @@
  *   commonest input there is. That test is first in the file, and it fails
  *   against the code it replaced, as do the ones for `www.`, a path, a trailing
  *   slash and the whitespace around a paste.
- * - **Nothing returns silently.** Garbage says it is garbage, a half-typed host
- *   says it is waiting, an emptied field clears the line and the icon, and the
- *   rate limit says it is the rate limit. Every one of those was previously a
- *   `return`.
+ * - **Nothing returns undecided.** Garbage says it is garbage, a half-typed host
+ *   clears the line rather than narrating itself, an emptied field clears the
+ *   line and the icon, and the rate limit says it is the rate limit. Every one of
+ *   those was previously a `return` that left whatever was on screen there.
  * - **The pause is a pause.** A burst of keystrokes is one lookup, fired after
  *   they stop; a paste does not wait for it; `blur` still works for a tab away.
  * - A fetched description fills an EMPTY field.
@@ -84,7 +84,7 @@ describe('the rendered form', () => {
     expect(page).toContain('method="post"');
     expect(page).not.toContain('onsubmit');
     expect(page).not.toContain('preventDefault');
-    expect(page).toContain('<button class="act" type="submit">');
+    expect(page).toMatch(/<button class="act" type="submit" id="pay">/);
   });
 
   it('carries every field name POST /api/checkout reads', () => {
@@ -119,10 +119,15 @@ describe('the rendered form', () => {
     expect(withPitch).not.toContain('<b>win</b>');
   });
 
-  it('ships exactly one inline script and loads nothing from anywhere else', () => {
+  it('ships only inline scripts and loads nothing from anywhere else', () => {
+    // Two, on a view with no panels: the autofill, and the one that keeps the
+    // price on the button equal to the tier that is checked. The number is not
+    // the property — the property is that every one of them is INLINE, so
+    // nothing on the buying page waits on another origin before it can post.
     const scripts = [...page.matchAll(/<script(\s[^>]*)?>/g)];
 
-    expect(scripts).toHaveLength(1);
+    expect(scripts).toHaveLength(2);
+    expect(scripts.every((match) => match[1] === undefined)).toBe(true);
     expect(page).not.toMatch(/<script[^>]*\ssrc=/);
   });
 });
@@ -405,14 +410,21 @@ describe('what a person actually types, running the script the page ships', () =
     }
   });
 
-  it('waits for a half-typed host while typing, and calls it wrong once they leave', async () => {
+  it('says nothing at all about a half-typed host, and calls it wrong once they leave', async () => {
     const h = harness({}, [FOUND]);
 
     await h.type('linear');
     await h.tick(PAUSE);
 
+    // No lookup, and no sentence either. The line used to narrate the field back
+    // at the person filling it in ("Waiting for the rest of the address"); blank
+    // is the honest state for "they are mid-word", and it is a DECIDED blank —
+    // the icon is gone and the line is hidden rather than left holding a stale
+    // answer about the previous value.
     expect(h.asked).toEqual([]);
-    expect(h.state.textContent).toContain('Waiting for the rest');
+    expect(h.state.textContent).toBe('');
+    expect(h.state.hidden).toBe(true);
+    expect(h.icon.hidden).toBe(true);
 
     // Leaving the field with it is a different statement: they are done, and it
     // is not an address.
@@ -522,7 +534,10 @@ describe('the autofill, running the script the page ships', () => {
 
     expect(h.name.value).toBe('Ashgrove Pro');
     expect(h.description.value).toBe('Mine, thank you.');
-    expect(h.state.textContent).toContain('nothing was changed');
+    // It says what it did and stops. The old line went on to explain that the
+    // visitor's own words were already there, which they can see.
+    expect(h.state.textContent).toBe('Read ashgrove.dev.');
+    expect(h.state.textContent).not.toContain('filled in');
   });
 
   it('does not overwrite a field the visitor typed WHILE the lookup was in flight', async () => {
@@ -580,7 +595,7 @@ describe('the autofill, running the script the page ships', () => {
 
     await h.blur();
 
-    expect(h.state.textContent).toContain('lot of lookups');
+    expect(h.state.textContent).toContain('Too many lookups');
     expect(h.state.textContent).not.toContain('Nothing we could read');
     // And it is retryable: the wall comes down on its own.
     await h.blur();
@@ -818,12 +833,15 @@ describe('the pitch cap is enforced on the server, not only in the browser', () 
     expect(transport.calls).toEqual([]);
   });
 
-  it('says why, on the form the visitor is looking at, and says nothing was charged', async () => {
+  it('names both numbers on the form the visitor is looking at, and nothing else', async () => {
     const body = await (await handleCheckoutCreate(post('x'.repeat(1200)), deps)).text();
 
+    // What they typed, and what they are allowed. The test above this one is the
+    // one that proves nothing was charged, and it proves it from the ledger of
+    // rows and transport calls rather than from a sentence promising it.
     expect(body).toContain('1200 characters');
     expect(body).toContain(String(PITCH_LIMIT));
-    expect(body).toContain('nothing was charged');
+    expect(body).not.toMatch(/trim it and try again/i);
     // Their text is still in the form, so fixing it is an edit and not a retype.
     expect(body).toContain('Ashgrove');
   });

@@ -113,14 +113,14 @@ describe('re-theming changed nothing a reader reads', () => {
   it('leaves the sign-in email saying what it said', () => {
     expect(MAGIC.subject).toBe('Sign in to The Pit');
     expect(MAGIC.html).toContain('Open the sign-in page');
-    expect(MAGIC.html).toContain('Open this link and press the button on the page.');
+    expect(MAGIC.html).toContain('Press the button.');
     expect(MAGIC.text).toContain('Sign in to The Pit');
   });
 
   it('leaves the account-link email saying what it said', () => {
     expect(CAPABILITY.subject).toBe('Your account link for The Pit');
     expect(CAPABILITY.html).toContain('Open my account');
-    expect(CAPABILITY.html).toContain('Your verdict page is public and separate.');
+    expect(CAPABILITY.html).toContain('Bookmark this.');
   });
 
   it('still escapes the link it was handed, which the styling sits next to', () => {

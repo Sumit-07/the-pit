@@ -65,9 +65,7 @@ export const BYLINE_NAMED = 'named';
 export const BYLINE_ANONYMOUS = 'anonymous';
 
 /** What the submitter is told when the field carried something unreadable. */
-export const BYLINE_UNREADABLE =
-  'We could not read your byline choice, so we did not guess. Pick “under your name” or ' +
-  '“as a robot” and try again — nothing was charged.';
+export const BYLINE_UNREADABLE = 'Pick “under your name” or “as a robot”.';
 
 export type BylineCheck =
   | { readonly ok: true; readonly anonymous: boolean }

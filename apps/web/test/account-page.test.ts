@@ -171,11 +171,10 @@ describe('with no session', () => {
     expect(page.body).not.toContain(slug);
   });
 
-  it('offers all three doors rather than only email', async () => {
+  it('offers both doors it can render rather than only email', async () => {
     const page = await render();
     expect(page.body).toContain('/auth/sign-in');
     expect(page.body).toContain('/auth/github/start');
-    expect(page.body).toContain('account link');
   });
 
   it('refuses a cookie it did not sign', async () => {
@@ -316,10 +315,8 @@ describe('the capability URL, and what rotating it does', () => {
 
     // Both halves, because a customer who believes rotation logs everyone out
     // will rotate and stop worrying.
-    expect(body).toContain('does <b>not</b> do');
-    expect(body).toContain('90 days');
-    expect(body).toContain('stays open until it expires');
-    expect(body).toContain('Replacing it is the only way to revoke it');
+    expect(body).toContain('Devices already signed in stay signed in.');
+    expect(body).toContain('Replacing it kills the old link instantly.');
   });
 
   it('rotating invalidates the old link and the page then shows the new one', async () => {
@@ -374,16 +371,15 @@ describe('GitHub', () => {
 
     expect(page.body).toContain('Not connected');
     expect(page.body).toContain('skips the review hold');
-    expect(page.body).toContain('Claiming a seeded listing');
-    expect(page.body).toContain('verified-builder marker');
-    expect(page.body).toContain('Re-pitching');
+    expect(page.body).toContain('Claim a seeded listing');
+    expect(page.body).toContain('Verified builder');
+    expect(page.body).toContain('Re-pitch in one button');
     expect(page.body).toContain('/auth/github/start');
   });
 
-  it('says linking can be done now, having already paid as a guest', async () => {
+  it('says linking attaches to this account rather than opening a second one', async () => {
     const page = await render(sessionCookie());
-    expect(page.body).toContain('already paid');
-    expect(page.body).toContain('rather than opening a second one');
+    expect(page.body).toContain('Attaches to <b>this</b> account');
   });
 
   it('promises no rank advantage anywhere in the list', async () => {
@@ -391,7 +387,7 @@ describe('GitHub', () => {
     // positional. A login-conferred rank advantage is the same violation as a
     // purchased one in a different currency.
     const page = await render(sessionCookie());
-    expect(page.body).toContain('Rank is not for sale and it is not for logging in either');
+    expect(page.body).toContain('None of it moves you up.');
   });
 
   it('shows the link once it exists, without offering to make another', async () => {

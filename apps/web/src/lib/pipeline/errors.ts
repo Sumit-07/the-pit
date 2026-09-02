@@ -63,6 +63,47 @@ export class PhaseFailedError extends Error {
 }
 
 /**
+ * What a customer is told a failure was.
+ *
+ * `PhaseFailure.message` is written for whoever has to fix the run: it names the
+ * provider, the tool that was called, the schema field that did not parse. That
+ * text was reaching `/status` verbatim — `NoModelClient` alone puts
+ * `a call to "score_product" was attempted` in front of somebody who paid five
+ * dollars and is watching a progress bar. A person waiting on a run needs to know
+ * whether it is coming back, and nothing else; the diagnosis belongs in the
+ * support queue, which reads the stored `PhaseFailure` and still has every word
+ * of it.
+ *
+ * Keyed on `FailureCode`, exactly as `dispatch.ts` classifies retryability, so
+ * this is a lookup and never a scan of message wording. An unrecognised code
+ * falls through to the generic line rather than leaking the raw text as a
+ * default — a new code should read as a plain failure until somebody writes it a
+ * sentence, not as a paragraph of engine prose.
+ *
+ * Nothing here changes retry behaviour. `retryable` is still the engine's, and
+ * `PhaseFailedError.message` still carries the raw text for logs and telemetry.
+ */
+const CUSTOMER_MESSAGE: Record<PhaseFailure['code'], string> = {
+  model_call: 'That step timed out.',
+  schema: 'That step failed.',
+  truncated: 'That step failed.',
+  incomplete_panel: 'Part of the panel did not answer.',
+  internal: 'That step failed.',
+};
+
+/** The generic line, for a code this module has not been taught. */
+const CUSTOMER_FALLBACK = 'That step failed.';
+
+/**
+ * One stored failure, as the sentence `/status` shows.
+ *
+ * Never the raw message. See `CUSTOMER_MESSAGE`.
+ */
+export function customerMessage(failure: Pick<PhaseFailure, 'code'>): string {
+  return CUSTOMER_MESSAGE[failure.code] ?? CUSTOMER_FALLBACK;
+}
+
+/**
  * The one storage fault that is deterministic, and therefore terminal.
  *
  * `PgPipelineStore.writeRanking` throws `SnapshotVersionConflictError` when the

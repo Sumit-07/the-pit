@@ -184,7 +184,7 @@ describe('GET /submit renders with no DATABASE_URL', () => {
   it('carries the tier selector, both tiers, with single pre-selected', async () => {
     const page = await renderSubmit();
 
-    const radios = [...page.body.matchAll(/<input type="radio" name="tier" value="([a-z]+)"( checked)?>/g)];
+    const radios = [...page.body.matchAll(/<input type="radio" name="tier" value="([a-z]+)" data-pay="[^"]+"( checked)?>/g)];
     expect(radios.map((match) => match[1])).toEqual(['single', 'triple']);
     // `emptyFormFrom` defaults to `single` when the query string says nothing.
     expect(radios[0]?.[2]).toBe(' checked');
@@ -194,6 +194,26 @@ describe('GET /submit renders with no DATABASE_URL', () => {
     expect(PRICE_TIERS.map((tier) => tier.amountCents)).toEqual([500, 1500]);
     expect(page.body).toContain('$5.00');
     expect(page.body).toContain('$15.00');
+  });
+
+  it('names the SELECTED tier on the button, on the server and as the radios move', async () => {
+    // The button said "Take my $5 →" unconditionally while the $15 tier sat above
+    // it, selectable — a price on a button that was wrong for anyone who took the
+    // other tier. It is now rendered from the checked tier and kept in step by a
+    // script that reads the price off the radio's own `data-pay`.
+    const single = await renderSubmit();
+    expect(single.body).toContain('>Take my $5 →</button>');
+    expect(single.body).not.toContain('Take my $15');
+
+    const triple = await renderSubmit(`${ORIGIN}/submit?tier=triple`);
+    expect(triple.body).toContain('>Take my $15 →</button>');
+    expect(triple.body).not.toContain('Take my $5 ');
+
+    // One price table. Every price on the page is `PRICE_TIERS`, spelled without
+    // its cents for the button and with them in the tier card.
+    for (const tier of PRICE_TIERS) {
+      expect(single.body).toContain(`data-pay="$${tier.amountCents / 100}"`);
+    }
   });
 
   it('posts to the checkout route, and nothing on the page intercepts that', async () => {
@@ -210,7 +230,7 @@ describe('GET /submit renders with no DATABASE_URL', () => {
     const page = await renderSubmit();
 
     expect(page.body).toContain('method="post" action="/api/checkout"');
-    expect(page.body).toContain('<button class="act" type="submit">');
+    expect(page.body).toMatch(/<button class="act" type="submit" id="pay">/);
     expect(page.body).not.toContain('onsubmit');
     expect(page.body).not.toContain('preventDefault');
     expect(page.body).not.toMatch(/<script[^>]*\ssrc=/);
@@ -242,29 +262,31 @@ describe('GET /submit renders with no DATABASE_URL', () => {
     expect(radios[1]?.[2]).toBeUndefined();
   });
 
-  it('says what stays public, that the choice is frozen, and how it can be undone', async () => {
+  it('states what is withheld, that the choice is frozen, and the way back', async () => {
     // The copy is load-bearing here in a way it is not elsewhere on the form: this
     // is a decision made once, before the buyer knows their result, that no later
-    // code path will offer to change. A control without these four sentences would
-    // be a control that took an irreversible choice on an unstated basis.
+    // code path will offer to change. What has to be on the page is the TERMS —
+    // what is withheld, when it stops being changeable, and the one door back. The
+    // page used to argue each of them as well, over four paragraphs; the argument
+    // is gone and the terms are not, which is what this test now pins.
     const page = await renderSubmit();
-    const text = page.body.replaceAll('&#39;', "'").replaceAll('&amp;', '&');
+    const text = page.body.replaceAll('&#39;', "'").replaceAll('&amp;', '&').replaceAll('&rsquo;', '’');
 
-    // 1. what is withheld, and what is not.
-    expect(text).toContain('Everything a reader uses stays public either way');
-    for (const kept of ['score', 'cut', 'reason', 'juror', 'cluster', 'demand']) {
-      expect(text.toLowerCase()).toContain(kept);
-    }
-    expect(text).toContain('your name and your URL');
-    // 2. that it cannot be changed later, and why.
-    expect(text).toContain('cannot be changed later');
+    // 1. what is withheld — and that it is only that.
+    expect(text).toContain('Your name and your address are withheld. Nothing else is.');
+    // 2. when it stops being changeable.
+    expect(text).toContain('changed after scoring');
     // 3. the robot, and that the designation is stable.
     expect(text).toMatch(/Unit [A-Za-z]+-\d{3}/);
-    expect(text).toContain('never changes');
-    // 4. the one door back.
+    expect(text).toContain('Yours stays the same everywhere');
+    // 4. the one door back, and what it does not reach.
     expect(text).toContain('GitHub');
-    // And it does not read as shame.
-    expect(text).toContain('not hiding');
+    expect(text).toContain('Past verdicts keep the robot');
+
+    // And it does not apologise for the option it is selling: no paragraph here
+    // defends the choice, and none says the buyer is not hiding.
+    expect(text).not.toContain('not hiding');
+    expect(text).not.toMatch(/that is on purpose/i);
   });
 
   it('prefills from the query string without needing anything wired', async () => {
@@ -274,7 +296,7 @@ describe('GET /submit renders with no DATABASE_URL', () => {
 
     expect(page.status).toBe(200);
     expect(page.body).toContain('value="https://ashgrove.dev"');
-    const radios = [...page.body.matchAll(/<input type="radio" name="tier" value="([a-z]+)"( checked)?>/g)];
+    const radios = [...page.body.matchAll(/<input type="radio" name="tier" value="([a-z]+)" data-pay="[^"]+"( checked)?>/g)];
     expect(radios[1]?.[2]).toBe(' checked');
   });
 

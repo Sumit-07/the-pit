@@ -86,24 +86,17 @@ export function RunProgress({ initial }: { initial: RunStatus }): React.JSX.Elem
       {status.failure !== undefined && (
         <p role="status">
           {status.failure.retryable
-            ? // `brief §2.3`: a retryable failure is a FREE retry. Saying so is
-              // not reassurance for its own sake — the purchase page promises it,
-              // and a customer watching a step go red needs the promise kept in
-              // the place they are looking.
-              'That step is being retried. Failures are free — this does not use up an attempt.'
-            : 'This run needs a person to look at it. Nothing has been charged for it.'}{' '}
+            ? // `brief §2.3`: a retryable failure is a FREE retry, and the word
+              // free is the whole message — a customer watching a step go red
+              // needs the purchase page's promise kept where they are looking,
+              // not restated as a paragraph.
+              'Retrying. Free.'
+            : 'This one needs a person. Nothing has been charged.'}{' '}
           {status.failure.message}
         </p>
       )}
 
-      {status.votes_cached > 0 && (
-        <p>
-          {status.votes_cached} juror {status.votes_cached === 1 ? 'verdict is' : 'verdicts are'} already
-          banked, so a retry starts from there rather than from the top.
-        </p>
-      )}
-
-      {stale && <p role="status">Lost touch for a moment — showing the last state we saw.</p>}
+      {stale && <p role="status">Reconnecting…</p>}
     </section>
   );
 }
@@ -112,7 +105,7 @@ export function RunProgress({ initial }: { initial: RunStatus }): React.JSX.Elem
 const HEADLINE: Record<RunState, string> = {
   queued: 'Queued. Nothing has started yet.',
   running: 'In the pit.',
-  retrying: 'A step failed and is being retried, free.',
+  retrying: 'A step failed. Retrying, free.',
   delivered: 'Done. Every cut is in.',
   needs_support: 'Stopped. This one needs a person.',
 };
@@ -145,6 +138,6 @@ const STATE_LABEL: Record<StepStatus['state'], string> = {
   done: 'done',
   // `DECISIONS.md` S11: a skip is a terminal, SUCCESSFUL status, and the word has
   // to say so. "Skipped" alone reads like something went missing.
-  skipped: 'nothing to do — complete',
+  skipped: 'complete',
   failed: 'failed',
 };

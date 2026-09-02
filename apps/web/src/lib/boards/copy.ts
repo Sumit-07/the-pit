@@ -71,12 +71,10 @@ export function cutsSentence(name: string, cuts: number): string {
  * next to the timestamp and the product count, which is the only honest way to
  * publish a leaderboard that is rebuilt under the reader.
  */
-export const STAMP_NOTE =
-  'No rank here is permanent. The board is rebuilt on every placement, which is why this line carries a time and a product count.';
+export const STAMP_NOTE = 'Rebuilt on every placement.';
 
 /** The category board's one-line explanation of what a row is. Leads with the cut, not the number. */
-export const BOARD_LEDE =
-  'Open a row for the ledger: every cut, the reason it was taken, and the juror who took it.';
+export const BOARD_LEDE = 'Open a row for the ledger.';
 
 /**
  * The homepage's version, which has a different job.
@@ -88,8 +86,7 @@ export const BOARD_LEDE =
  * whole card. Those are different quantities and the page says so rather than
  * hoping nobody notices.
  */
-export const HOME_LEGEND =
-  'Every row leads with the cut that hurt most and the juror who took it. Cuts is what came off the whole card, and the full board has the rest.';
+export const HOME_LEGEND = 'Every row leads with the cut that hurt most.';
 
 /**
  * The panel labels for a category.
@@ -124,8 +121,7 @@ export function panelLabels(type: string): { critics: string; buyers: string } {
  * publishing a ranking rule it does not run. So the number is shown and the rule
  * is stated beside it, in this sentence, on every surface that carries the column.
  */
-export const HEALTH_NOTE =
-  'Health is what a card walked out with: 100 minus its cuts. It is not the sort order — rows are ranked by core, which blends merit with demand.';
+export const HEALTH_NOTE = 'Health is 100 minus cuts.';
 
 /**
  * The solo-cluster explanation, stated once.
@@ -135,5 +131,4 @@ export const HEALTH_NOTE =
  * watch, not a thing to hide: it is a stated property of the board, and a row
  * that carries it is not in an error state.
  */
-export const SOLO_NOTE =
-  'no buyers were shown this one beside a substitute, so there was no forced choice to run and the rank is merit alone';
+export const SOLO_NOTE = 'no substitutes, so no forced choice — ranked on merit alone';

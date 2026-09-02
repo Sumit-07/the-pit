@@ -70,15 +70,12 @@ export default async function Boards(): Promise<ReactNode> {
         <span className="sh">The boards</span>
         <h1>Every cut, on the record.</h1>
         <p className="headsub">
-          Free to read, and there is nothing to buy on them. Open a category, open a row, and the ledger is
-          the whole thing: every deduction, the reason it was taken, and the juror who took it.
+          Open a category, open a row: every deduction, the reason, and the juror who took it.
         </p>
       </div>
 
       {boards.length === 0 ? (
-        <div className="empty">
-          No board has been published yet. A board is written only for a DELIVERED run.
-        </div>
+        <div className="empty">No boards yet.</div>
       ) : (
         <div className="blist">
           {boards.map((board) => (

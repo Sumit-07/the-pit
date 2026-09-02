@@ -48,8 +48,8 @@ describe('the message', () => {
   });
 
   it('tells the reader there is a button, because brief §2.1 makes the link inert', () => {
-    expect(message.text).toContain('press the button');
-    expect(message.html).toContain('press the button');
+    expect(message.text).toContain('Press the button');
+    expect(message.html).toContain('Press the button');
   });
 
   it('states the 15-minute, single-use terms', () => {
@@ -57,9 +57,9 @@ describe('the message', () => {
     expect(message.text).toContain('works once');
   });
 
-  it('tells someone who did not ask that nothing has happened', () => {
+  it('tells someone who did not ask that they can ignore it', () => {
     // The one line that stops a mail cannon from also being a scare campaign.
-    expect(message.text).toContain('nothing has happened to your account');
+    expect(message.text).toContain('Ignore it.');
   });
 
   it('is keyed on the token hash, never the token', () => {

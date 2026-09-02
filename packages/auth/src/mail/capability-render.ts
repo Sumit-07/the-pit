@@ -1,11 +1,10 @@
 /**
  * The receipt-time message that carries the capability URL — as a BACKUP.
  *
- * The ordering matters and the copy says it out loud. The buyer has already seen
- * this URL on the success page, where nothing had to be delivered for it to
- * arrive. This message exists for the case where they closed the tab before
- * bookmarking it, and it is written so that a customer who never receives it has
- * still lost nothing: everything it contains, they were shown.
+ * The ordering matters. The buyer has already seen this URL on the success page,
+ * where nothing had to be delivered for it to arrive. This message exists for the
+ * case where they closed the tab before bookmarking it, so a customer who never
+ * receives it has still lost nothing: everything it contains, they were shown.
  *
  * That is the inversion the capability path is for. The magic link makes email a
  * dependency of signing in; this makes email a convenience. Until SPF, DKIM and
@@ -64,27 +63,22 @@ export function renderCapabilityEmail(input: CapabilityMessageInput): OutboundEm
   const text = [
     'Your account link for The Pit',
     '',
-    'This is the same link the page showed you after payment. Bookmark it — it is how you',
-    'reach your remaining attempts, your history, and a re-pitch.',
+    'Bookmark this.',
     '',
     input.url,
     '',
-    'It does not expire and it does not need a password. Treat it like a key: anyone who has',
-    'it can reach your account. If you think it has got out, sign in and rotate it — the old',
-    'link stops working the moment you do.',
-    '',
-    'Your verdict page is public and separate. Nothing here is needed to view or share it.',
+    'No password, no expiry. Anyone who has it can reach your account.',
+    'Replace it from your account page.',
   ].join('\n');
 
   const html = [
     '<!doctype html>',
     `<html lang="en"><body style="${MAIL_BODY_STYLE}">`,
     '<h1 style="font-size:20px;margin:0 0 16px">Your account link</h1>',
-    '<p style="margin:0 0 20px">The same link the page showed you after payment. Bookmark it — it is how you reach your remaining attempts, your history, and a re-pitch.</p>',
+    '<p style="margin:0 0 20px">Bookmark this.</p>',
     `<p style="margin:0 0 24px"><a href="${safeUrl}" style="${MAIL_BUTTON_STYLE}">Open my account</a></p>`,
     `<p style="margin:0 0 20px;word-break:break-all;${MAIL_SMALL_STYLE}">${safeUrl}</p>`,
-    `<p style="margin:0 0 8px;${MAIL_SMALL_STYLE}">No password, no expiry. Treat it like a key: anyone who has it can reach your account. If you think it has got out, sign in and rotate it — the old link stops working the moment you do.</p>`,
-    `<p style="margin:0;${MAIL_SMALL_STYLE}">Your verdict page is public and separate. Nothing here is needed to view or share it.</p>`,
+    `<p style="margin:0;${MAIL_SMALL_STYLE}">No password, no expiry. Anyone who has it can reach your account. Replace it from your account page.</p>`,
     '</body></html>',
   ].join('');
 

@@ -233,7 +233,7 @@ describe('POST /auth/capability/rotate', () => {
       new Request(`${ORIGIN}/auth/capability/rotate`, { method: 'POST', headers: { cookie: sessionCookie() } }),
       deps,
     );
-    expect((await response.text()).toLowerCase()).toContain('stays signed in');
+    expect((await response.text()).toLowerCase()).toContain('stay signed in');
   });
 });
 

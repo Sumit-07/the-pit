@@ -361,7 +361,7 @@ export function checkSubmissionLocal(input: LocalCheckInput): SubmissionCheck {
   if (description.length > SANITIZE_LIMIT) {
     return rejected({
       code: 'description_too_long',
-      message: `Keep it under ${SANITIZE_LIMIT} characters — everyone on the board gets the same room.`,
+      message: `Keep it under ${SANITIZE_LIMIT} characters.`,
       limit: SANITIZE_LIMIT,
     });
   }

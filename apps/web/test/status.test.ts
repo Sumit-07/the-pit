@@ -120,7 +120,7 @@ describe('a delivered run', () => {
     // stalled at 4/5 forever would be showing a complete run as stuck.
     expect(status.completed).toBe(5);
     expect(status.state).toBe('delivered');
-    expect(persona?.detail).toContain('a complete run');
+    expect(persona?.detail).toBe('complete');
   });
 });
 
