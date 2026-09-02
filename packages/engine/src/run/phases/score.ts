@@ -33,6 +33,18 @@
  * per juror across products, so a half-present juror is worse than an absent one.
  * It is recorded as a missing role, and `auditScoreCoverage` turns that into
  * `brief §2.3`'s partial failure.
+ *
+ * ## One call goes first
+ *
+ * "Fires its calls in parallel" is not "fires them all in the same instant", and
+ * for this phase the difference is what the run costs. The six jurors of a chunk
+ * send a byte-identical cached prefix and differ only in the mandate that sits
+ * after the breakpoint, so a simultaneous fan-out has all six miss the cache and
+ * all six pay the write premium — the breakpoint bought nothing and charged 25%
+ * for it. One primer per chunk goes out and is awaited; the rest follow and read
+ * what it wrote. The block comment on the fan-out below carries why it is per
+ * chunk, why the order calls reach the client is unchanged, and what a primer
+ * that fails does.
  */
 
 import { JUROR_COUNT } from '../../config/constants.js';
@@ -78,7 +90,9 @@ export async function runScorePhase(input: ScorePhaseInput): Promise<PhaseResult
     );
   }
 
-  // One flat fan-out over (juror x chunk). `brief` Part 7's one-step phase.
+  // One flat fan-out over (juror x chunk), juror-major and chunk-minor.
+  // `brief` Part 7's one-step phase. Described here and STARTED below, because
+  // the order they start in is the whole of the caching behaviour.
   const calls = input.jury.jurors.flatMap((juror, jurorIndex) =>
     chunks.map((chunk, chunkIndex) => {
       const request = buildScoreRequest({
@@ -90,13 +104,72 @@ export async function runScorePhase(input: ScorePhaseInput): Promise<PhaseResult
       });
       const label = `juror ${JSON.stringify(juror.role)} chunk ${chunkIndex + 1}/${chunks.length}`;
       const expectation = { productIds: chunk.map((product) => product.id), metricNames };
-      return dispatch(input.client, request, label, ledger, (output) =>
-        validateScoreResult(output, expectation),
-      ).then((result) => ({ jurorIndex, result }));
+      return {
+        jurorIndex,
+        chunkIndex,
+        run: (): Promise<DispatchResult<ScoreRow[]>> =>
+          dispatch(input.client, request, label, ledger, (output) => validateScoreResult(output, expectation)),
+      };
     }),
   );
 
-  const settled = await Promise.all(calls);
+  // The first call for each chunk is the cache PRIMER, and it goes alone.
+  //
+  // `buildScoreRequest` puts the whole shared prefix — tools, method, rubric,
+  // calibration, the chunk's product list — inside one `cache_control` prefix,
+  // and leaves only the mandate outside it (see that file's layout table). The
+  // six jurors of a chunk therefore send byte-identical prefixes. Fired in one
+  // `Promise.all` they arrive together, every one of them finds the cache empty,
+  // and all six pay the 1.25x write premium while none of them reads: the
+  // breakpoint costs 25% extra and returns nothing. Awaiting one first turns
+  // that into one write and five reads at 0.1x, which is the entire reason the
+  // breakpoint is there.
+  //
+  // Per CHUNK, because the product list is inside the prefix: two chunks are two
+  // different prefixes and neither primes the other, so their primers go out
+  // together. Juror-major iteration puts juror 0's calls at the front of the flat
+  // list, one per chunk, so the primers ARE flat indices 0..chunks-1 and the
+  // order calls reach the client is exactly what it was before. That matters
+  // beyond tidiness: `HandoffClient` matches a request to its plan descriptor by
+  // the order `complete` is entered.
+  //
+  // A primer that fails is not a reason to skip the rest. `dispatch` returns
+  // failures rather than throwing, so a dead provider or a bad answer lands in
+  // `results` exactly as it did when all six raced, and the coverage audit below
+  // reads the same thing either way. An engine bug still throws, and still
+  // surfaces from the same `await`.
+  const results: DispatchResult<ScoreRow[]>[] = new Array<DispatchResult<ScoreRow[]>>(calls.length);
+  const primers = new Set<number>();
+  const seenChunks = new Set<number>();
+  for (const [index, call] of calls.entries()) {
+    if (seenChunks.has(call.chunkIndex)) continue;
+    seenChunks.add(call.chunkIndex);
+    primers.add(index);
+  }
+
+  await Promise.all(
+    [...primers].map(async (index) => {
+      const call = calls[index];
+      if (call !== undefined) results[index] = await call.run();
+    }),
+  );
+
+  await Promise.all(
+    calls.map(async (call, index) => {
+      if (primers.has(index)) return;
+      results[index] = await call.run();
+    }),
+  );
+
+  const settled = calls.map((call, index) => {
+    const result = results[index];
+    // Unreachable: both fan-outs above cover every index and neither can resolve
+    // without assigning. Stated rather than asserted with `!`, so a future third
+    // wave that forgot an index says so instead of writing `undefined` into the
+    // score log.
+    if (result === undefined) throw new Error(`runScorePhase: call ${index} never settled`);
+    return { jurorIndex: call.jurorIndex, result };
+  });
 
   // Group by juror, preserving the installed panel's order so the score log reads
   // the same way twice.

@@ -60,14 +60,20 @@ describe('one Inngest step per phase, on the paid path (brief Part 7)', () => {
     expect(harness.meter.total).toBe(11);
   });
 
-  it('fires all six juror calls together inside the single score step', async () => {
+  it('fires all six juror calls inside the single score step, one priming the rest', async () => {
     const harness = await makePlacementHarness();
     await place(harness);
 
     expect(harness.meter.callsIn('score')).toBe(JUROR_COUNT);
     // ...and together, not one after another. A phase that awaited its calls in a
     // loop would give the right step count and the same latency as the split.
-    expect(harness.meter.concurrencyIn('score')).toBe(JUROR_COUNT);
+    //
+    // Five in flight rather than six: `runScorePhase` sends one primer and awaits
+    // it so the other five read the cached prefix instead of each paying to write
+    // it. On the PAID path that is the same prompt shape with a calibration block
+    // inside the prefix, so the saving is if anything larger here. One step is
+    // still one step, which is what `brief` Part 7 asks for.
+    expect(harness.meter.concurrencyIn('score')).toBe(JUROR_COUNT - 1);
   });
 
   it('fires every persona call inside the single persona step', async () => {

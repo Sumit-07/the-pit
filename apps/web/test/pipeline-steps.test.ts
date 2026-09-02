@@ -43,7 +43,7 @@ describe('one Inngest step per phase (brief Part 7)', () => {
     expect(harness.meter.total).toBe(11);
   });
 
-  it('fires all six juror calls inside the single score step', async () => {
+  it('fires all six juror calls inside the single score step, one priming the rest', async () => {
     const harness = makeHarness();
     await run(harness);
 
@@ -51,7 +51,15 @@ describe('one Inngest step per phase (brief Part 7)', () => {
     // ...and together, not one after another. A phase that awaited its calls in
     // a loop would give the right step count and a peak of 1 — which is the same
     // latency the split-step version has, arrived at a different way.
-    expect(harness.meter.concurrencyIn('score')).toBe(JUROR_COUNT);
+    //
+    // The peak is FIVE, not six, and that is the fix rather than a regression.
+    // The six jurors of a chunk send a byte-identical cached prefix and differ
+    // only in the mandate after the breakpoint, so a six-way simultaneous
+    // fan-out has every one of them miss the cache and pay the 1.25x write
+    // premium while none reads. `runScorePhase` sends one primer, awaits it, and
+    // fans out the other five — one write and five reads. `brief` Part 7 is
+    // about STEP granularity, and one step is still one step.
+    expect(harness.meter.concurrencyIn('score')).toBe(JUROR_COUNT - 1);
   });
 
   it('fires every persona call inside the single persona step', async () => {
