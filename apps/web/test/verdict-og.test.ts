@@ -36,6 +36,68 @@ describe('what the share card says', () => {
     expect(fields.eyebrow).toBe('THE PIT · VERDICT · DEVELOPER TOOLS');
   });
 
+  it('carries the rank as a number and the count as its own field', async () => {
+    // The card sets the rank at 180px and the count small beside it, so the two
+    // are separate strings. `rank` above still exists and still carries both plus
+    // the moment: there is no field here that can put a bare number on the card
+    // without the other two being in the layout.
+    const fields = ogFields(parseVerdict(await seededVerdictNamed('developer-tools', 'Sequo')));
+
+    expect(fields.rankNumber).toBe('#7');
+    expect(fields.rankOf).toBe('/ 48');
+    expect(fields.rank).toContain('of 48 products');
+  });
+
+  it('splits the hundred into the half that survived and the half that was taken', async () => {
+    const fields = ogFields(parseVerdict(await seededVerdictNamed('developer-tools', 'Sequo')));
+
+    // 30 in cuts, so 70 left, and the two add to exactly 100 — the bar's held
+    // head is `${health}%` and its tail is the remainder, so a pair that did not
+    // add up would be a bar that did not fill.
+    expect(fields.cuts).toBe('30');
+    expect(fields.health).toBe('70');
+    expect(Number(fields.health) + Number(fields.cuts)).toBe(100);
+    expect(fields.healthLine).toBe('70 health left · 30 in cuts');
+  });
+
+  it('rounds health off the same total it prints, never off the raw one', () => {
+    // 100 - 16.6 = 83.4, which rounds to 83; round(16.6) is 17, and 83 + 17 is
+    // 100 only because health is derived from the ROUNDED cuts total. Deriving
+    // each independently gives 83 and 17 here and 84 and 17 one card over.
+    const fields = ogFields(
+      parseVerdict(
+        handBuiltVerdict({
+          scorecard: [
+            { metric: 'Trust Surface', score: 83.4, spread: 0, juror_count: 6, substituted_roles: [], deductions: [] },
+          ],
+        }),
+      ),
+    );
+
+    expect(fields.cuts).toBe('17');
+    expect(fields.health).toBe('83');
+    expect(fields.healthLine).toBe('83 health left · 17 in cuts');
+  });
+
+  it('names the category on its own, for the corner the wordmark does not occupy', async () => {
+    const fields = ogFields(parseVerdict(await seededVerdictNamed('developer-tools', 'Sequo')));
+
+    expect(fields.category).toBe('DEVELOPER TOOLS');
+    // The brand is a wordmark drawn in the layout now, so the category eyebrow
+    // must not repeat it.
+    expect(fields.category).not.toContain('THE PIT');
+  });
+
+  it('stamps the day and the domain in the corner', async () => {
+    const fields = ogFields(parseVerdict(await seededVerdictNamed('developer-tools', 'Sequo')));
+
+    expect(fields.stamp).toBe('27 Aug 2026 · thepit.show');
+    // The day, not the minute: at 19px in a corner the clock is unreadable, and
+    // the full instant is still on `rank`.
+    expect(fields.stamp).not.toContain('UTC');
+    expect(fields.rank).toContain('14:03 UTC');
+  });
+
   it('never states the rank without its product count and its moment', async () => {
     const fields = ogFields(parseVerdict(await seededVerdictNamed('developer-tools', 'Carillon')));
 

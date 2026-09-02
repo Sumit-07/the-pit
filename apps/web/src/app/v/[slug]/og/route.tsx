@@ -11,9 +11,32 @@
  * and what is left here is a picture.
  *
  * The card is the verdict card at 1200x630 in `lib/theme.ts`'s palette, with the
- * single hue on the single number that matters. `brief` Part 5's rule rides in the
- * data — `fields.rank` cannot be produced without its product count and its
- * timestamp — so there is no arrangement of this layout that shows a bare rank.
+ * two hues doing the two jobs they do everywhere else: `--held` is what survived,
+ * `--cut` is what was taken. `brief` Part 5's rule rides in the data —
+ * `fields.rank` cannot be produced without its product count and its timestamp —
+ * so there is no arrangement of this layout that shows a bare rank.
+ *
+ * ## What it puts first, and why that changed
+ *
+ * The card used to lead with the cuts total, set at 120px, and then print the
+ * same number again in words underneath: `97` over `took 97 in cuts`. Two thirds
+ * of the card's visual budget went to saying one number twice, and the rank —
+ * the thing a founder shares a verdict FOR — was a 26px line under it. The rank
+ * is now the biggest element, the two halves of the hundred are a bar rather
+ * than a repeated figure, and the brand is a wordmark in the corner instead of a
+ * word inside a tracked-out eyebrow.
+ *
+ * ## The type is fetched, and the card survives it failing
+ *
+ * satori has no font of its own, so before this the card was set in whatever
+ * fallback `next/og` bundles — which is not Archivo, and the one surface that
+ * travels off the site was the one surface not in the site's type. Archivo 700
+ * and IBM Plex Mono 500 are fetched from Google Fonts as TTF at REQUEST time and
+ * cached for the life of the process. Request time and not build time for the
+ * reason `app/layout.tsx` gives about `next/font/google`: `pnpm -r build` has to
+ * work on a machine with no network. If the fetch fails the card is drawn in the
+ * default face and every word on it is still there — a share image with the
+ * wrong typeface is a blemish, a share image that 500s is a broken link.
  *
  * When the site was paper this card was the one surface that INVERTED, because a
  * share image is seen at thumbnail size in a feed next to other people's and the
@@ -37,16 +60,73 @@ import { verdictStore } from '@/lib/verdict/service';
 const GROUND = '#1A1610';
 /** `--card`, one step up: the quote panel. */
 const PANEL = '#29241C';
+/** `--sunk`, the recess: the health bar's track, as on every board row. */
+const SUNK = '#0F0A06';
 /** `--line` (ink at .17) resolved over `--card`. */
 const RULE = '#4A453D';
 /** `--ink`. */
 const INK = '#EDE6DE';
 /** `--dimmer` (ink at .66) resolved over `--pit`. */
 const MUTED = '#A59F98';
-/** `--cut`. */
+/** `--cut` — what was taken. */
 const CUT = '#F45C33';
+/** `--held` — what survived. The kept head of the bar, and nothing else. */
+const HELD = '#3E9C86';
 
 const SIZE = { width: 1200, height: 630 } as const;
+
+const SANS = 'Archivo';
+const MONO = 'IBM Plex Mono';
+
+/**
+ * One Google font file, as TTF, fetched once per process.
+ *
+ * `css2` hands back a `truetype` source rather than a `woff2` one when the
+ * request does not advertise woff2 support, which is what Node's own fetch does
+ * — and truetype is the only one of the two satori can parse. The two-step is
+ * the shape `next/og`'s own documentation uses: read the stylesheet, pull the
+ * one `src: url(…)` out of it, fetch that.
+ *
+ * The promise is cached rather than the bytes, so a burst of crawler requests on
+ * a cold process shares one fetch. A FAILED fetch is evicted, because a share
+ * card is served for as long as the process lives and a network blip at boot
+ * must not cost every card after it its typeface.
+ */
+const fonts = new Map<string, Promise<ArrayBuffer | undefined>>();
+
+async function googleFont(family: string, weight: number): Promise<ArrayBuffer | undefined> {
+  const key = `${family}:${weight}`;
+  let pending = fonts.get(key);
+  if (pending === undefined) {
+    pending = (async (): Promise<ArrayBuffer | undefined> => {
+      const url = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@${weight}`;
+      const sheet = await fetch(url);
+      if (!sheet.ok) return undefined;
+      const source = /src:\s*url\((https:\/\/[^)]+)\)\s*format\('truetype'\)/.exec(await sheet.text())?.[1];
+      if (source === undefined) return undefined;
+      const file = await fetch(source);
+      return file.ok ? await file.arrayBuffer() : undefined;
+    })().catch(() => undefined);
+    fonts.set(key, pending);
+  }
+
+  const data = await pending;
+  if (data === undefined) fonts.delete(key);
+  return data;
+}
+
+/** Satori's font list, or an empty one when the host is unreachable. */
+async function typeface(): Promise<
+  { name: string; data: ArrayBuffer; weight: 500 | 700; style: 'normal' }[] | undefined
+> {
+  const [sans, mono] = await Promise.all([googleFont(SANS, 700), googleFont(MONO, 500)]);
+  const loaded: { name: string; data: ArrayBuffer; weight: 500 | 700; style: 'normal' }[] = [];
+  if (sans !== undefined) loaded.push({ name: SANS, data: sans, weight: 700, style: 'normal' });
+  if (mono !== undefined) loaded.push({ name: MONO, data: mono, weight: 500, style: 'normal' });
+  // `fonts: []` is not "use the default", it is "no font at all", and satori
+  // throws on it. Undefined is the way to ask for the bundled fallback.
+  return loaded.length === 0 ? undefined : loaded;
+}
 
 export async function GET(_request: Request, context: { params: Promise<{ slug: string }> }): Promise<Response> {
   const { slug } = await context.params;
@@ -58,6 +138,7 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
   }
 
   const fields = ogFields(parseVerdict(row));
+  const loaded = await typeface();
 
   return new ImageResponse(
     (
@@ -69,40 +150,88 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
           flexDirection: 'column',
           background: GROUND,
           color: INK,
-          padding: '56px 64px',
-          borderLeft: `14px solid ${CUT}`,
+          fontFamily: SANS,
+          padding: '48px 60px 44px',
+          borderLeft: `6px solid ${CUT}`,
         }}
       >
+        {/* The wordmark, and the category it was judged in. `pit.css`'s `.mark`
+            is the same two things: a square of `--cut`, then THE PIT. */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: 22, letterSpacing: 4, color: MUTED }}>{fields.eyebrow}</div>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: 'flex', width: 18, height: 18, background: CUT }} />
+            <div style={{ display: 'flex', fontSize: 26, fontWeight: 700, letterSpacing: 2, marginLeft: 12 }}>
+              THE PIT
+            </div>
+          </div>
+          <div style={{ display: 'flex', fontFamily: MONO, fontSize: 20, letterSpacing: 3, color: MUTED }}>
+            {fields.category}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'baseline', marginTop: 34 }}>
+          <div style={{ display: 'flex', fontSize: 48, fontWeight: 700, lineHeight: 1.06, flexGrow: 1 }}>
+            {fields.name}
+          </div>
           {fields.pitch === '' ? (
             <div style={{ display: 'flex' }} />
           ) : (
-            <div style={{ display: 'flex', fontSize: 20, color: MUTED, border: `1px solid ${RULE}`, padding: '6px 12px' }}>
+            <div
+              style={{
+                display: 'flex',
+                fontFamily: MONO,
+                fontSize: 19,
+                color: MUTED,
+                border: `1px solid ${RULE}`,
+                padding: '5px 11px',
+                marginLeft: 24,
+              }}
+            >
               {fields.pitch}
             </div>
           )}
         </div>
 
-        <div style={{ display: 'flex', fontSize: 62, fontWeight: 700, marginTop: 26, lineHeight: 1.08 }}>
-          {fields.name}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'baseline', marginTop: 22 }}>
-          <div style={{ display: 'flex', fontSize: 120, fontWeight: 700, color: CUT, lineHeight: 1 }}>
-            {fields.cuts}
+        {/*
+          The rank, big, with the count it is meaningless without — and beside it
+          the hundred everyone walks in with, whose head is what survived and
+          whose tail is what was taken. They share a band rather than stacking
+          because a 180px figure and a full-width bar on separate lines leave the
+          quote nothing to sit in; `lineHeight` is above 1 because at this size a
+          line box of exactly 1em clips the crossbar off the `#`.
+        */}
+        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline' }}>
+            <div style={{ display: 'flex', fontFamily: MONO, fontSize: 180, color: CUT, lineHeight: 1.16 }}>
+              {fields.rankNumber}
+            </div>
+            <div style={{ display: 'flex', fontFamily: MONO, fontSize: 46, color: MUTED, marginLeft: 14 }}>
+              {fields.rankOf}
+            </div>
           </div>
-          <div style={{ display: 'flex', fontSize: 34, color: INK, marginLeft: 18 }}>{fields.cutsLabel}</div>
-        </div>
 
-        {/* `marginBottom` guarantees a gap even when the quote below is pushed
-            to the bottom by `marginTop: auto`. */}
-        <div style={{ display: 'flex', fontSize: 26, color: MUTED, marginTop: 14, marginBottom: 26 }}>
-          {fields.rank}
+          {/* Square, like the meter on every board row. */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              flexGrow: 1,
+              marginLeft: 40,
+              marginBottom: 34,
+            }}
+          >
+            <div style={{ display: 'flex', width: '100%', height: 16, background: SUNK }}>
+              <div style={{ display: 'flex', width: `${fields.health}%`, height: '100%', background: HELD }} />
+              <div style={{ display: 'flex', flexGrow: 1, height: '100%', background: CUT }} />
+            </div>
+            <div style={{ display: 'flex', fontFamily: MONO, fontSize: 21, color: MUTED, marginTop: 12 }}>
+              {fields.healthLine}
+            </div>
+          </div>
         </div>
 
         {fields.quote === '' ? (
-          <div style={{ display: 'flex' }} />
+          <div style={{ display: 'flex', marginTop: 'auto' }} />
         ) : (
           <div
             style={{
@@ -112,17 +241,24 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
               background: PANEL,
               borderLeft: `6px solid ${CUT}`,
               borderTop: `1px solid ${RULE}`,
-              padding: '20px 24px',
+              padding: '18px 22px',
             }}
           >
-            <div style={{ display: 'flex', fontSize: 28, lineHeight: 1.35, color: INK }}>{fields.quote}</div>
-            <div style={{ display: 'flex', fontSize: 20, color: MUTED, marginTop: 12 }}>{fields.attribution}</div>
+            <div style={{ display: 'flex', fontSize: 26, lineHeight: 1.32, color: INK }}>{fields.quote}</div>
+            <div style={{ display: 'flex', fontFamily: MONO, fontSize: 19, color: MUTED, marginTop: 10 }}>
+              {fields.attribution}
+            </div>
           </div>
         )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+          <div style={{ display: 'flex', fontFamily: MONO, fontSize: 19, color: MUTED }}>{fields.stamp}</div>
+        </div>
       </div>
     ),
     {
       ...SIZE,
+      ...(loaded === undefined ? {} : { fonts: loaded }),
       headers: {
         // The image is as frozen as the row behind it, and it is fetched by
         // crawlers rather than by people, so it is cached as hard as the page.

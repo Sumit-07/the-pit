@@ -26,13 +26,40 @@ import './pit.css';
  * decoration: without it, a relative Open Graph URL on a shared board resolves
  * against whatever preview deployment produced it.
  */
+const TITLE = "The Pit — you can't outbid the pit";
+const DESCRIPTION = 'Everyone walks in at 100. Fewest cuts wins.';
+
+/**
+ * The site-level share card, inherited by every surface that does not set its own.
+ *
+ * `openGraph` and `twitter` are declared here rather than per page because the
+ * default is the one that gets used: a link to `/how-it-works` or `/boards` is
+ * pasted into a chat far more often than anyone remembers to write a tag for it,
+ * and a surface with no `og:title` is unfurled by its `<title>` and its URL —
+ * which on this site is a slug and a domain. `summary_large_image` is the card a
+ * board or a verdict is worth showing at; the per-verdict image is set by
+ * `/v/<slug>` itself, and the per-board one by `boards/[slug]/opengraph-image`.
+ */
 export const metadata: Metadata = {
   metadataBase: new URL('https://thepit.show'),
   title: {
-    default: "The Pit — you can't outbid the pit",
+    default: TITLE,
     template: '%s — The Pit',
   },
-  description: 'Everyone walks in at 100. Fewest cuts wins.',
+  description: DESCRIPTION,
+  openGraph: {
+    type: 'website',
+    siteName: 'The Pit',
+    url: '/',
+    title: TITLE,
+    description: DESCRIPTION,
+    locale: 'en',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 };
 
 export const viewport: Viewport = {

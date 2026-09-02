@@ -20,6 +20,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 
+import { boardStats } from '@/lib/boards/home';
 import { defaultBoardSource } from '@/lib/boards/source';
 import { toBoardView } from '@/lib/boards/view';
 import { CategoryBoard } from '@/components/category-board';
@@ -39,11 +40,33 @@ export async function generateMetadata({
   const { slug } = await params;
   const document_ = await defaultBoardSource().read(slug);
   if (document_ === undefined) return { title: 'No board here' };
+
+  // `brief` Part 5: never promise a rank. The share line says what the board
+  // holds and where its middle sits — two facts about the category, neither of
+  // which is a position, and both computed off the snapshot the page is about to
+  // render rather than looked up.
+  //
+  // The median comes from `boardStats`, which is the homepage's own fold, run
+  // over a list of one. A second median in this file would be a second answer to
+  // "where is the middle of a board", and the two would part the first time
+  // either was touched.
+  const headline =
+    `${document_.category} · ${document_.productCount} products judged · ` +
+    `median health ${Math.round(boardStats([toBoardView(document_)]).medianHealth)}`;
+  const description = `${document_.productCount} products, every cut and the juror who took it.`;
+
   return {
     title: document_.category,
-    // `brief` Part 5: never promise a rank. The description says what the board
-    // holds and what it cost, and stamps the count — not a position.
-    description: `${document_.productCount} products, every cut and the juror who took it.`,
+    description,
+    alternates: { canonical: `/boards/${slug}` },
+    openGraph: {
+      type: 'article',
+      siteName: 'The Pit',
+      url: `/boards/${slug}`,
+      title: headline,
+      description,
+    },
+    twitter: { card: 'summary_large_image', title: headline, description },
   };
 }
 
