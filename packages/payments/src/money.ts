@@ -4,13 +4,21 @@
  *
  * ## Why $5 is a constant and not a config value
  *
- * `brief §2.3` gives the tiers as "$5 = 1 attempt, $15 = 3 attempts + fit
- * report" and then gives the REASON: $5 stays the atomic unit so "same five
- * dollars for everyone" is literally true. A tier table that could express
- * "$40 = 12 attempts" or "$5 = 1 attempt, but $50 = 15 attempts and priority"
- * would quietly make that sentence false, so the table is closed: two tiers,
- * both defined here, and `tierForPayment` refuses anything it does not
- * recognise rather than dividing the amount by 500 and guessing.
+ * `brief §2.3` gives $5 = 1 attempt and then gives the REASON: $5 stays the
+ * atomic unit so "same five dollars for everyone" is literally true. A tier
+ * table that could express "$40 = 12 attempts" or "$5 = 1 attempt, but $50 = 15
+ * attempts and priority" would quietly make that sentence false, so the table is
+ * closed: one tier, defined here, and `tierForPayment` refuses anything it does
+ * not recognise rather than dividing the amount by 500 and guessing.
+ *
+ * ## Why there is only one tier
+ *
+ * The brief also priced a second tier that bundled an off-board "fit report".
+ * Nothing in this repository produces a fit report, so that tier was a paid
+ * deliverable with no implementation and it is withdrawn. The shapes here are
+ * deliberately still plural — `PriceTierId`, `PRICE_TIERS`, `PriceTier.fitReport`
+ * — because a second tier is a pricing decision that may come back, and the seam
+ * it would return through is cheaper to keep than to rebuild.
  *
  * ## Everything is integer cents
  *
@@ -41,20 +49,20 @@ const BPS_DENOMINATOR = 10_000;
 /** The only currency the tiers are priced in. Anything else needs review, not a guess. */
 export const SUPPORTED_CURRENCY = 'USD';
 
-/**
- * The two things that can be bought.
- *
- * `fit_report` is a per-purchase entitlement rather than a third attempt tier,
- * because `brief` Part 4 makes the fit report an OFF-BOARD advisory run: it
- * never writes to rankings, so it is not an attempt and must not be counted as
- * one.
- */
-export type PriceTierId = 'single' | 'triple';
+/** The one thing that can be bought. A union of one, so a second can be added back. */
+export type PriceTierId = 'single';
 
 export interface PriceTier {
   readonly id: PriceTierId;
   readonly amountCents: number;
   readonly attempts: number;
+  /**
+   * A per-purchase entitlement rather than an attempt, because the report it
+   * named would have been an OFF-BOARD advisory run that never writes to
+   * rankings. No tier sets it and nothing generates one; it is `false` on
+   * everything sold, and it stays on the shape so the entitlement seam — and the
+   * `orders.includes_fit_report` column already in the database — keeps a name.
+   */
   readonly fitReport: boolean;
   /** The line the purchase page shows. `brief` Part 5: "$5 to enter." */
   readonly label: string;
@@ -69,16 +77,7 @@ export const TIER_SINGLE: PriceTier = {
   label: 'Throw it in · $5',
 };
 
-/** `brief §2.3`. Three attempts plus the off-board fit report. */
-export const TIER_TRIPLE: PriceTier = {
-  id: 'triple',
-  amountCents: 1500,
-  attempts: 3,
-  fitReport: true,
-  label: 'Three throws + fit report · $15',
-};
-
-export const PRICE_TIERS: readonly PriceTier[] = [TIER_SINGLE, TIER_TRIPLE];
+export const PRICE_TIERS: readonly PriceTier[] = [TIER_SINGLE];
 
 /**
  * The purchase-page terms, kept here rather than in the UI package because two

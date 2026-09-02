@@ -95,8 +95,11 @@ export class FakeDelivery {
         kind: 'grant',
         providerEventId: key,
         providerPaymentId: `pay_${key}`,
-        tier: attempts === 3 ? 'triple' : 'single',
-        amountCents: attempts === 3 ? 1500 : 500,
+        // One tier is on sale, so a multi-attempt balance is several $5 grants
+        // rather than one larger one. The helper folds them into a single ledger
+        // row because these tests are about spending attempts, not buying them.
+        tier: 'single',
+        amountCents: attempts * 500,
       },
       idempotencyKey: key,
       createdAt: new Date('2026-03-01T00:00:00.000Z'),

@@ -84,7 +84,7 @@ describe('idempotency', () => {
     };
 
     expect(await grantThreeInOneTransaction('evt_retry')).toBeNull();
-    // $15 = 3 attempts (brief §2.3).
+    // Three attempts, granted once: the retry below must not add three more.
     const first = await database.pg.query<{ balance: number }>(`SELECT attempt_balance($1) AS balance`, [payer.id]);
     expect(Number(first.rows[0]?.balance)).toBe(3);
 

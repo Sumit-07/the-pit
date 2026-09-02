@@ -148,7 +148,7 @@ beforeEach(async () => {
 const CONFIG: DodoConfig = {
   mode: 'test',
   webhookSecret: 'whsec_' + 'a'.repeat(40),
-  productIds: { prod_single: 'single', prod_triple: 'triple' },
+  productIds: { prod_single: 'single' },
   returnUrl: `${ORIGIN}/checkout/success`,
 };
 

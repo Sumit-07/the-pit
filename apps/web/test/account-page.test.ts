@@ -201,7 +201,11 @@ describe('with a session', () => {
     expect(page.status).toBe(200);
     expect(reads.calls).toEqual([`balance:${ACCOUNT_ID}`, `purchases:${ACCOUNT_ID}`, `listings:${ACCOUNT_ID}`]);
     expect(page.body).toContain('>2<');
-    expect(page.body).toContain('3 attempts + fit report');
+    // The order really did grant three and really was $15 — a row written before
+    // that tier was withdrawn — so both are shown. What is NOT shown is the fit
+    // report the row still flags, because nothing here ever produced one.
+    expect(page.body).toContain('3 attempts');
+    expect(page.body).not.toContain('fit report');
     expect(page.body).toContain('$15.00');
     expect(page.body).toContain('Runlet');
     expect(page.body).toContain('1 Jun 2026');

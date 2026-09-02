@@ -90,7 +90,7 @@ header.page h1{margin-top:9px}
  * --sunk is the one surface below the ground, and putting the jury in it says
  * the right thing about the jury: it is not a feature being sold beside the form,
  * it is the floor the form drops into. A raised card here would have read as a
- * third pricing tier.
+ * second thing for sale.
  */
 .panelcol{background:var(--sunk);border:1px solid var(--hair);border-radius:var(--r2);
   padding:18px 18px 20px;box-shadow:inset 0 2px 5px rgb(var(--shade-c) / .5)}
@@ -112,17 +112,27 @@ header.page h1{margin-top:9px}
 .plist .pm{display:block;margin-top:6px;font-size:12px;line-height:1.6;color:var(--dim)}
 .pfoot{margin-top:14px;font-family:var(--mono);font-size:10.5px;line-height:1.7;color:var(--faint)}
 
-.tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-top:10px}
-.tier{display:block;background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
+/* The card pair. One control uses it — the byline — and it is a pair of cards
+   rather than a checkbox because both outcomes have to be stated in the same
+   breath. See bylineChoice. */
+.choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-top:10px}
+.choice{display:block;background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
   box-shadow:var(--lip),var(--e1);padding:15px 16px;cursor:pointer;
   transition:box-shadow .15s ease,border-color .15s ease}
-.tier:hover{box-shadow:var(--e2);border-color:rgb(var(--ink-c) / .2)}
-.tier:has(input:checked){border-color:var(--ink);box-shadow:var(--e2)}
-.tier:has(input:focus-visible){outline:2px solid var(--ink);outline-offset:2px}
-.tier b{display:flex;align-items:center;gap:9px;font-size:14.5px;font-weight:600;letter-spacing:-.01em}
-.tier span{display:block;font-family:var(--mono);font-size:11.5px;color:var(--dimmer);
+.choice:hover{box-shadow:var(--e2);border-color:rgb(var(--ink-c) / .2)}
+.choice:has(input:checked){border-color:var(--ink);box-shadow:var(--e2)}
+.choice:has(input:focus-visible){outline:2px solid var(--ink);outline-offset:2px}
+.choice b{display:flex;align-items:center;gap:9px;font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+.choice span{display:block;font-family:var(--mono);font-size:11.5px;color:var(--dimmer);
   margin-top:7px;padding-left:24px}
-.tier input{margin:0;flex:0 0 auto;accent-color:var(--ink);width:15px;height:15px}
+.choice input{margin:0;flex:0 0 auto;accent-color:var(--ink);width:15px;height:15px}
+
+/* The same card, stated rather than chosen: there is one price, so it is a fact
+   on the page and not a control. No radio, so no 24px gutter under the title. */
+.buying{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
+  box-shadow:var(--lip),var(--e1);padding:15px 16px;margin-top:10px}
+.buying b{display:block;font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+.buying span{display:block;font-family:var(--mono);font-size:11.5px;color:var(--dimmer);margin-top:7px}
 
 /* The one button that takes money is the filled one, wherever it appears — and on
    dark "filled" means the lightest surface in the system, with the ground as its
@@ -169,13 +179,12 @@ a.act{margin-top:16px}
 /*
  * ---------- the byline ----------
  *
- * The same two cards the tiers use, and that is the argument for the styling
- * rather than a coincidence of markup. This is a purchase decision of the same
- * weight as $5-or-$15: it is chosen once, before anything is known, and it is the
- * only one on the page that cannot be revisited. A checkbox tucked under the
- * category select would have said the opposite about it — and an UNCHECKED box
- * would have made "named" a default nobody was shown rather than a choice
- * somebody made.
+ * Two cards, at the weight of a purchase decision, and that is the argument for
+ * the styling rather than a coincidence of markup. It is chosen once, before
+ * anything is known, and it is the only field on the page that cannot be
+ * revisited. A checkbox tucked under the category select would have said the
+ * opposite about it — and an UNCHECKED box would have made "named" a default
+ * nobody was shown rather than a choice somebody made.
  */
 .byline{margin-top:10px}
 /* The example robot. A recess, like the panel column: it is a specimen of what
@@ -447,39 +456,6 @@ const PANEL_SCRIPT = `(function(){
   show();
 })();`;
 
-/**
- * Keep the price on the button equal to the price of the tier that is checked.
- *
- * The button used to say "Take my $5 →" unconditionally while the $15 tier sat
- * three inches above it, selectable. That is a button that lies to a third of
- * the people who read it, and it lies about the one thing on the page that is a
- * number of dollars.
- *
- * Server-rendered first — `payLabel(selectedTier(view))` puts the right price
- * there for the tier the form arrives with, including a `?tier=triple` link and
- * a re-render after a refusal — so with scripting off the button is correct on
- * arrival and this only keeps it correct as the radios move. The price itself
- * comes off the radio's own `data-pay`, so there is one price table and it is
- * `PRICE_TIERS`.
- */
-const PAY_SCRIPT = `(function(){
-  var form=document.getElementById(${JSON.stringify(FORM_ID)});
-  var pay=document.getElementById(${JSON.stringify(PAY_ID)});
-  if(!form||!pay)return;
-  var radios=form.querySelectorAll('input[name="tier"]');
-  if(!radios.length)return;
-  function show(){
-    for(var i=0;i<radios.length;i++){
-      if(!radios[i].checked)continue;
-      var amount=radios[i].getAttribute('data-pay');
-      if(amount)pay.textContent='Take my '+amount+' \\u2192';
-      return;
-    }
-  }
-  for(var i=0;i<radios.length;i++)radios[i].addEventListener('change',show);
-  show();
-})();`;
-
 function document_(title: string, body: string, wide = false): string {
   return [
     '<!doctype html>',
@@ -501,7 +477,6 @@ function document_(title: string, body: string, wide = false): string {
     // At the end of the body, so they bind to markup that already exists and so
     // the form is on screen and usable before a byte of either has run.
     `<script>${AUTOFILL_SCRIPT}</script>`,
-    `<script>${PAY_SCRIPT}</script>`,
     // Only where there is something to switch between. `wide` is set exactly when
     // the panel column rendered, so the refusal page and a deployment with no
     // reference files ship no dead script at all.
@@ -528,6 +503,13 @@ export interface SubmitFormValues {
   /** What they CLAIM, in their own words. `lib/checkout/pitch.ts`; up to `PITCH_LIMIT`. */
   readonly pitch: string;
   readonly categorySlug: string;
+  /**
+   * What was posted in the `tier` field, as text, before anything checks it.
+   *
+   * `string` rather than `PriceTierId` on purpose: this is the wire value, and
+   * the whole job of `tierFor` on the way in is to turn an arbitrary string into
+   * a tier or a refusal. `single` is the only one that resolves.
+   */
   readonly tier: string;
   /**
    * Published as a robot rather than under a name.
@@ -564,6 +546,11 @@ export interface SubmitPageView {
    * not mounted renders the form on its own rather than a column of placeholders.
    */
   readonly panels?: readonly CategoryPanel[];
+  /**
+   * `PRICE_TIERS`. One entry, and the page states it rather than offering a
+   * choice — but it is still a list, because the price on the button and the
+   * price on the card must both come off the catalogue and not off a literal.
+   */
   readonly tiers: readonly PriceTier[];
   readonly values: SubmitFormValues;
   /** The description limit, printed rather than implied. `DECISIONS.md` S5: 300. */
@@ -596,7 +583,7 @@ function categoryOptions(view: SubmitPageView): string {
 }
 
 /**
- * `500` -> `"$5"`, `1500` -> `"$15"`.
+ * `500` -> `"$5"`.
  *
  * Not `formatUsd`, deliberately. That one is the accounting spelling and always
  * carries its cents; this is the price said out loud, on a button, in a sentence
@@ -618,26 +605,30 @@ function selectedTier(view: SubmitPageView): PriceTier | undefined {
   return view.tiers.find((tier) => tier.id === view.values.tier) ?? view.tiers[0];
 }
 
-function tierChoices(view: SubmitPageView): string {
-  return view.tiers
-    .map((tier) => {
-      const checked = tier.id === view.values.tier ? ' checked' : '';
-      const detail =
-        tier.attempts === 1
-          ? 'One run. One verdict. One place on the board.'
-          : `${tier.attempts} runs, plus the off-board fit report.`;
-      return [
-        '<label class="tier">',
-        // `data-pay` carries this tier's price to the button. The alternative was
-        // a price table inlined into the script, which is the same two numbers
-        // written down twice — and the copy that drifts is always the second one.
-        `<b><input type="radio" name="tier" value="${escapeHtml(tier.id)}" data-pay="${escapeHtml(price(tier.amountCents))}"${checked}>`,
-        `${escapeHtml(tier.label)}</b>`,
-        `<span>${escapeHtml(detail)} ${escapeHtml(formatUsd(tier.amountCents))}</span>`,
-        '</label>',
-      ].join('');
-    })
-    .join('');
+/**
+ * What the money buys, stated rather than chosen.
+ *
+ * This was a radio group while a second tier was on sale. That tier bundled an
+ * off-board fit report nothing in this repository generates, so it is withdrawn
+ * and there is nothing left to pick: a one-option radio group is a control that
+ * cannot be operated, and it would still ask a visitor to make a decision that
+ * has already been made for them.
+ *
+ * The tier still travels, as a hidden field, so the posted contract is unchanged
+ * and a second tier comes back as a control rather than as a new field. The
+ * server does not trust it either way — `tierFor` refuses anything but `single`
+ * before a Dodo call, so an edited hidden field buys nothing.
+ */
+function whatYouAreBuying(view: SubmitPageView): string {
+  const tier = selectedTier(view);
+  if (tier === undefined) return '';
+  return [
+    '<div class="buying">',
+    `<b>${escapeHtml(tier.label)}</b>`,
+    `<span>One run. One verdict. One place on the board. ${escapeHtml(formatUsd(tier.amountCents))}</span>`,
+    '</div>',
+    `<input type="hidden" name="tier" value="${escapeHtml(tier.id)}">`,
+  ].join('');
 }
 
 /**
@@ -649,8 +640,8 @@ function tierChoices(view: SubmitPageView): string {
  * shown it, and this is the one field on the form whose default they can never
  * revisit. Two cards state both outcomes in the same breath, pre-select the
  * ordinary one, and make choosing the other an act rather than an omission. It is
- * also the same control the tiers use, which is the honest comparison: this is a
- * purchase decision of that weight.
+ * the only choice left on this form, now that there is one price, and it is
+ * styled at the weight of a purchase decision because that is what it is.
  *
  * ## The copy states the terms and stops
  *
@@ -673,12 +664,12 @@ function bylineChoice(view: SubmitPageView): string {
   const named = view.values.anonymous ? '' : ' checked';
   const anon = view.values.anonymous ? ' checked' : '';
   return [
-    `<div class="tiers byline">`,
-    '<label class="tier">',
+    `<div class="choices byline">`,
+    '<label class="choice">',
     `<b><input type="radio" name="${BYLINE_FIELD}" value="${BYLINE_NAMED}"${named}>Under your name</b>`,
     '<span>Your name and your address sit on the board beside the score.</span>',
     '</label>',
-    '<label class="tier">',
+    '<label class="choice">',
     `<b><input type="radio" name="${BYLINE_FIELD}" value="${BYLINE_ANONYMOUS}"${anon}>As a robot</b>`,
     '<span>Your name and your address are withheld. Nothing else is.</span>',
     '</label>',
@@ -852,17 +843,16 @@ export function renderSubmitPage(view: SubmitPageView): string {
     `<select name="category" required>${categoryOptions(view)}</select>`,
     '<span class="hint">Pick the one your buyers would search.</span></label>',
 
-    // Above the tier, and that order is the argument. The tier is how many runs
-    // you are buying and can be bought again tomorrow; this is the one thing on
-    // the form that is settled forever the moment the button is pressed, and it
-    // should be read while the visitor is still deciding rather than after they
-    // have already reached for the price.
+    // Above the price, and that order is the argument. A run can be bought again
+    // tomorrow; this is the one thing on the form that is settled forever the
+    // moment the button is pressed, and it should be read while the visitor is
+    // still deciding rather than after they have already reached for the price.
     '<div class="sh" style="margin-top:18px">How you appear on the board</div>',
     bylineChoice(view),
     bylineTerms(),
 
     '<div class="sh" style="margin-top:22px">What you are buying</div>',
-    `<div class="tiers">${tierChoices(view)}</div>`,
+    whatYouAreBuying(view),
 
     `<button class="act" type="submit" id="${PAY_ID}">${escapeHtml(payLabel(selectedTier(view)))}</button>`,
     '</form>',
@@ -976,7 +966,7 @@ function renderFormOnly(view: SubmitPageView): string {
     '<div class="sh" style="margin-top:18px">How you appear on the board</div>',
     bylineChoice(view),
     '<span class="hint">A robot withholds your name and URL. Nothing else.</span>',
-    `<div class="tiers">${tierChoices(view)}</div>`,
+    whatYouAreBuying(view),
     '<button class="act" type="submit">Try again →</button>',
     '</form>',
   ].join('');

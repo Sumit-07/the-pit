@@ -148,7 +148,7 @@ export const submissions = pgTable(
      */
     cycleId: text('cycle_id').notNull(),
 
-    /** `single` or `triple`. `PriceTierId` in `@the-pit/payments`. */
+    /** `single`, always. `PriceTierId` in `@the-pit/payments`. */
     tier: text('tier').notNull(),
 
     /** Which pitch this will be, 1-based. `brief §2.4`: shown publicly as "3rd pitch". */
@@ -194,11 +194,14 @@ export const submissions = pgTable(
     ),
 
     /**
-     * `brief §2.3` closes the tier table at two: "$5 = 1 attempt, $15 = 3
-     * attempts + fit report. Keeps $5 as the atomic unit so 'same five dollars
-     * for everyone' stays literally true." A third tier is a pricing decision,
-     * and it should reach this table as a migration somebody reviewed rather than
-     * as a string nothing here recognises.
+     * `brief §2.3` closes the tier table: "$5 = 1 attempt. Keeps $5 as the atomic
+     * unit so 'same five dollars for everyone' stays literally true." Another
+     * tier is a pricing decision, and it should reach this table as a migration
+     * somebody reviewed rather than as a string nothing here recognises.
+     *
+     * `triple` is still named here because the constraint was written when it was
+     * on sale and this file's migration is already applied. It is no longer
+     * offered and nothing writes it; the rows that hold it are real sales.
      */
     check('submissions_tier_known', sql`${t.tier} in ('single', 'triple')`),
 

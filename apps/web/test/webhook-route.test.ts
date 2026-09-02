@@ -361,10 +361,13 @@ describe('a settled payment', () => {
     expect(ledgerStore.entries[0]?.delta).toBe(1);
   });
 
-  it('grants three for the $15 tier', async () => {
-    await handleDodoWebhookRequest(signed(body({ amount: 1500 })), deps);
-    expect(ledgerStore.entries[0]?.delta).toBe(3);
-    expect(ledgerStore.entries[0]?.reason).toMatchObject({ kind: 'grant', tier: 'triple' });
+  it('grants nothing for the withdrawn $15 tier and sends it for review', async () => {
+    // $15 is no longer a price, so it is an amount we cannot map to a tier. The
+    // rule is the one that matters most on this route: an unrecognised amount
+    // becomes a review queue entry, never `Math.floor(amountCents / 500)`.
+    const response = await handleDodoWebhookRequest(signed(body({ amount: 1500 })), deps);
+    expect(await response.json()).toEqual({ status: 'needs_review' });
+    expect(ledgerStore.entries).toHaveLength(0);
   });
 
   it('mints a capability slug the customer can reach the account with', async () => {

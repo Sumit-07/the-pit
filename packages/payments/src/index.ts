@@ -13,7 +13,7 @@
  * | §2.2 grant on the signed webhook only | `handleDodoWebhook`; `resolveSuccessRedirect` takes no store |
  * | §2.2 idempotent webhook | `grantIdempotencyKey` + a UNIQUE index |
  * | §2.2 idempotent job creation | `jobIdempotencyKey` + a UNIQUE index |
- * | §2.3 $5 = 1 attempt, $15 = 3 | `PRICE_TIERS`, `tierForPayment` |
+ * | §2.3 $5 = 1 attempt | `PRICE_TIERS`, `tierForPayment` |
  * | §2.3 consumed only on delivery | `AttemptsLedger.deliver`, inside one `DeliveryTx` |
  * | §2.3 failures are free retries | `decideAttempt` |
  * | §2.3 partial success is a failure | the engine's `RunOutcome` union, read by `decideAttempt` |

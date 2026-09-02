@@ -21,7 +21,7 @@
  * Mapping them is optional and worth doing: a discount code changes the amount
  * and does not change what was sold, and an unmapped discounted $4 payment is
  * `needs_review` rather than an attempt. Unset, the amount alone still prices the
- * two tiers exactly.
+ * one tier exactly.
  */
 
 import { mintCapabilitySlug } from '@the-pit/auth';
@@ -35,7 +35,7 @@ import {
   type Database,
   type PostgresAccountStore,
 } from '@the-pit/db';
-import { AttemptsLedger, seededCategoryClassifier, type DodoConfig } from '@the-pit/payments';
+import { AttemptsLedger, seededCategoryClassifier, type DodoConfig, type PriceTierId } from '@the-pit/payments';
 
 import { candidateCategories, listingLookup, submissionUrlResolver } from '@/lib/checkout/bindings';
 import type { DodoWebhookDeps } from '@/lib/payments/webhook-handlers';
@@ -85,12 +85,10 @@ function database(): Database {
 }
 
 /** The tier mapping, from whichever Dodo product ids this deployment was given. */
-function productIds(): Record<string, 'single' | 'triple'> {
-  const map: Record<string, 'single' | 'triple'> = {};
+function productIds(): Record<string, PriceTierId> {
+  const map: Record<string, PriceTierId> = {};
   const single = process.env['DODO_PRODUCT_SINGLE'];
-  const triple = process.env['DODO_PRODUCT_TRIPLE'];
   if (single !== undefined && single !== '') map[single] = 'single';
-  if (triple !== undefined && triple !== '') map[triple] = 'triple';
   return map;
 }
 

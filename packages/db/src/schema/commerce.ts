@@ -79,21 +79,26 @@ export const orders = pgTable(
       .notNull()
       .references(() => accounts.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
 
-    /** Gross, in the smallest currency unit. `brief §2.3`: $5 or $15. */
+    /** Gross, in the smallest currency unit. `brief §2.3`: $5. */
     amountCents: integer('amount_cents').notNull(),
 
     currency: char('currency', { length: 3 }).notNull(),
 
     /**
-     * How many attempts this event grants. `brief §2.3`: "$5 = 1 attempt. $15 = 3
-     * attempts + fit report. Keeps $5 as the atomic unit so 'same five dollars
-     * for everyone' stays literally true."
+     * How many attempts this event grants. `brief §2.3`: "$5 = 1 attempt. Keeps
+     * $5 as the atomic unit so 'same five dollars for everyone' stays literally
+     * true."
      *
      * Zero for a refund or dispute event, which grants nothing.
      */
     attemptsGranted: integer('attempts_granted').notNull(),
 
-    /** The $15 tier's extra: an off-board advisory report (`brief` Part 4). */
+    /**
+     * An off-board advisory report (`brief` Part 4) that the withdrawn second
+     * tier bundled. Nothing generates one, no tier on sale sets this, and every
+     * new order writes `false`. The column stays because the rows that hold
+     * `true` are real sales and dropping it would rewrite what they bought.
+     */
     includesFitReport: boolean('includes_fit_report').notNull().default(false),
 
     status: orderStatus('status').notNull(),
@@ -220,12 +225,12 @@ export const attempts = pgTable(
      * How many attempts this row moves. Positive on a grant, exactly `-1` on a
      * consume, either sign on an adjustment.
      *
-     * A grant is ONE row worth what the tier bought — `brief §2.3`'s "$15 = 3
-     * attempts" is `delta = 3` — because the grant is one event: one signed
-     * webhook, one idempotency key, one row that either lands or does not. A
-     * consume is always exactly one, because a delivery delivers one verdict.
-     * That asymmetry is the money model, not an oversight: attempts are bought in
-     * tiers and spent one at a time.
+     * A grant is ONE row worth whatever the tier bought — `delta` is the tier's
+     * `attempts`, which is 1 at today's one price — because the grant is one
+     * event: one signed webhook, one idempotency key, one row that either lands
+     * or does not. `delta > 1` is still allowed: a tier that grants several is a
+     * pricing decision, and this column must not be the thing that forbids it.
+     * A consume is always exactly one, because a delivery delivers one verdict.
      */
     delta: integer('delta').notNull(),
 

@@ -64,12 +64,12 @@ export type LedgerEntryReason =
       /**
        * `PriceTierId` re-declared. Written out as its members rather than as
        * `string` so the bidirectional assignability check in
-       * `test/identity.test.ts` has something to fail on: a third tier added to
-       * `brief §2.3`'s "$5 = 1 attempt, $15 = 3" is a pricing change, and it
-       * should reach this package as a typecheck error rather than as a value
-       * nothing here knows about.
+       * `test/identity.test.ts` has something to fail on: a second tier added
+       * beside `brief §2.3`'s "$5 = 1 attempt" is a pricing change, and it should
+       * reach this package as a typecheck error rather than as a value nothing
+       * here knows about.
        */
-      readonly tier: 'single' | 'triple';
+      readonly tier: 'single';
       readonly amountCents: number;
     }
   | {

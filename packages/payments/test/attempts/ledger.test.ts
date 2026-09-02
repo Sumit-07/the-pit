@@ -4,7 +4,7 @@ import { decideAttempt } from '../../src/attempts/decide.js';
 import { AttemptsLedger, consumeIdempotencyKey, grantIdempotencyKey } from '../../src/attempts/ledger.js';
 import type { VerdictWrite } from '../../src/attempts/types.js';
 import { InsufficientAttemptsError } from '../../src/attempts/types.js';
-import { TIER_SINGLE, TIER_TRIPLE } from '../../src/money.js';
+import { TIER_SINGLE } from '../../src/money.js';
 import { deliveredSoloCluster, providerTimeout } from '../helpers/outcomes.js';
 import { emptyDeliveryRecord, MemoryAttemptsStore, memoryDeliveryTx } from '../helpers/stores.js';
 
@@ -33,13 +33,13 @@ describe('grant (brief §2.2: on the signed webhook, idempotent)', () => {
     const { ledger } = ledgerFor(store);
     const result = await ledger.grant({
       accountId: 'acct_1',
-      tier: TIER_TRIPLE,
+      tier: TIER_SINGLE,
       providerEventId: 'evt_1',
       providerPaymentId: 'pay_1',
-      amountCents: 1500,
+      amountCents: 500,
       now: NOW,
     });
-    expect(result).toEqual({ outcome: 'granted', attemptsGranted: 3, balance: 3 });
+    expect(result).toEqual({ outcome: 'granted', attemptsGranted: 1, balance: 1 });
   });
 
   it('grants nothing the second time the same provider event arrives', async () => {

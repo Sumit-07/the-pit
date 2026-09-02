@@ -26,7 +26,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { mintCapabilitySlug } from '@the-pit/auth';
 import type { AttemptsStore, WebhookStore } from '@the-pit/payments';
-import { AttemptsLedger, TIER_SINGLE, TIER_TRIPLE, grantIdempotencyKey } from '@the-pit/payments';
+import { AttemptsLedger, TIER_SINGLE, grantIdempotencyKey } from '@the-pit/payments';
 
 import type { Database } from '../src/client.js';
 import { readMigrations } from '../src/migrations.js';
@@ -159,21 +159,23 @@ describe('granting, and the three ways a grant is refused a second time', () => 
     expect(order.rows).toEqual([{ attempts_granted: 1, includes_fit_report: false, currency: 'USD' }]);
   });
 
-  it('grants three and marks the fit report on the $15 tier', async () => {
+  it('never marks the fit report, because no tier on sale carries one', async () => {
+    // The column stays — the rows that hold `true` were real sales — but nothing
+    // in this repository generates a fit report, so nothing written from here on
+    // may claim one was bought.
     const accountId = await account();
 
-    const granted = await ledgerFor().grant({
+    await ledgerFor().grant({
       accountId,
-      tier: TIER_TRIPLE,
+      tier: TIER_SINGLE,
       providerEventId: 'evt_15',
       providerPaymentId: 'pay_15',
-      amountCents: 1500,
+      amountCents: 500,
       now: AT,
     });
 
-    expect(granted).toEqual({ outcome: 'granted', attemptsGranted: 3, balance: 3 });
     const order = await pg.query<{ includes_fit_report: boolean }>('select includes_fit_report from orders');
-    expect(order.rows[0]?.includes_fit_report).toBe(true);
+    expect(order.rows[0]?.includes_fit_report).toBe(false);
   });
 
   it('grants nothing the second time the SAME event arrives', async () => {

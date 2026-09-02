@@ -30,10 +30,7 @@ import { EMPTY_FORM, renderSubmitPage } from '@/lib/checkout/page';
 import { firstSentence, readCategoryPanel, readCategoryPanels } from '@/lib/checkout/panel';
 import { resolveWorkdir } from '@/lib/boards/source';
 
-const TIERS = [
-  { id: 'single', label: 'One attempt', amountCents: 500, attempts: 1, includesFitReport: false },
-  { id: 'triple', label: 'Three attempts', amountCents: 1500, attempts: 3, includesFitReport: true },
-] as never;
+const TIERS = [{ id: 'single', label: 'One attempt', amountCents: 500, attempts: 1, includesFitReport: false }] as never;
 
 /** Strip tags, so an assertion is about what a reader sees. */
 function textOf(html: string): string {

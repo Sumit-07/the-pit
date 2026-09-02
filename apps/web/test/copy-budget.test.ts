@@ -169,7 +169,6 @@ const SUBMIT_VIEW: Parameters<typeof renderSubmitPage>[0] = {
   categories: ['developer-tools', 'health-fitness-wellness'],
   tiers: [
     { id: 'single', label: '$5', amountCents: 500, attempts: 1, includesFitReport: false },
-    { id: 'triple', label: '$15', amountCents: 1500, attempts: 3, includesFitReport: false },
   ] as unknown as Parameters<typeof renderSubmitPage>[0]['tiers'],
   values: EMPTY_FORM,
   descriptionLimit: 300,

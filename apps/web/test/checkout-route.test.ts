@@ -207,7 +207,7 @@ function blockingClassifier(suggested: string): CategoryClassifier {
 const CONFIG: DodoConfig = {
   mode: 'test',
   webhookSecret: SECRET,
-  productIds: { prod_single: 'single', prod_triple: 'triple' },
+  productIds: { prod_single: 'single' },
   returnUrl: `${ORIGIN}/checkout/success`,
 };
 
@@ -395,10 +395,43 @@ describe('the submission row — the thing that was missing', () => {
     expect(transport.sessionCount).toBe(1);
   });
 
-  it('records the tier the buyer chose', async () => {
-    await handleCheckoutCreate(post({ tier: 'triple' }), deps);
-    expect(submissions.rows[0]?.tier).toBe('triple');
-    expect(transport.calls[0]?.productId).toBe('prod_triple');
+  it('records the tier the buyer bought', async () => {
+    await handleCheckoutCreate(post(), deps);
+    expect(submissions.rows[0]?.tier).toBe('single');
+    expect(transport.calls[0]?.productId).toBe('prod_single');
+  });
+
+  it('refuses a tier that is not on sale, and charges nothing for it', async () => {
+    // `triple` was a real price once — three throws plus a fit report — and
+    // nothing in this repository ever produced the report, so it was withdrawn.
+    // A form edited to ask for it again must be REFUSED rather than quietly
+    // billed as a $5 throw: silently charging a different price than the one
+    // that was asked for is the failure mode this guards.
+    const response = await handleCheckoutCreate(postJson({ tier: 'triple' }), deps);
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({
+      status: 'rejected',
+      code: 'unknown_tier',
+      message: 'Pick $5.',
+      charged: false,
+    });
+    // Nothing reached Dodo and nothing was written down: no session, no
+    // submission row, no idempotency key burned.
+    expect(transport.calls).toHaveLength(0);
+    expect(transport.sessionCount).toBe(0);
+    expect(submissions.rows).toHaveLength(0);
+  });
+
+  it('refuses the same way from a plain form post, re-rendering with one price', async () => {
+    const response = await handleCheckoutCreate(post({ tier: 'triple' }), deps);
+
+    expect(response.status).toBe(422);
+    const body = await response.text();
+    expect(body).toContain('Take my $5 →');
+    expect(body).not.toContain('value="triple"');
+    expect(transport.calls).toHaveLength(0);
+    expect(submissions.rows).toHaveLength(0);
   });
 });
 

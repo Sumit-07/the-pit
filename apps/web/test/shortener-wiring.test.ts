@@ -90,7 +90,7 @@ const SECRET = 'whsec_' + Buffer.from('a-thirty-two-byte-endpoint-secret').toStr
 const CONFIG: DodoConfig = {
   mode: 'test',
   webhookSecret: SECRET,
-  productIds: { prod_single: 'single', prod_triple: 'triple' },
+  productIds: { prod_single: 'single' },
   returnUrl: `${ORIGIN}/checkout/success`,
 };
 

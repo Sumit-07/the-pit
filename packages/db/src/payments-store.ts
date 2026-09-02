@@ -251,7 +251,12 @@ export function createPostgresAttemptsStore(
             // The trigger `attempts_grant_matches_order` compares this to the
             // ledger row's delta, so they are written from the one value.
             attemptsGranted: entry.delta,
-            includesFitReport: reason.tier === 'triple',
+            // Always false, and the column stays. The only tier that ever set it
+            // bundled a fit report nothing in this repository generates, so it
+            // was withdrawn from sale; the column is kept because the rows that
+            // carry `true` were really sold and a migration that dropped it would
+            // rewrite what those buyers were charged for.
+            includesFitReport: false,
             status: 'paid',
             rawEvent: sql`${options.rawEvent}::jsonb`,
             receivedAt: entry.createdAt,
@@ -323,6 +328,12 @@ export interface SubmissionDraftRow {
    */
   readonly anonymous: boolean;
   readonly cycleId: string;
+  /**
+   * `single` is the only tier on sale, so it is the only value written. The
+   * retired `triple` stays in the union — and in `submissions_tier_known` — because
+   * rows written before it was withdrawn still hold it and a read must be able to
+   * say so.
+   */
   readonly tier: 'single' | 'triple';
   readonly attemptNumber: number;
   readonly repitchOf: string | null;

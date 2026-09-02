@@ -31,7 +31,6 @@ describe.skipIf(out === undefined || out === '')('page previews', () => {
         categories: ['developer-tools', 'health-fitness-wellness'],
         tiers: [
           { id: 'single', label: 'One attempt', amountCents: 500, attempts: 1, includesFitReport: false },
-          { id: 'triple', label: 'Three attempts', amountCents: 1500, attempts: 3, includesFitReport: true },
         ] as never,
         values: { ...EMPTY_FORM, categorySlug: 'developer-tools' },
         descriptionLimit: 300,
@@ -51,10 +50,10 @@ describe.skipIf(out === undefined || out === '')('page previews', () => {
         purchases: [
           {
             orderId: 'ord_2',
-            amountCents: 1500,
+            amountCents: 500,
             currency: 'USD',
-            attemptsGranted: 3,
-            includesFitReport: true,
+            attemptsGranted: 1,
+            includesFitReport: false,
             createdAt: new Date('2026-08-26T09:12:00Z'),
           },
           {

@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   formatUsd,
+  PRICE_TIERS,
   netProceedsCents,
   providerFeeCents,
   PURCHASE_TERMS,
   TIER_SINGLE,
-  TIER_TRIPLE,
   tierForPayment,
 } from '../src/money.js';
 
@@ -17,8 +17,9 @@ describe('provider fee (brief §2.2: assume 5.5% + $0.40)', () => {
     expect(netProceedsCents(500)).toBe(432);
   });
 
-  it('takes $1.23 on a $15 sale', () => {
-    // 1500 * 550 / 10000 = 82.5 -> 83, plus 40 = 123.
+  it('takes $1.23 on a $15 sale, whether or not one tier costs that', () => {
+    // 1500 * 550 / 10000 = 82.5 -> 83, plus 40 = 123. The arithmetic is priced in
+    // cents, not in tiers, and must stay right for an amount nothing sells for.
     expect(providerFeeCents(1500)).toBe(123);
     expect(netProceedsCents(1500)).toBe(1377);
   });
@@ -50,14 +51,16 @@ describe('formatUsd', () => {
   });
 });
 
-describe('tiers (brief §2.3: $5 = 1 attempt, $15 = 3 attempts + fit report)', () => {
-  it('prices the two tiers and nothing else', () => {
+describe('tiers (brief §2.3: $5 = 1 attempt)', () => {
+  it('prices the one tier and nothing else', () => {
+    expect(PRICE_TIERS).toEqual([TIER_SINGLE]);
     expect(TIER_SINGLE.amountCents).toBe(500);
     expect(TIER_SINGLE.attempts).toBe(1);
-    expect(TIER_SINGLE.fitReport).toBe(false);
-    expect(TIER_TRIPLE.amountCents).toBe(1500);
-    expect(TIER_TRIPLE.attempts).toBe(3);
-    expect(TIER_TRIPLE.fitReport).toBe(true);
+  });
+
+  it('sells no fit report, because nothing here produces one', () => {
+    expect(PRICE_TIERS.some((tier) => tier.fitReport)).toBe(false);
+    expect(PRICE_TIERS.map((tier) => tier.label).join(' ')).not.toMatch(/fit report/i);
   });
 
   it('maps a settled $5 payment to one attempt', () => {
@@ -65,7 +68,14 @@ describe('tiers (brief §2.3: $5 = 1 attempt, $15 = 3 attempts + fit report)', (
   });
 
   it('accepts a lowercase currency code', () => {
-    expect(tierForPayment({ amountCents: 1500, currency: 'usd' })).toBe(TIER_TRIPLE);
+    expect(tierForPayment({ amountCents: 500, currency: 'usd' })).toBe(TIER_SINGLE);
+  });
+
+  it('prices no $15 payment, now that the tier that cost that is withdrawn', () => {
+    // Not zero attempts and not one: `null`, which the webhook turns into a
+    // review queue entry. A $15 payment against a one-tier catalogue is a fact
+    // about the world that somebody has to look at.
+    expect(tierForPayment({ amountCents: 1500, currency: 'USD' })).toBeNull();
   });
 
   it('refuses to invent attempts for an amount it does not price', () => {
@@ -80,10 +90,10 @@ describe('tiers (brief §2.3: $5 = 1 attempt, $15 = 3 attempts + fit report)', (
     expect(tierForPayment({ amountCents: 500, currency: 'EUR' })).toBeNull();
   });
 
-  it('prefers the Dodo product id over the amount, so a discounted triple still grants three', () => {
+  it('prefers the Dodo product id over the amount, so a discounted throw still grants one', () => {
     expect(
-      tierForPayment({ amountCents: 500, currency: 'USD', productId: 'pdt_triple' }, { pdt_triple: 'triple' }),
-    ).toBe(TIER_TRIPLE);
+      tierForPayment({ amountCents: 300, currency: 'USD', productId: 'pdt_single' }, { pdt_single: 'single' }),
+    ).toBe(TIER_SINGLE);
   });
 
   it('falls back to the amount when the product id is not mapped', () => {

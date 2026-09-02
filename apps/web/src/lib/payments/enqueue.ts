@@ -135,6 +135,7 @@ export interface PendingSubmission {
    */
   readonly anonymous?: boolean;
   readonly cycleId: string;
+  /** `single`, the only tier on sale. `triple` is retired and only old rows hold it. */
   readonly tier: 'single' | 'triple';
   readonly attemptNumber: number;
   readonly repitchOf: string | null;

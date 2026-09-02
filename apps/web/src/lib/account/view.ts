@@ -31,6 +31,7 @@ export interface AccountPurchase {
   readonly amountCents: number;
   readonly currency: string;
   readonly attemptsGranted: number;
+  /** Always `false` on anything sold now; the page does not print it. See `purchaseRow`. */
   readonly includesFitReport: boolean;
   readonly createdAt: Date;
 }

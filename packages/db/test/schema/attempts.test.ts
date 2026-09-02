@@ -63,7 +63,10 @@ const balanceOf = async (account: TestAccount): Promise<number> => {
 
 describe('a balance is derived from immutable rows', () => {
   it('sums grants and consumes into a balance', async () => {
-    // $15 = 3 attempts (`brief §2.3`). One grant event, one row worth three.
+    // A multi-attempt grant: one event, one idempotency key, one row worth
+    // three. No tier on sale grants three today, and the schema must still
+    // hold one that does — the arithmetic here is the ledger's, not the
+    // catalogue's.
     const account = await anAccount();
     const categoryId = await insertCategory(database.pg, `bal-${counter}`);
     const order = await insertOrder(database.pg, account, { attemptsGranted: 3 });
@@ -285,7 +288,7 @@ describe('a grant is worth exactly what the tier bought', () => {
   });
 
   it('refuses more attempts than the order paid for', async () => {
-    // `brief §2.3`: "$5 = 1 attempt. $15 = 3 attempts + fit report." A handler
+    // The row may never grant more than the order it names paid for. A handler
     // that read the wrong tier is caught here rather than in a support ticket.
     const account = await anAccount();
     const order = await insertOrder(database.pg, account, { attemptsGranted: 1 });

@@ -13,7 +13,7 @@ const NOW = new Date('2026-08-29T12:00:00.000Z');
 const CONFIG: DodoConfig = {
   mode: 'test',
   webhookSecret: SECRET,
-  productIds: { pdt_single: 'single', pdt_triple: 'triple' },
+  productIds: { pdt_single: 'single' },
   returnUrl: 'https://thepit.show/checkout/return',
 };
 
@@ -80,8 +80,11 @@ describe('grant on the signed webhook (brief §2.2)', () => {
     expect(attempts.entryCount).toBe(1);
   });
 
-  it('grants three attempts on the $15 tier', async () => {
-    const { ledger, store } = harness();
+  it('grants nothing on the withdrawn $15 tier and sends it for review', async () => {
+    // The tier that cost $15 bundled a fit report nothing here produces, so it is
+    // no longer sold. A payment at that amount is therefore an amount we do not
+    // price: `needs_review`, not three attempts, and not one either.
+    const { attempts, ledger, store } = harness();
     const raw = body({ amount: 1500, productId: 'pdt_triple' });
     const result = await handleDodoWebhook({
       rawBody: raw,
@@ -91,8 +94,8 @@ describe('grant on the signed webhook (brief §2.2)', () => {
       store,
       now: NOW,
     });
-    expect(result.status === 'granted' ? result.attemptsGranted : 0).toBe(3);
-    expect(result.status === 'granted' ? result.tier.fitReport : false).toBe(true);
+    expect(result.status).toBe('needs_review');
+    expect(attempts.entryCount).toBe(0);
   });
 });
 
@@ -142,7 +145,7 @@ describe('unverifiable requests never reach the ledger', () => {
     const { attempts, ledger, store } = harness();
     const raw = body();
     const headers = signed(raw);
-    const tampered = body({ amount: 1500, productId: 'pdt_triple' });
+    const tampered = body({ amount: 1500, productId: 'pdt_bundle' });
 
     const result = await handleDodoWebhook({
       rawBody: tampered,

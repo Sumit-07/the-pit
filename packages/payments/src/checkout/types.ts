@@ -14,6 +14,8 @@
  * is a loud parse failure.
  */
 
+import type { PriceTierId } from '../money.js';
+
 /** `test` until a human deliberately flips it. `brief` Phase 3: Dodo test mode. */
 export type DodoMode = 'test' | 'live';
 
@@ -22,7 +24,7 @@ export interface DodoConfig {
   /** The endpoint secret for signature verification, `whsec_...`. */
   readonly webhookSecret: string;
   /** Dodo product ids mapped to our tiers. Takes precedence over the amount. */
-  readonly productIds: Readonly<Record<string, 'single' | 'triple'>>;
+  readonly productIds: Readonly<Record<string, PriceTierId>>;
   /** Where Dodo sends the buyer after paying. A display route; it grants nothing. */
   readonly returnUrl: string;
 }

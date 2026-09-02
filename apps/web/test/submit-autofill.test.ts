@@ -120,13 +120,14 @@ describe('the rendered form', () => {
   });
 
   it('ships only inline scripts and loads nothing from anywhere else', () => {
-    // Two, on a view with no panels: the autofill, and the one that keeps the
-    // price on the button equal to the tier that is checked. The number is not
-    // the property — the property is that every one of them is INLINE, so
-    // nothing on the buying page waits on another origin before it can post.
+    // One, on a view with no panels: the autofill. There used to be a second,
+    // repricing the button as the tier radios moved, and it went with them — one
+    // price needs no script to state it. The number is not the property, though —
+    // the property is that every one of them is INLINE, so nothing on the buying
+    // page waits on another origin before it can post.
     const scripts = [...page.matchAll(/<script(\s[^>]*)?>/g)];
 
-    expect(scripts).toHaveLength(2);
+    expect(scripts).toHaveLength(1);
     expect(scripts.every((match) => match[1] === undefined)).toBe(true);
     expect(page).not.toMatch(/<script[^>]*\ssrc=/);
   });
@@ -772,7 +773,7 @@ class NoListings implements ListingLookup {
 const CONFIG: DodoConfig = {
   mode: 'test',
   webhookSecret: 'whsec_' + Buffer.from('a-thirty-two-byte-endpoint-secret').toString('base64'),
-  productIds: { prod_single: 'single', prod_triple: 'triple' },
+  productIds: { prod_single: 'single' },
   returnUrl: `${ORIGIN}/checkout/success`,
 };
 

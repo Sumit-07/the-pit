@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { FixtureDodoTransport } from '../../src/checkout/fixture-transport.js';
 import { CheckoutConfigError, createCheckoutSession } from '../../src/checkout/session.js';
 import type { DodoConfig } from '../../src/checkout/types.js';
-import { TIER_SINGLE, TIER_TRIPLE } from '../../src/money.js';
+import type { PriceTier } from '../../src/money.js';
+import { TIER_SINGLE } from '../../src/money.js';
 import type { SubmissionDraft } from '../../src/submission/guards.js';
 import { clearanceFor } from '../helpers/clearance.js';
 
@@ -12,7 +13,7 @@ const NOW = new Date('2026-08-29T21:30:00.000Z');
 const CONFIG: DodoConfig = {
   mode: 'test',
   webhookSecret: 'whsec_c2VjcmV0',
-  productIds: { pdt_single: 'single', pdt_triple: 'triple' },
+  productIds: { pdt_single: 'single' },
   returnUrl: 'https://thepit.show/checkout/return',
 };
 
@@ -90,10 +91,19 @@ describe('a double-clicked pay button opens one session', () => {
   });
 
   it('opens a separate session for a genuinely different tier', async () => {
+    // One tier is on sale, so the second one here is a stand-in for whatever a
+    // future pricing decision adds. The guarantee under test is the idempotency
+    // key's, not the catalogue's: two tiers over one clearance must not collide
+    // into one session, and that has to still be true on the day a tier returns.
     const transport = new FixtureDodoTransport();
     const clearance = clearanceFor(DRAFT, NOW);
-    await createCheckoutSession({ clearance, tier: TIER_SINGLE, config: CONFIG, transport, submissionId: 'sub_1' });
-    await createCheckoutSession({ clearance, tier: TIER_TRIPLE, config: CONFIG, transport, submissionId: 'sub_1' });
+    const future = { ...TIER_SINGLE, id: 'bundle', amountCents: 900 } as unknown as PriceTier;
+    const config: DodoConfig = {
+      ...CONFIG,
+      productIds: { pdt_single: 'single', pdt_bundle: 'bundle' } as unknown as DodoConfig['productIds'],
+    };
+    await createCheckoutSession({ clearance, tier: TIER_SINGLE, config, transport, submissionId: 'sub_1' });
+    await createCheckoutSession({ clearance, tier: future, config, transport, submissionId: 'sub_1' });
     expect(transport.sessionCount).toBe(2);
   });
 });
@@ -133,8 +143,8 @@ describe('configuration mistakes fail loudly', () => {
     await expect(
       createCheckoutSession({
         clearance: clearanceFor(DRAFT, NOW),
-        tier: TIER_TRIPLE,
-        config: { ...CONFIG, productIds: { pdt_single: 'single' } },
+        tier: TIER_SINGLE,
+        config: { ...CONFIG, productIds: {} },
         transport,
         submissionId: 'sub_1',
       }),

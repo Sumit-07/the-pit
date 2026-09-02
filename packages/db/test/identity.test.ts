@@ -108,13 +108,13 @@ describe('attemptRow', () => {
     // `attempts_grant_has_order` would reject the insert at the database.
     const entry: AttemptEntry = {
       accountId: ACCOUNT,
-      delta: 3,
+      delta: 1,
       reason: {
         kind: 'grant',
         providerEventId: 'evt_1',
         providerPaymentId: 'pay_1',
-        tier: 'triple',
-        amountCents: 1500,
+        tier: 'single',
+        amountCents: 500,
       },
       idempotencyKey: 'dodo:event:evt_1',
       createdAt: AT,
@@ -123,7 +123,7 @@ describe('attemptRow', () => {
     expect(attemptRow(entry, { orderId: ORDER })).toEqual({
       accountId: ACCOUNT,
       kind: 'grant',
-      delta: 3,
+      delta: 1,
       idempotencyKey: 'dodo:event:evt_1',
       orderId: ORDER,
       createdAt: AT,

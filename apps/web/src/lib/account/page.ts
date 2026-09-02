@@ -237,11 +237,18 @@ function listingsSection(view: AccountView): string {
   ].join('');
 }
 
+/**
+ * One line of history: what was granted, when, and what it cost.
+ *
+ * `includesFitReport` is deliberately not printed. The tier that set it was
+ * withdrawn because nothing here produces a fit report, so a receipt line
+ * advertising one would name a deliverable that never existed. The attempts and
+ * the amount are the two facts about a purchase that are true.
+ */
 function purchaseRow(purchase: AccountPurchase): string {
-  const extra = purchase.includesFitReport ? ' + fit report' : '';
   return [
     '<div class="row">',
-    `<span class="nm"><b>${escapeHtml(attempts(purchase.attemptsGranted))}${escapeHtml(extra)}</b>` +
+    `<span class="nm"><b>${escapeHtml(attempts(purchase.attemptsGranted))}</b>` +
       `<span>${escapeHtml(stampDate(purchase.createdAt))}</span></span>`,
     `<span class="amt">${escapeHtml(formatUsd(purchase.amountCents))}</span>`,
     '</div>',

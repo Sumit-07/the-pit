@@ -35,14 +35,13 @@
  * `name="url"`, `name="name"`, `name="description"`, `name="category"` and
  * `name="tier"` are the form's contract with `POST /api/checkout` — they are
  * what `readValues` reads. Labels, headings and prices are being reworked
- * elsewhere and are not asserted, with one exception: the two tier VALUES and
- * their amounts come from `PRICE_TIERS` in `@the-pit/payments`, which is
- * `brief §2.3`'s rule and not the theme's.
+ * elsewhere and are not asserted, with one exception: the tier VALUE and its
+ * amount come from `PRICE_TIERS` in `@the-pit/payments`, which is `brief §2.3`'s
+ * rule and not the theme's.
  *
  * Hand-derived, from `packages/payments/src/money.ts`:
  *
- *   single   500 cents   formatUsd -> "$5.00"    checked by default
- *   triple  1500 cents   formatUsd -> "$15.00"
+ *   single   500 cents   formatUsd -> "$5.00"    the only thing on sale
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -88,7 +87,6 @@ const MANAGED = [
   'DODO_API_KEY',
   'DODO_MODE',
   'DODO_PRODUCT_SINGLE',
-  'DODO_PRODUCT_TRIPLE',
   'SESSION_SECRET',
   'SESSION_SECRET_PREVIOUS',
   'AUTH_DEV_MEMORY_STORE',
@@ -181,39 +179,36 @@ describe('GET /submit renders with no DATABASE_URL', () => {
     expect(page.body).toMatch(/<select[^>]*name="category"/);
   });
 
-  it('carries the tier selector, both tiers, with single pre-selected', async () => {
+  it('carries the tier as a value, not as a choice, because there is one price', async () => {
     const page = await renderSubmit();
 
-    const radios = [...page.body.matchAll(/<input type="radio" name="tier" value="([a-z]+)" data-pay="[^"]+"( checked)?>/g)];
-    expect(radios.map((match) => match[1])).toEqual(['single', 'triple']);
-    // `emptyFormFrom` defaults to `single` when the query string says nothing.
-    expect(radios[0]?.[2]).toBe(' checked');
-    expect(radios[1]?.[2]).toBeUndefined();
+    // One tier on sale, so the form states it and posts it. A radio group of one
+    // is a control nobody can operate that still asks to be operated.
+    expect(PRICE_TIERS.map((tier) => tier.id)).toEqual(['single']);
+    expect(page.body).toContain('<input type="hidden" name="tier" value="single">');
+    expect(page.body).not.toMatch(/<input type="radio" name="tier"/);
 
-    // $5 and $15, from `brief §2.3` — one price on the page per tier on offer.
-    expect(PRICE_TIERS.map((tier) => tier.amountCents)).toEqual([500, 1500]);
+    // $5, from `brief §2.3`, and nothing else priced anywhere on the page.
+    expect(PRICE_TIERS.map((tier) => tier.amountCents)).toEqual([500]);
     expect(page.body).toContain('$5.00');
-    expect(page.body).toContain('$15.00');
+    expect(page.body).not.toContain('$15');
   });
 
-  it('names the SELECTED tier on the button, on the server and as the radios move', async () => {
-    // The button said "Take my $5 →" unconditionally while the $15 tier sat above
-    // it, selectable — a price on a button that was wrong for anyone who took the
-    // other tier. It is now rendered from the checked tier and kept in step by a
-    // script that reads the price off the radio's own `data-pay`.
-    const single = await renderSubmit();
-    expect(single.body).toContain('>Take my $5 →</button>');
-    expect(single.body).not.toContain('Take my $15');
+  it('sells no fit report and offers no second tier anywhere in the copy', async () => {
+    const page = await renderSubmit();
+    expect(page.body).not.toMatch(/fit report/i);
+    expect(page.body).not.toMatch(/three throws/i);
+    expect(page.body).not.toContain('triple');
+  });
 
-    const triple = await renderSubmit(`${ORIGIN}/submit?tier=triple`);
-    expect(triple.body).toContain('>Take my $15 →</button>');
-    expect(triple.body).not.toContain('Take my $5 ');
-
-    // One price table. Every price on the page is `PRICE_TIERS`, spelled without
-    // its cents for the button and with them in the tier card.
-    for (const tier of PRICE_TIERS) {
-      expect(single.body).toContain(`data-pay="$${tier.amountCents / 100}"`);
-    }
+  it('names the price on the button, server-rendered, with no script to keep it right', async () => {
+    // The button is the one thing on the page that is a number of dollars, so it
+    // is rendered from `PRICE_TIERS` rather than written out — and with one price
+    // it needs no client script to stay in step with a radio.
+    const page = await renderSubmit();
+    expect(page.body).toContain('>Take my $5 →</button>');
+    expect(page.body).not.toContain('Take my $15');
+    expect(page.body).not.toContain('data-pay=');
   });
 
   it('posts to the checkout route, and nothing on the page intercepts that', async () => {
@@ -296,8 +291,10 @@ describe('GET /submit renders with no DATABASE_URL', () => {
 
     expect(page.status).toBe(200);
     expect(page.body).toContain('value="https://ashgrove.dev"');
-    const radios = [...page.body.matchAll(/<input type="radio" name="tier" value="([a-z]+)" data-pay="[^"]+"( checked)?>/g)];
-    expect(radios[1]?.[2]).toBe(' checked');
+    // The tier is NOT prefillable. A link that named a withdrawn tier would
+    // render a form that cannot be posted; the page renders the one price it
+    // sells and `POST /api/checkout` is what refuses anything else.
+    expect(page.body).toContain('<input type="hidden" name="tier" value="single">');
   });
 
   it('renders as a guest when SESSION_SECRET is missing rather than failing', async () => {

@@ -418,7 +418,11 @@ function emptyFormFrom(request: Request): SubmitFormValues {
     description: '',
     pitch: '',
     categorySlug: params.get('category') ?? '',
-    tier: params.get('tier') === 'triple' ? 'triple' : 'single',
+    // Not read from the query string. One tier is on sale and a link that named
+    // another would render a form that cannot be posted; `tierFor` is what
+    // refuses a wrong value, and it refuses it on the POST where it costs
+    // nothing rather than on the GET where it would look like a broken page.
+    tier: 'single',
     // NOT prefillable from the query string, and that is the point. A "pitch this"
     // link is written by whoever made the link, and the byline is the one field on
     // this form that its owner must choose for themselves — a URL that arrived
@@ -503,9 +507,12 @@ export async function handleCheckoutCreate(request: Request, deps: CheckoutHandl
   const tier = tierFor(values.tier);
   if (tier === null) {
     // Not a `SubmissionRejection` — the tier is ours, not theirs, and a value
-    // outside the two `brief §2.3` closes the table at means the form was edited.
+    // outside the one `brief §2.3` closes the table at means the form was edited.
+    // Refused, never coerced to `single`: a request that asked to be charged for
+    // something we do not sell must not be quietly charged for something else.
+    console.info(`[checkout] refused before payment — unknown_tier: ${values.tier}`);
     return wantsJson(request)
-      ? json({ status: 'rejected', code: 'unknown_tier', message: 'Pick $5 or $15.', charged: false }, 422)
+      ? json({ status: 'rejected', code: 'unknown_tier', message: 'Pick $5.', charged: false }, 422)
       : html(renderSubmitPage(form), 422);
   }
 
