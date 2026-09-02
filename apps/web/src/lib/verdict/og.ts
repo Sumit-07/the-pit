@@ -25,6 +25,7 @@
 
 import type { Verdict } from './model';
 import { PIT_ORIGIN, stampTime } from './page';
+import { trimTo } from './text';
 
 /** The share card, as strings. */
 export interface OgFields {
@@ -87,20 +88,10 @@ export interface OgFields {
 }
 
 /**
- * Trim to `limit` characters on a word boundary, with an ellipsis.
- *
- * A juror reason is one sentence and usually fits; a few run long, and a share
- * card that overflows is a broken share card. Cutting mid-word reads as a
- * rendering fault rather than as a quotation, so the break lands on whitespace
- * when there is any to land on.
+ * `text.ts`'s, re-exported because this module was where it used to live and the
+ * card's own tests name it here. One definition, in a file that imports nothing.
  */
-export function trimTo(text: string, limit: number): string {
-  const clean = text.replace(/\s+/g, ' ').trim();
-  if (clean.length <= limit) return clean;
-  const head = clean.slice(0, limit - 1);
-  const space = head.lastIndexOf(' ');
-  return `${(space > limit * 0.6 ? head.slice(0, space) : head).replace(/[,;:.\s]+$/, '')}…`;
-}
+export { trimTo };
 
 /**
  * Room on the card. Read off the 1200x630 layout in the route.
@@ -112,8 +103,20 @@ export function trimTo(text: string, limit: number): string {
 const NAME_LIMIT = 42;
 const QUOTE_LIMIT = 132;
 
-/** `https://thepit.show` -> `thepit.show`. One definition of the domain, in `page.ts`. */
-const DOMAIN = PIT_ORIGIN.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+/**
+ * `https://thepit.show` -> `thepit.show`. One definition of the domain, in `page.ts`.
+ *
+ * Read at call time rather than into a module-level `const`, which is what this
+ * was and what broke: `share.ts` imported this module for `trimTo`, closing the
+ * ring `page.ts -> share.ts -> og.ts -> page.ts`, and a top-level read of an
+ * imported binding runs while the module it comes from is still initialising.
+ * The ring itself is gone now — `trimTo` moved to the leaf `text.ts`, which is
+ * the actual fix — and this stays a function because it costs nothing and
+ * because a future import cannot make it throw again.
+ */
+function domain(): string {
+  return PIT_ORIGIN.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+}
 
 /**
  * `27 Aug 2026, 14:03 UTC` -> `27 Aug 2026`.
@@ -151,6 +154,6 @@ export function ogFields(verdict: Verdict): OgFields {
     quote: sharpest === null ? '' : trimTo(sharpest.reason, QUOTE_LIMIT),
     attribution: sharpest === null ? '' : `${sharpest.role} · −${sharpest.points} on ${sharpest.metric}`,
     pitch: verdict.pitchLabel ?? '',
-    stamp: `${stampDay(verdict.issuedAt)} · ${DOMAIN}`,
+    stamp: `${stampDay(verdict.issuedAt)} · ${domain()}`,
   };
 }

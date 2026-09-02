@@ -42,8 +42,8 @@ import { escapeHtml } from '@the-pit/auth';
 
 import { badgeWidth } from './badge';
 import type { Verdict } from './model';
-import { trimTo } from './og';
 import { cutsLine, stampedRank } from './page';
+import { trimTo } from './text';
 
 /**
  * X counts a link as a fixed 23 characters whatever its length, so the text has
@@ -72,12 +72,15 @@ export function verdictUrl(verdict: Verdict, origin: string): string {
 /**
  * The one-line summary, as it travels.
  *
- * `cutsLine`'s full stop is dropped before the interpunct: "took 17 in cuts. · 1
- * of 48" reads as a typo, and the clause after the dot is a stamp rather than a
- * new sentence.
+ * `cutsLine` whole, full stop and all, and then the stamp. The sentence is
+ * `brief` Part 5's own — "Runlet took 97 in cuts." — and the page prints it in
+ * that form, so the line a founder pastes elsewhere is the line the page was
+ * issued with rather than a second edit of it. What follows the interpunct is a
+ * stamp, not a second clause, which is why it does not need the sentence
+ * repunctuated around it.
  */
 export function shareLine(verdict: Verdict): string {
-  return `${cutsLine(verdict).replace(/\.\s*$/, '')} · ${stampedRank(verdict)}`;
+  return `${cutsLine(verdict)} · ${stampedRank(verdict)}`;
 }
 
 /** What the copy button puts on the clipboard: the line, then the URL. */
@@ -128,13 +131,19 @@ export function badgeMarkdown(verdict: Verdict, origin: string): string {
 }
 
 /**
- * One delegated listener for both copy buttons.
+ * One delegated listener for both copy buttons, and one for the badge.
  *
  * No verdict text is in here: each button carries its own payload in
  * `data-copy`, so this string is a constant and cannot be broken by a product
  * name. `navigator.clipboard` is unavailable on an insecure origin and in a few
  * older browsers, so the textarea/`execCommand` path is kept — this page is meant
  * to be saved to disk and opened from `file://`, where the async API is refused.
+ *
+ * The badge listener is for that same saved copy. Opened from a disk with no
+ * network, the preview's `src` resolves to nothing and the browser draws its
+ * broken-image glyph — a rendering fault where there is none, on the one page
+ * whose promise is that it keeps looking like itself. The row is complete
+ * without the image, so the image removes itself rather than failing visibly.
  */
 const COPY_SCRIPT = `
 (function(){
@@ -163,6 +172,8 @@ const COPY_SCRIPT = `
       navigator.clipboard.writeText(text).then(function(){flash(button);},function(){if(fallback(text))flash(button);});
     }else if(fallback(text)){flash(button);}
   });
+  var badge=document.querySelector('.share-row .sbadge');
+  if(badge!==null)badge.addEventListener('error',function(){badge.hidden=true;});
 })();`.trim();
 
 /**
@@ -187,7 +198,10 @@ export function renderShareRow(verdict: Verdict, options: { readonly origin: str
     'Badge for README</button>',
     `<img class="sbadge" src="${attr(badge)}" alt="${attr(alt)}" `,
     `width="${badgeWidth(verdict)}" height="20" loading="lazy">`,
-    `<a class="sact" href="?download=1" download="the-pit-${attr(verdict.slug)}.html">Download</a>`,
+    // Absolute, not `?download=1`: this page is meant to be saved, and a
+    // relative query on a document opened from `file://` resolves to nothing.
+    `<a class="sact" href="${attr(verdictUrl(verdict, origin))}?download=1" `,
+    `download="the-pit-${attr(verdict.slug)}.html">Download</a>`,
     `<script>${COPY_SCRIPT}</script>`,
     '</div>',
   ].join('');

@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 
 import { badgeWidth } from '@/lib/verdict/badge';
 import { parseVerdict } from '@/lib/verdict/model';
+import { cutsLine } from '@/lib/verdict/page';
 import { badgeMarkdown, renderShareRow, shareLine, tweetIntentUrl } from '@/lib/verdict/share';
 
 import { handBuiltVerdict, seededVerdictNamed } from './helpers/verdict.js';
@@ -24,7 +25,7 @@ describe('the verdict line, as it travels', () => {
   it('carries the cuts, the rank, the count and the moment in one line', async () => {
     const line = shareLine(parseVerdict(await seededVerdictNamed('developer-tools', 'Sequo')));
 
-    expect(line).toMatch(/^Unit [A-Za-z]+-\d{3} took 30 in cuts · 7 of 48 products on 27 Aug 2026, 14:03 UTC$/);
+    expect(line).toMatch(/^Unit [A-Za-z]+-\d{3} took 30 in cuts\. · 7 of 48 products on 27 Aug 2026, 14:03 UTC$/);
     // The submitted name is not on it: a seeded listing is anonymous, and the
     // most public string the page produces is the last place to leak it.
     expect(line).not.toContain('Sequo');
@@ -37,8 +38,12 @@ describe('the verdict line, as it travels', () => {
     expect(line).toContain('27 Aug 2026, 14:03 UTC');
   });
 
-  it('drops the sentence stop before the stamp rather than printing ". ·"', () => {
-    expect(shareLine(parseVerdict(handBuiltVerdict()))).not.toContain('cuts. ·');
+  it('carries `brief` Part 5\'s sentence whole, as the page prints it', () => {
+    // Not a re-edit of the sentence for the share surface: `cutsLine` verbatim,
+    // full stop and all, and then the stamp. What follows the interpunct is a
+    // stamp rather than a second clause.
+    const verdict = parseVerdict(handBuiltVerdict());
+    expect(shareLine(verdict).startsWith(cutsLine(verdict))).toBe(true);
   });
 });
 
@@ -107,7 +112,8 @@ describe('the share row', () => {
     expect(html).toContain('Download');
     // Two buttons that copy, one intent, one download, one preview.
     expect(html.match(/data-copy=/g)).toHaveLength(2);
-    expect(html).toContain('href="?download=1"');
+    // Absolute, so the link still resolves in a copy saved to disk.
+    expect(html).toContain(`href="${ORIGIN}/v/${SLUG}?download=1"`);
   });
 
   it('points the preview and the copied markdown at the same badge URL', () => {

@@ -314,9 +314,29 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
   letter-spacing:.06em;text-transform:uppercase;color:var(--dimmer)}
 @media (max-width:760px){.vlines{grid-template-columns:1fr}}
 
-/* The share row. lib/verdict/share.ts writes the buttons; this places them. */
-.share-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
-.share-row .act{font-size:12.5px;padding:8px 13px}
+/* The share row. lib/verdict/share.ts writes the controls; this dresses them.
+   Two of them are <button> and two are <a>, because two copy and two navigate —
+   so .sact resets the three things a button brings that an anchor does not (its
+   own font, its own background, its own border) and both then land on the same
+   object. This rule set is the row's only styling: it is written into the
+   document, not into pit.css, because a saved copy carries no stylesheet. */
+.share-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:20px}
+.share-row .sact{font:inherit;font-size:12.5px;line-height:1;color:var(--dim);
+  background:none;border:1px solid var(--line);padding:9px 13px;text-decoration:none;
+  cursor:pointer;transition:border-color .15s ease,color .15s ease,background-color .15s ease}
+/* Hover lifts to the ink and the next surface up, which is what every other
+   control on this page does. Not the accent: --cut means taken and --held means
+   survived, and a button that turns vermilion when a pointer crosses it spends
+   the one hue that has a meaning on a thing that has none. */
+.share-row .sact:hover,.share-row .sact:focus-visible{color:var(--ink);
+  background:var(--rise);border-color:var(--dimmer)}
+/* Copying swaps a 17-character label for a 6-character one. A floor keeps the
+   rest of the row from sliding sideways when it does. */
+.share-row .sact[data-copy]{min-width:148px;text-align:center}
+.share-row .sbadge{display:block;height:20px;width:auto;max-width:100%}
+/* The narrow-screen half of this rule set is at the bottom with the page's one
+   other 560px block. One block per breakpoint: two of them is how a reader ends
+   up applying only the first they find. */
 
 /* ---------- the evidence ---------- */
 /*
@@ -848,6 +868,10 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
      six invisible tab stops that reveal nothing. The panel list under each chart
      is the twin here, exactly as the table view is for the heatmap. */
   .rspot{display:none}
+  /* Four controls and a badge do not fit 390px in a row, and a wrapped row of
+     half-width buttons reads as a broken grid. One per line, full width. */
+  .share-row{flex-direction:column;align-items:stretch}
+  .share-row .sact[data-copy]{min-width:0}
 }
 `;
 

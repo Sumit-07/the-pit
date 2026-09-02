@@ -292,7 +292,12 @@ describe('the matrix, rendered', () => {
     );
     const html = renderVerdictPage(verdict);
 
-    expect(html).not.toContain('<img');
+    // The reason is a whole <img> tag, and it is printed rather than parsed. The
+    // only real image on the page is the share row's badge, served by this app.
+    expect(html).not.toContain('<img src=x');
+    const images = [...html.matchAll(/<img [^>]*src="([^"]+)"/g)].map(([, src]) => src ?? '');
+    expect(images).toHaveLength(1);
+    expect(images[0]).toContain('/badge.svg');
     expect(html).not.toContain('<b>Skeptic</b>');
     expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
     // Including inside the aria-label, where an unescaped quote breaks the attribute.

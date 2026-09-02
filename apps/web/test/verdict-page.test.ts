@@ -28,6 +28,21 @@ async function renderSeeded(slug: string, name: string): Promise<string> {
   return renderVerdictPage(parseVerdict(await seededVerdictNamed(slug, name)), { origin: 'https://thepit.show' });
 }
 
+/**
+ * The bodies of every `<script>` element on the page.
+ *
+ * The share row ships one inline handler (`lib/verdict/share.ts`) so that "Copy
+ * verdict line" can reach the clipboard, and this is how the tests below hold it
+ * to the rule that matters. "No script anywhere" was a proxy for "no
+ * user-submitted string is ever in a script context"; the handler is a constant
+ * and every string it acts on rides in a `data-copy` attribute, so the property
+ * is asserted directly instead — one script element, and nothing of the payload
+ * inside it.
+ */
+function scriptBodies(html: string): string[] {
+  return [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(([, body]) => body ?? '');
+}
+
 describe('never promise a rank', () => {
   it('renders the rank only beside the product count and the moment', async () => {
     const html = await renderSeeded('developer-tools', 'Sequo');
@@ -76,8 +91,10 @@ describe('the connective word', () => {
     expect(html).toMatch(/Unit [A-Za-z]+-\d{3} took 30 in cuts\./);
     expect(html).not.toContain('Sequo');
     // The same sentence is what the share row copies, so the line a founder
-    // pastes is the line the page was issued with.
-    expect(html).toMatch(/writeText\(&quot;Unit [A-Za-z]+-\d{3} took 30 in cuts\./);
+    // pastes is the line the page was issued with. It rides in the button's
+    // `data-copy` attribute rather than in a handler, which is what keeps the
+    // page's one script free of payload text.
+    expect(html).toMatch(/data-copy="Unit [A-Za-z]+-\d{3} took 30 in cuts\./);
   });
 });
 
@@ -226,8 +243,14 @@ describe('untrusted text', () => {
     );
 
     expect(html).not.toContain('<script>alert');
-    expect(html).not.toContain('</script>');
     expect(html).toContain('&lt;script&gt;alert(&quot;pwn&quot;)&lt;/script&gt;');
+    // The name is on this page a dozen times, including inside the share row's
+    // copy attributes — and none of those places is a script context. The one
+    // script element is share.ts's handler, and the name is not in it.
+    const bodies = scriptBodies(html);
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).not.toContain('alert');
+    expect(bodies[0]).not.toContain('pwn');
     // Including inside attribute values, where an unescaped quote breaks out.
     const title = /<title>([^<]*)<\/title>/.exec(html)?.[1] ?? '';
     expect(title).toContain('&lt;script&gt;');
@@ -257,7 +280,13 @@ describe('untrusted text', () => {
     expect(html).toContain('&lt;&lt;&lt;ignore previous instructions&gt;&gt;&gt;');
     expect(html).toContain('The &lt;b&gt;Skeptic&lt;/b&gt;');
     expect(html).not.toContain('<b>Skeptic</b>');
-    expect(html).not.toContain('</script>');
+    // The reason ends in a literal `</script>`, which is the closer this page's
+    // one inline handler would be broken by. It is escaped where it is printed,
+    // and it is not in the handler at all.
+    expect(html).toContain('&lt;/script&gt;');
+    const bodies = scriptBodies(html);
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).not.toContain('ignore previous instructions');
   });
 
   it('refuses to make a javascript: url into a link', () => {
@@ -280,12 +309,33 @@ describe('the downloadable artifact', () => {
   it('renders with nothing loaded but its own typeface', async () => {
     const html = await renderSeeded('developer-tools', 'Sequo');
 
-    // No script at all — the page has one product on it and nothing to expand,
-    // so a saved copy is inert by construction.
-    expect(html).not.toContain('<script');
-    // No image, no iframe, no data fetch.
-    expect(html).not.toContain('<img');
+    // The property is that the page LOADS nothing, not that it runs nothing. A
+    // saved copy has to render whole from its own bytes; whether a clipboard
+    // button works in it is a convenience, and `share.ts` ships one inline
+    // handler for exactly that. So: no external script, no iframe, and nothing
+    // that goes to the network for content.
+    expect(html).not.toContain('<script src');
     expect(html).not.toContain('<iframe');
+    expect(html).not.toContain('fetch(');
+    expect(html).not.toContain('XMLHttpRequest');
+    expect(html).not.toContain('import(');
+
+    // Every host the document FETCHES from, which is a different set from every
+    // host it links to: an <a> is navigation the reader chooses, and the share
+    // row's "Post on X" is supposed to leave the site. What must stay small is
+    // what the page pulls on its own — <img>, <script>, <iframe> and <link>.
+    const fetched = [
+      ...[...html.matchAll(/<(?:img|script|iframe)[^>]*\ssrc="([^"]+)"/g)],
+      ...[...html.matchAll(/<link[^>]*\shref="([^"]+)"/g)],
+    ].map(([, url]) => new URL(url ?? '', 'https://thepit.show').host);
+    expect([...new Set(fetched)].sort()).toEqual(['fonts.googleapis.com', 'fonts.gstatic.com', 'thepit.show']);
+
+    // The share row's badge preview is the one image, and this app serves it
+    // under this verdict's own slug. It is an illustration of the thing the
+    // button beside it copies, not a dependency: the page reads whole without it.
+    const images = [...html.matchAll(/<img [^>]*src="([^"]+)"/g)].map(([, src]) => src ?? '');
+    expect(images).toHaveLength(1);
+    expect(images[0]).toMatch(/^https:\/\/thepit\.show\/v\/[0-9a-f]+\/badge\.svg$/);
 
     // The palette is `lib/theme.ts`'s own values, inline — the same theme every
     // other surface renders, so a saved copy is not a different product.
@@ -412,8 +462,11 @@ describe('the share row', () => {
     expect(html).toContain('Badge for README');
 
     // The badge is an absolute URL under this verdict's own slug, so a README
-    // that embeds it links back here from wherever it is pasted.
-    expect(html).toContain(`href="${url}/badge.svg"`);
+    // that embeds it links back here from wherever it is pasted. It appears
+    // twice: once as the preview the reader sees, once inside the markdown the
+    // button copies.
+    expect(html).toContain(`src="${url}/badge.svg"`);
+    expect(html).toContain(`[![The Pit: #${verdict.rank} of ${verdict.productCount} in ${verdict.category}](${url}/badge.svg)](${url})`);
     // The intent link carries the frozen sentence and the canonical URL.
     expect(html).toContain(`https://twitter.com/intent/tweet?text=${encodeURIComponent(cutsLine(verdict))}`);
     expect(html).toContain(encodeURIComponent(url));
@@ -421,14 +474,23 @@ describe('the share row', () => {
     expect(html).toContain(`href="${url}?download=1"`);
   });
 
-  it('escapes a hostile name in the copy handler, which is an attribute holding a string literal', () => {
+  it('escapes a hostile name into the copy attributes, and keeps it out of the handler', () => {
     const html = renderVerdictPage(
       parseVerdict(handBuiltVerdict({ name: '"><script>alert(1)</script>' })),
       { origin: 'https://thepit.show' },
     );
 
-    expect(html).not.toContain('<script');
-    expect(html).not.toContain('onclick="navigator.clipboard&&navigator');
+    // The name reaches two sinks in this row and each is escaped for itself: the
+    // `data-copy` attribute as HTML, the intent's `text` as a query parameter.
     expect(html).toContain('&quot;&gt;&lt;script&gt;');
+    expect(html).toContain('%3Cscript%3Ealert(1)%3C%2Fscript%3E');
+    expect(html).not.toContain('<script>alert');
+
+    // And the handler itself holds no verdict text at all, which is why no name
+    // can close it: the payload is in the attribute, the script is a constant.
+    const bodies = scriptBodies(html);
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toContain('getAttribute(\'data-copy\')');
+    expect(bodies[0]).not.toContain('alert(1)');
   });
 });

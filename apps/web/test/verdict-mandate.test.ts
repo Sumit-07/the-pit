@@ -216,9 +216,18 @@ describe('the biography is not a hover', () => {
       expect(withoutTips, mandate.role).toContain(mandate.biasedAgainst.slice(0, 40));
     }
 
-    // Still no script and no image: the readout is CSS and native focus.
-    expect(html).not.toContain('<script');
-    expect(html).not.toContain('<img');
+    // Still nothing scripted and nothing drawn HERE: the readout is CSS and
+    // native focus. The page's one script is the share row's clipboard handler
+    // and its one image is that row's badge; neither knows this mechanism
+    // exists, which is the property that used to be spelled "no script at all".
+    const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(([, body]) => body ?? '');
+    expect(scripts).toHaveLength(1);
+    expect(scripts[0]).toContain('data-copy');
+    expect(scripts[0]).not.toContain('rspot');
+    expect(scripts[0]).not.toContain('rbios');
+    const images = [...html.matchAll(/<img [^>]*src="([^"]+)"/g)].map(([, src]) => src ?? '');
+    expect(images).toHaveLength(1);
+    expect(images[0]).toContain('/badge.svg');
   });
 
   it('withdraws the readout on a narrow screen and keeps the list', async () => {

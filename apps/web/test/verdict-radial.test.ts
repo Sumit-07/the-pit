@@ -607,9 +607,19 @@ describe('a peer’s shape may be shown; a peer’s name may not', () => {
       expect(html).toContain(`data-avatar-seed="${peer.avatarSeed}"`);
       expect(peer.avatarSeed).not.toContain(peer.label);
     }
-    // Still no image on a downloadable, offline-safe page.
-    expect(html).not.toContain('<img');
-    expect(html).not.toContain('<script');
+    // And still nothing DRAWS one. The only image on the page is the share row's
+    // badge, which belongs to no peer, and the only script is that row's copy
+    // handler — neither has a seed anywhere near it. What this page may load at
+    // all is `verdict-page.test.ts`'s rule; this is about the avatars.
+    const images = [...html.matchAll(/<img [^>]*src="([^"]+)"/g)].map(([, src]) => src ?? '');
+    expect(images).toHaveLength(1);
+    expect(images[0]).toContain('/badge.svg');
+    const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(([, body]) => body ?? '');
+    expect(scripts).toHaveLength(1);
+    for (const peer of verdict.comparison?.peers ?? []) {
+      expect(images[0]).not.toContain(peer.avatarSeed);
+      expect(scripts[0]).not.toContain(peer.avatarSeed);
+    }
   });
 
   it('links a named peer to its own page, and an anonymous one nowhere', async () => {
