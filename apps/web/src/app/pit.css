@@ -2059,3 +2059,125 @@ footer {
     min-width: 0;
   }
 }
+
+/* ---------- the buyer's run status ---------- */
+
+/*
+ * `/status/s/<submission>`: five steps, one bar, and a verdict link when there
+ * is one. It borrows the page furniture every other surface uses — `.wrap`,
+ * `nav`, `.head`, `.blk`, `footer` — so a customer who has just paid lands
+ * somewhere they recognise rather than on a bare `<h1>`.
+ *
+ * The bar is `--cut` for the same reason `.prog` is: this is the pit taking
+ * points off, and the hue means "taken" everywhere in the app. `--held` is
+ * reserved for what survived, and is not used here.
+ */
+.runstatus .head {
+  margin-bottom: 26px;
+}
+
+.verdictout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 18px;
+  margin: 0 0 26px;
+}
+.verdictout .terms {
+  font-size: 12.5px;
+  color: var(--dimmer);
+}
+
+.runsteps {
+  border: 1px solid var(--line);
+  background: var(--card);
+  box-shadow: var(--lip), var(--e1);
+  padding: 20px 20px 16px;
+}
+.runhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.runhead strong {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.runcount {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+}
+
+.runbar {
+  height: 2px;
+  background: var(--sunk);
+  overflow: hidden;
+  margin: 14px 0 4px;
+}
+.runbar i {
+  display: block;
+  height: 100%;
+  background: var(--cut);
+  transition: width 0.4s ease;
+}
+
+.runlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* The ledger row this app draws everywhere else: name, state, detail. */
+.runlist li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding: 11px 0;
+  border-top: 1px solid var(--hair);
+}
+.runstep {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.runstate {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+/* A finished step is stated, not celebrated; a failed one takes the cut hue. */
+.runlist li[data-state="done"] .runstate,
+.runlist li[data-state="skipped"] .runstate {
+  color: var(--dim);
+}
+.runlist li[data-state="failed"] .runstate {
+  color: var(--cut);
+}
+.runlist li[data-state="pending"] .runstep {
+  color: var(--dimmer);
+}
+.rundetail {
+  grid-column: 1 / -1;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--dimmer);
+}
+
+.runnote {
+  margin: 14px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--dim);
+}
+
+.runstatus .blk {
+  margin-top: 26px;
+}

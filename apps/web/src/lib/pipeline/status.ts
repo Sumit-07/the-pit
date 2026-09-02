@@ -96,6 +96,47 @@ export interface StatusInput {
   versions: PhaseVersions;
   /** Consulted for the `deliver` step. Omitted, `deliver` is reported from `ranking.json` alone. */
   snapshots?: SnapshotSink;
+  /**
+   * The `category_snapshot_version` this run's board is PUBLISHED under, when it
+   * is not the one the run read.
+   *
+   * A seed run publishes the version it read and needs nothing here. A placement
+   * does not: `brief §1.2` moves every z-score the moment a product is appended,
+   * so the board that comes out is a different board under a bumped version
+   * (`inngest.ts`'s `publishAs`). Comparing the published snapshot against the
+   * version the run READ would find a mismatch on every successful placement and
+   * report `deliver` as pending forever — the customer's run stuck at four of
+   * five, on the page they opened to find out whether it was done.
+   *
+   * Phases are still judged against `versions`, verbatim. The two stamps mean
+   * different things and `pg-store.ts` keeps them apart for the same reason.
+   */
+  boardVersion?: string;
+}
+
+/**
+ * A run that has been bought and not yet started — five steps, none of them run.
+ *
+ * The window between the payment settling and the first phase landing is short
+ * and it is the window a buyer is most likely to be looking at, so it gets a real
+ * answer rather than a 404. There is nothing persisted to read yet, which is
+ * exactly what this says: `queued`, and "Nothing has started yet."
+ *
+ * Deliberately not "read the category's own run and show that". The seed run's
+ * phases are stamped with the same four versions and would be reported as this
+ * customer's progress — a full board's worth of finished steps, on a submission
+ * that has not been scored.
+ */
+export function pendingRunStatus(slug: string, versions: PhaseVersions): RunStatus {
+  return {
+    slug,
+    state: 'queued',
+    steps: PIPELINE_STEPS.map((step) => ({ step, state: 'pending' })),
+    completed: 0,
+    total: PIPELINE_STEPS.length,
+    versions,
+    votes_cached: 0,
+  };
 }
 
 /** Read the run's real state off its persisted artifacts. */
@@ -113,10 +154,11 @@ export async function readRunStatus(input: StatusInput): Promise<RunStatus> {
   // so the check is a comparison rather than a guess — and without it a bumped
   // rubric would show `rank: done` above three phases that are about to be
   // re-bought, which is the same lie the stale-phase rule above exists to stop.
+  const boardVersion = input.boardVersion ?? input.versions.category_version;
   const currentRanking = ranking !== undefined && ranking.prompt_version === input.versions.prompt_version;
   const currentSnapshot =
     snapshot !== undefined &&
-    snapshot.category_version === input.versions.category_version &&
+    snapshot.category_version === boardVersion &&
     snapshot.ranking.prompt_version === input.versions.prompt_version;
 
   const steps: StepStatus[] = PIPELINE_STEPS.map((step) => {

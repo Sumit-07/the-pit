@@ -56,7 +56,7 @@
  * outside as well, because a dependency can always be added back.
  */
 
-import { readSession, type SessionKeyring } from '@the-pit/auth';
+import { mintRunStatusToken, readSession, type SessionKeyring } from '@the-pit/auth';
 import { SANITIZE_LIMIT } from '@the-pit/engine';
 import {
   createCheckoutSession,
@@ -562,6 +562,22 @@ export async function handleCheckoutCreate(request: Request, deps: CheckoutHandl
     now,
   });
 
+  /**
+   * The buyer's key to their own status page, minted here and nowhere else.
+   *
+   * This is the last instant at which we know the person asking is the person
+   * who typed the submission — after this there is only a browser coming back
+   * from Dodo with a query string on it. So the signature is made now, rides the
+   * return URL home, and `/checkout/success` mints nothing. See
+   * `lib/pipeline/status-access.ts`.
+   *
+   * Absent when no keyring is bound, which on this route means `SESSION_SECRET`
+   * is unset. The checkout still opens: `brief §2.1` puts nothing between a
+   * visitor and their purchase, and a missing status link is not a reason to
+   * refuse somebody's money.
+   */
+  const statusToken = deps.keyring === undefined ? undefined : mintRunStatusToken(submissionId, deps.keyring);
+
   let created: CheckoutCreated;
   try {
     const result = await createCheckoutSession({
@@ -570,6 +586,7 @@ export async function handleCheckoutCreate(request: Request, deps: CheckoutHandl
       config: deps.config,
       transport: deps.transport,
       submissionId,
+      ...(statusToken === undefined ? {} : { statusToken }),
     });
     created = {
       submissionId,

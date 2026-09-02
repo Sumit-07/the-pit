@@ -236,7 +236,20 @@ describe('the success redirect grants nothing (brief §2.2)', () => {
       submissionId: 'sub_1',
       message: expect.stringContaining('Payment received'),
       attemptsGranted: 0,
+      // A path, and only a path. Whether it opens anything is decided by the
+      // status route, against a signature this function cannot make.
+      statusPath: '/status/s/sub_1',
     });
+  });
+
+  it('carries the submission id and its signature into one forward path', () => {
+    const view = resolveSuccessRedirect({ submission_id: 'sub_1', t: 'sig', payment_id: 'pay_1' });
+    expect(view.submissionId).toBe('sub_1');
+    expect(view.statusPath).toBe('/status/s/sub_1?t=sig');
+  });
+
+  it('has nowhere to send a buyer whose return URL named no submission', () => {
+    expect(resolveSuccessRedirect({ payment_id: 'pay_1' }).statusPath).toBeNull();
   });
 
   it('cannot grant, because it is handed nothing that could', () => {

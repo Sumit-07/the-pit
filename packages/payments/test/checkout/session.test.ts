@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { FixtureDodoTransport } from '../../src/checkout/fixture-transport.js';
-import { CheckoutConfigError, createCheckoutSession } from '../../src/checkout/session.js';
+import {
+  CheckoutConfigError,
+  createCheckoutSession,
+  runStatusPath,
+  successReturnUrl,
+} from '../../src/checkout/session.js';
 import type { DodoConfig } from '../../src/checkout/types.js';
 import type { PriceTier } from '../../src/money.js';
 import { TIER_SINGLE } from '../../src/money.js';
@@ -38,7 +43,9 @@ describe('guest checkout (brief §2.1: no login at submission)', () => {
     expect(result.session.paymentLink).toContain('https://');
     const request = transport.calls[0];
     expect(request?.productId).toBe('pdt_single');
-    expect(request?.returnUrl).toBe(CONFIG.returnUrl);
+    // The configured return URL, with this submission named on it so the buyer
+    // lands on their own run rather than on a page about a payment.
+    expect(request?.returnUrl).toBe(`${CONFIG.returnUrl}?submission_id=sub_1`);
     // Nothing identity-shaped crosses: no account id, no email, no session.
     expect(Object.keys(request?.metadata ?? {}).sort()).toEqual([
       'attempt_number',
@@ -149,5 +156,42 @@ describe('configuration mistakes fail loudly', () => {
         submissionId: 'sub_1',
       }),
     ).rejects.toThrow(CheckoutConfigError);
+  });
+});
+
+/**
+ * The buyer comes back from Dodo to a page about a PAYMENT and has to be able to
+ * reach a page about their RUN. Everything that carries them across is written
+ * here, at checkout, and read on the way back — nothing in between can be asked
+ * what it meant.
+ */
+describe('the return URL carries the run (brief Part 6)', () => {
+  it('names the submission and its signature, and keeps them together', () => {
+    expect(successReturnUrl('https://thepit.show/checkout/success', 'sub_1', 'sig')).toBe(
+      'https://thepit.show/checkout/success?submission_id=sub_1&t=sig',
+    );
+  });
+
+  it('keeps whatever query the configured return URL already had', () => {
+    expect(successReturnUrl('https://thepit.show/checkout/success?src=dodo', 'sub_1')).toBe(
+      'https://thepit.show/checkout/success?src=dodo&submission_id=sub_1',
+    );
+  });
+
+  it('puts the token on the checkout it was minted for', async () => {
+    const transport = new FixtureDodoTransport();
+    await createCheckoutSession({
+      clearance: clearanceFor(DRAFT, NOW),
+      tier: TIER_SINGLE,
+      config: CONFIG,
+      transport,
+      submissionId: 'sub_1',
+      statusToken: 'signed-value',
+    });
+    expect(transport.calls[0]?.returnUrl).toBe(`${CONFIG.returnUrl}?submission_id=sub_1&t=signed-value`);
+  });
+
+  it('escapes an id that would otherwise change the path', () => {
+    expect(runStatusPath('a/b?c')).toBe('/status/s/a%2Fb%3Fc');
   });
 });

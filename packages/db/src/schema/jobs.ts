@@ -27,6 +27,7 @@ import { boolean, check, index, integer, jsonb, pgTable, text, timestamp, unique
 import { categories } from './categories.js';
 import { jobKind, jobStatus } from './enums.js';
 import { products } from './products.js';
+import { submissions } from './submissions.js';
 
 export const jobs = pgTable(
   'jobs',
@@ -52,6 +53,42 @@ export const jobs = pgTable(
      * than the race.
      */
     idempotencyKey: text('idempotency_key'),
+
+    /**
+     * The draft this run is placing, when a customer paid for it.
+     *
+     * The only edge from a submission to the work it bought. Without it the
+     * buyer's status page has nothing to resolve: `submissions` carries no
+     * account and no job, `idempotency_key` is a hash over an account id the
+     * buyer does not have on the page, and `product_id` is not written until the
+     * catalogue row exists — which is the last step of the run rather than the
+     * first.
+     *
+     * Written by the placement CLAIM (`lib/pipeline/pg-claims.ts`), which is
+     * taken before the first step and before anything is spent. That is what lets
+     * the status page say "queued" honestly, from the instant the webhook lands,
+     * rather than 404ing until the first phase is persisted.
+     *
+     * Null on a seed run, on a preview and on an admin placement: none of them
+     * have a buyer with a page to watch.
+     */
+    submissionId: uuid('submission_id').references(() => submissions.id, {
+      onDelete: 'restrict',
+      onUpdate: 'cascade',
+    }),
+
+    /**
+     * The engine id of the product this run is PLACING, when it is a placement.
+     *
+     * `products.engine_id` in every respect except that it is written before the
+     * `products` row exists. `runJobId` folds it into this row's own id, and the
+     * placement's phase envelopes, its board version and its verdict are all
+     * addressed through it — so a status page that knows the submission and not
+     * this number knows which category the run is in and nothing else about it.
+     *
+     * Null on everything that is not a placement.
+     */
+    placementEngineId: integer('placement_engine_id'),
 
     /**
      * The versions this job's phases were produced under. Non-null on every job:
@@ -109,6 +146,8 @@ export const jobs = pgTable(
     index('jobs_category_status_idx').on(t.categoryId, t.status, t.createdAt),
     index('jobs_account_email_idx').on(t.accountEmail, t.createdAt),
     index('jobs_product_idx').on(t.productId),
+    // The buyer's status page: one submission, newest run first.
+    index('jobs_submission_idx').on(t.submissionId, t.createdAt),
 
     check('jobs_retry_count_cap', sql`${t.retryCount} between 0 and 3`),
     check('jobs_cost_non_negative', sql`${t.costCents} >= 0`),

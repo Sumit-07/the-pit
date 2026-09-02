@@ -63,6 +63,18 @@ export interface PlacementSubmission {
   versions: PhaseVersions;
   /** The engine id of the product being placed. */
   productId: number;
+  /**
+   * The draft the buyer paid for, when a buyer paid.
+   *
+   * The claim is the first row a submission's run writes, so it is the only place
+   * the link can be recorded early enough to be useful: `/status/s/<id>` has to
+   * answer "queued" while the score phase is still running, and every other edge
+   * from a submission to its job appears at delivery.
+   *
+   * Optional, and ignored by `MemoryPlacementClaims` — an admin placement has no
+   * submission, and the in-memory binding has no table to record one in.
+   */
+  submissionId?: string;
 }
 
 /** Who owns a submission, and what they made of it. */

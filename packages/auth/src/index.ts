@@ -116,6 +116,12 @@ export {
   verifySessionCookie,
 } from './session/cookie.js';
 
+export {
+  mintRunStatusToken,
+  RUN_STATUS_TOKEN_PARAM,
+  verifyRunStatusToken,
+} from './session/run-status-token.js';
+
 export type { TimingFloor } from './timing.js';
 export { DEFAULT_REQUEST_FLOOR_MS, noTimingFloor, padTo, systemTimingFloor } from './timing.js';
 

@@ -45,11 +45,12 @@ import { PipelineBindingError, storageMode, workdirOf, type Env } from './mode';
 import { assertBindingsConfigured, bindingProblems } from './bindings';
 import { PgPlacementClaims } from './pg-claims';
 import { PgCategorySource } from './pg-catalog';
-import { PgPipelineStore, type PaidListing } from './pg-store';
+import { PgPipelineStore, nextCategorySnapshotVersion, type PaidListing } from './pg-store';
+import { createPostgresSubmissionRunSource, type SubmissionRunSource } from './run-lookup';
 import { defaultSnapshotSink } from './sink';
-import { readRunStatus, type RunStatus } from './status';
+import { pendingRunStatus, readRunStatus, type RunStatus } from './status';
 import type { SnapshotSink } from './snapshot';
-import { FilePipelineStore, placementScope, type PipelineStore } from './store';
+import { FilePipelineStore, PlacementPhaseStore, placementScope, type PipelineStore } from './store';
 
 /**
  * Re-exported from `mode.ts`, which is dependency-free so the board READ path can
@@ -70,6 +71,18 @@ export {
 export type { Env, StorageMode } from './mode';
 export { defaultSnapshotSink } from './sink';
 export type { PaidListing } from './pg-store';
+export type { SubmissionRecord, SubmissionRun, SubmissionRunSource } from './run-lookup';
+
+/**
+ * The buyer's submission lookup, over the deployment's own connection.
+ *
+ * A function rather than a constant, for the same reason `database()` is: an
+ * import-time connection would turn a missing `DATABASE_URL` into a build
+ * failure, and `next build` imports every server module to trace it.
+ */
+export function submissionRunSource(env: Env = process.env): SubmissionRunSource {
+  return createPostgresSubmissionRunSource(database(env));
+}
 
 /**
  * The startup binding check, re-exported from the leaf module that owns it.
@@ -258,6 +271,129 @@ export function defaultBindings(env: Env = process.env): RunnerBindings {
 
 /** A run whose category is not seeded here — a 404, not a failure. */
 export type RunStatusLookup = { found: true; status: RunStatus } | { found: false };
+
+/** What `/status/s/<submission>` renders. */
+export interface SubmissionStatusView {
+  readonly submissionId: string;
+  /** The name the buyer typed. Their own page, so their own name, not a designation. */
+  readonly name: string;
+  readonly categorySlug: string;
+  readonly status: RunStatus;
+  /** `verdicts.public_slug`, once there is one. The thing they paid for. */
+  readonly verdictSlug: string | null;
+}
+
+export type SubmissionStatusLookup = { found: true; view: SubmissionStatusView } | { found: false };
+
+/**
+ * One buyer's run, resolved from their submission and read at the version
+ * stamped on their JOB.
+ *
+ * The three lines that matter are the three stamps, and every one of them comes
+ * off the job row rather than off the category:
+ *
+ * - the versions the phases are judged against are `phaseVersions` of the
+ *   category loaded AT `jobs.category_snapshot_version` — the population this run
+ *   read, not the one a later placement moved it to;
+ * - the phases themselves live in the placement's own scope, keyed by
+ *   `jobs.placement_engine_id`, because a placement's `score` envelope holds one
+ *   product and a seed run's holds forty;
+ * - the board is compared at `publishAs`, the version this placement produces,
+ *   because `brief §1.2` makes the board that comes out a different board from
+ *   the one that went in.
+ *
+ * Get any of the three from `categories.category_snapshot_version` instead and
+ * the page reports an empty run the moment somebody else's placement lands.
+ */
+export async function loadSubmissionStatus(
+  submissionId: string,
+  runs: SubmissionRunSource,
+  bindings: RunnerBindings = defaultBindings(),
+): Promise<SubmissionStatusLookup> {
+  const record = await runs.find(submissionId);
+  if (record === null) return { found: false };
+
+  const base = {
+    submissionId: record.submissionId,
+    name: record.name,
+    categorySlug: record.run?.categorySlug ?? record.categorySlug,
+  };
+
+  // Paid, and not yet enqueued. Honest, and better than a 404 — see
+  // `pendingRunStatus`.
+  if (record.run === null) {
+    const category = await bindings.categories.load(record.categorySlug);
+    const versions = category === undefined ? UNKNOWN_VERSIONS : phaseVersions(category);
+    return {
+      found: true,
+      view: { ...base, status: pendingRunStatus(record.categorySlug, versions), verdictSlug: null },
+    };
+  }
+
+  const run = record.run;
+  const input = await bindings.categories.load(run.categorySlug, { categoryVersion: run.categoryVersion });
+  if (input === undefined) {
+    // The category was withdrawn, or its version rolled back, under a run that is
+    // still on the books. Nothing further happens to it without a person, which
+    // is what `needs_support` means — and the customer is owed that sentence
+    // rather than a 404 on a page they paid to reach.
+    const stopped = { ...pendingRunStatus(run.categorySlug, UNKNOWN_VERSIONS), state: 'needs_support' as const };
+    return { found: true, view: { ...base, status: stopped, verdictSlug: run.verdictSlug } };
+  }
+
+  const versions: PhaseVersions = phaseVersions(input);
+
+  // The same pair of handles `executePlacement` runs through: phases in the
+  // placement's own scope, board and ranking on the category's. Built here from
+  // the same bindings and the same `nextCategorySnapshotVersion`, so a status
+  // read and the run it describes cannot disagree about which rows either means.
+  const board =
+    run.engineId === null
+      ? bindings.store(input.category, versions)
+      : bindings.store(input.category, versions, {
+          publishAs: nextCategorySnapshotVersion(versions.category_version, run.engineId),
+        });
+  const store =
+    run.engineId === null
+      ? board
+      : new PlacementPhaseStore(board, bindings.store(input.category, versions, { placement: run.engineId }));
+
+  // Read off the store, exactly as `placementDeliverStep` reads it when it stamps
+  // the board. A second derivation here is how a status page comes to compare the
+  // published snapshot against a version nothing published it under — and the
+  // bindings that key no board by version (memory, filesystem) answer `undefined`
+  // and fall back to the version the run read, which is what they publish at.
+  const boardVersion = store.publishedCategoryVersion ?? versions.category_version;
+
+  const status = await readRunStatus({ store, versions, snapshots: bindings.snapshots, boardVersion });
+
+  return {
+    found: true,
+    view: {
+      ...base,
+      // A verdict row is the settled fact of delivery — it is written in the same
+      // transaction that consumes the attempt (`brief §2.3`). If one exists the
+      // run is done, whatever the board comparison two lines up concluded.
+      status: run.verdictSlug === null ? status : { ...status, state: 'delivered' },
+      verdictSlug: run.verdictSlug,
+    },
+  };
+}
+
+/**
+ * The stamps of a run whose category cannot be loaded.
+ *
+ * Empty strings and not a guess. Every version comparison downstream is an
+ * equality against a stored stamp, and an empty one matches nothing — so a phase
+ * is reported `pending` rather than silently reused under versions nobody
+ * checked.
+ */
+const UNKNOWN_VERSIONS: PhaseVersions = {
+  category_version: '',
+  prompt_version: '',
+  persona_version: '',
+  engine_version: '',
+};
 
 /**
  * The status of one run, reconstructed from its persisted artifacts.

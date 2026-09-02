@@ -73,7 +73,15 @@ export class PgPlacementClaims implements PlacementClaims {
         .values({ ...(await this.row(submission, runId)), idempotencyKey: submission.key })
         .onConflictDoUpdate({
           target: jobs.id,
-          set: { idempotencyKey: sql`coalesce(${jobs.idempotencyKey}, excluded.idempotency_key)` },
+          set: {
+            idempotencyKey: sql`coalesce(${jobs.idempotencyKey}, excluded.idempotency_key)`,
+            // `coalesce` for the same reason as the key above: a row this claim
+            // did not create — a retry, or a phase that landed first — keeps
+            // whatever it already carries, and one that has neither gets the
+            // link its buyer's status page needs.
+            submissionId: sql`coalesce(${jobs.submissionId}, excluded.submission_id)`,
+            placementEngineId: sql`coalesce(${jobs.placementEngineId}, excluded.placement_engine_id)`,
+          },
         });
     } catch {
       // Swallowed on purpose: the reason is read back below, and it is more
@@ -130,6 +138,14 @@ export class PgPlacementClaims implements PlacementClaims {
       personaVersion: submission.versions.persona_version,
       categorySnapshotVersion: submission.versions.category_version,
       engineVersion: submission.versions.engine_version,
+      // The buyer's edge to their own run, written before the first step. See
+      // `jobs.submission_id`: nothing else on this table can be joined back to a
+      // submission until the catalogue row exists, which is the last step rather
+      // than the first, and the status page is wanted long before then.
+      ...(submission.submissionId === undefined || submission.submissionId === ''
+        ? {}
+        : { submissionId: submission.submissionId }),
+      placementEngineId: submission.productId,
     };
   }
 

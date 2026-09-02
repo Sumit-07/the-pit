@@ -59,6 +59,20 @@ export interface CreateCheckoutInput {
    */
   readonly submissionId: string;
   /**
+   * The signature that lets the buyer open this submission's status page.
+   *
+   * Minted by the caller, beside the `submissions` row and before this call —
+   * see `@the-pit/auth`'s `mintRunStatusToken`. It is carried on the return URL
+   * and nowhere else, because this is the last moment at which we know the person
+   * holding it is the person who typed the submission: after this, the only thing
+   * coming back is a browser with a query string on it.
+   *
+   * Optional. Without one the return URL still names the submission and the
+   * success page still hands over the account link; only the status page is out
+   * of reach, which is the right failure for a deployment with no signing secret.
+   */
+  readonly statusToken?: string;
+  /**
    * Required to open a LIVE checkout. Phase 3 ships against Dodo test mode; this
    * flag exists so that going live is one greppable, deliberate edit rather than
    * an environment variable nobody reviewed.
@@ -107,7 +121,7 @@ export async function createCheckoutSession(input: CreateCheckoutInput): Promise
   const session = await input.transport.createCheckoutSession({
     productId: productIdFor(input.config, input.tier),
     quantity: 1,
-    returnUrl: input.config.returnUrl,
+    returnUrl: successReturnUrl(input.config.returnUrl, input.submissionId, input.statusToken),
     idempotencyKey,
     metadata: {
       submission_id: input.submissionId,
@@ -120,6 +134,37 @@ export async function createCheckoutSession(input: CreateCheckoutInput): Promise
   });
 
   return { session, idempotencyKey };
+}
+
+/**
+ * Where the buyer's run is watched. One definition, three callers.
+ *
+ * The checkout writes it into the return URL, the success page links forward to
+ * it, and the status route parses what comes back. A second spelling of this
+ * path anywhere would be a customer landing on a 404 holding a valid token.
+ */
+export function runStatusPath(submissionId: string, statusToken?: string): string {
+  const path = `/status/s/${encodeURIComponent(submissionId)}`;
+  return statusToken === undefined || statusToken === ''
+    ? path
+    : `${path}?t=${encodeURIComponent(statusToken)}`;
+}
+
+/**
+ * The return URL Dodo sends the buyer back to, with this submission named on it.
+ *
+ * Dodo appends its own `payment_id`; these two are ours. The submission id is
+ * what turns "payment received" into "here is your run", and the token is the
+ * only thing that makes that link openable — see `CreateCheckoutInput.statusToken`.
+ *
+ * Built with `URL` rather than string concatenation because `DodoConfig.returnUrl`
+ * is configuration and may already carry a query string.
+ */
+export function successReturnUrl(returnUrl: string, submissionId: string, statusToken?: string): string {
+  const url = new URL(returnUrl);
+  url.searchParams.set('submission_id', submissionId);
+  if (statusToken !== undefined && statusToken !== '') url.searchParams.set('t', statusToken);
+  return url.toString();
 }
 
 /**
@@ -137,6 +182,15 @@ export interface SuccessRedirectView {
   readonly message: string;
   /** Always 0. The redirect does not know the balance and must not imply that it does. */
   readonly attemptsGranted: 0;
+  /**
+   * Where to send the buyer next, token and all, or `null` when the query names
+   * no submission.
+   *
+   * Derived and not granted. This is a string the caller may put in an `href`;
+   * whether it opens anything is decided by the status route, which verifies the
+   * signature against the server's own keyring.
+   */
+  readonly statusPath: string | null;
 }
 
 export function resolveSuccessRedirect(query: Readonly<Record<string, string | undefined>>): SuccessRedirectView {
@@ -146,5 +200,6 @@ export function resolveSuccessRedirect(query: Readonly<Record<string, string | u
     submissionId,
     message: 'Payment received. Your run starts the moment the payment settles — this page updates itself.',
     attemptsGranted: 0,
+    statusPath: submissionId === null || submissionId === '' ? null : runStatusPath(submissionId, query['t']),
   };
 }

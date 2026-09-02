@@ -515,7 +515,15 @@ export async function executePlacement(
   const submission: PlacementSubmission | undefined =
     data.idempotencyKey === undefined || data.idempotencyKey === ''
       ? undefined
-      : { key: data.idempotencyKey, slug: data.slug, versions, productId: data.product.id };
+      : {
+          key: data.idempotencyKey,
+          slug: data.slug,
+          versions,
+          productId: data.product.id,
+          // Carried so the claim row — the first row this run writes, before
+          // anything is spent — can be found from `/status/s/<submission>`.
+          ...(data.payer?.submissionId === undefined ? {} : { submissionId: data.payer.submissionId }),
+        };
 
   if (submission !== undefined) {
     const claim = await bindings.claims.claim(submission);

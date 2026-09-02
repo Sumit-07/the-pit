@@ -28,6 +28,7 @@
  */
 
 import { capabilityHandoff, clientIp, type HandoffDeps } from '@the-pit/auth';
+import { resolveSuccessRedirect } from '@the-pit/payments';
 
 import { capabilityHandoffPage, capabilityUnavailablePage, capabilityRateLimitedPage } from '@/lib/auth/pages';
 
@@ -64,8 +65,13 @@ function html(body: string, status: number, extra: Record<string, string> = {}):
  *
  * Dodo appends its own identifiers to the return URL. `payment_id` is the one
  * that maps onto `orders.provider_payment_id`, which `orders_payment_idx`
- * covers; `resolveSuccessRedirect` in `@the-pit/payments` reads `submission_id`
- * off the same query string for the run status, and the two are independent.
+ * covers; `submission_id` and its signature are ours, written onto the return URL
+ * at checkout, and `resolveSuccessRedirect` in `@the-pit/payments` turns them
+ * into the path this page links forward to.
+ *
+ * The two are independent. The payment id decides whether an account link may be
+ * shown; the submission id decides which run is watched. Neither is evidence for
+ * the other, and one failing does not withhold the other.
  *
  * A 200 either way. The unavailable page is not an error — the payment worked,
  * the account exists, and the run is starting; the only thing that has expired
@@ -74,6 +80,21 @@ function html(body: string, status: number, extra: Record<string, string> = {}):
 export async function handleCheckoutSuccess(request: Request, deps: HandoffHandlerDeps): Promise<Response> {
   const url = new URL(request.url);
   const ipOptions = deps.trustedProxyHops === undefined ? {} : { trustedProxyHops: deps.trustedProxyHops };
+
+  /**
+   * Where the run is watched. `resolveSuccessRedirect` reads `submission_id` and
+   * the signature off the same query string the payment id arrived on, and it is
+   * a pure function from that string to a path — it grants nothing and knows
+   * nothing about a balance.
+   *
+   * This page LINKS forward rather than redirecting, and that is the whole reason
+   * it still exists. The capability URL is a bearer credential and this is the
+   * one page in the product that has it in the body; sending it onward as a query
+   * parameter would put it in a `Referer`, in a history entry and in whatever
+   * sits in front of the origin. So the account link is handed over here, under
+   * `no-referrer`, and the status page is one press away.
+   */
+  const forward = resolveSuccessRedirect(Object.fromEntries(url.searchParams)).statusPath;
 
   const result = await capabilityHandoff(
     {
@@ -90,8 +111,8 @@ export async function handleCheckoutSuccess(request: Request, deps: HandoffHandl
     return html(capabilityRateLimitedPage(), 429, { 'retry-after': String(result.retryAfterSeconds) });
   }
   if (result.outcome === 'unavailable') {
-    return html(capabilityUnavailablePage(), 200);
+    return html(capabilityUnavailablePage(forward), 200);
   }
 
-  return html(capabilityHandoffPage({ url: result.url, email: result.email }), 200);
+  return html(capabilityHandoffPage({ url: result.url, email: result.email, statusPath: forward }), 200);
 }

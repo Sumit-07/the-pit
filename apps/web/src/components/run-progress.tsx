@@ -22,15 +22,27 @@ import type { RunState, RunStatus, StepStatus } from '@/lib/pipeline/status';
  * Polling stops on a terminal state. `delivered` and `needs_support` do not move
  * again without a new run or a person, and a page left open on a delivered
  * verdict should not keep a function warm all afternoon.
+ *
+ * The poll carries the same signature the page was opened with. The endpoint
+ * gates on it exactly as the page does; a component that could refresh without
+ * one would be a second, softer door onto the same run.
  */
 
-/** How often to ask. A run is five steps over tens of seconds; this is fast enough to feel live. */
+/** How often to ask. A run is five steps over a couple of minutes; this feels live. */
 const POLL_MS = 2000;
 
 /** States that never change again on their own. */
 const TERMINAL: readonly RunState[] = ['delivered', 'needs_support'];
 
-export function RunProgress({ initial }: { initial: RunStatus }): React.JSX.Element {
+export function RunProgress({
+  initial,
+  submissionId,
+  token,
+}: {
+  initial: RunStatus;
+  submissionId: string;
+  token: string | undefined;
+}): React.JSX.Element {
   const [status, setStatus] = useState<RunStatus>(initial);
   const [stale, setStale] = useState(false);
 
@@ -41,9 +53,11 @@ export function RunProgress({ initial }: { initial: RunStatus }): React.JSX.Elem
     const timer = setInterval(() => {
       void (async () => {
         try {
-          const response = await fetch(`/api/runs/${encodeURIComponent(status.slug)}/status`, {
-            cache: 'no-store',
-          });
+          const query = token === undefined ? '' : `?t=${encodeURIComponent(token)}`;
+          const response = await fetch(
+            `/api/runs/s/${encodeURIComponent(submissionId)}/status${query}`,
+            { cache: 'no-store' },
+          );
           if (!response.ok) throw new Error(`status ${response.status}`);
           const next = (await response.json()) as RunStatus;
           if (!cancelled) {
@@ -63,28 +77,31 @@ export function RunProgress({ initial }: { initial: RunStatus }): React.JSX.Elem
       cancelled = true;
       clearInterval(timer);
     };
-  }, [status.state, status.slug]);
+  }, [status.state, submissionId, token]);
 
   return (
-    <section aria-label="Run progress" aria-live="polite">
-      <p>
+    <section className="runsteps" aria-label="Run progress" aria-live="polite">
+      <div className="runhead">
         <strong>{HEADLINE[status.state]}</strong>
-      </p>
+        <span className="runcount">
+          {status.completed} / {status.total}
+        </span>
+      </div>
 
-      <progress value={status.completed} max={status.total}>
-        {status.completed} of {status.total} steps
-      </progress>
+      <div className="runbar">
+        <i style={{ width: `${Math.round((status.completed / status.total) * 100)}%` }} />
+      </div>
 
-      <ol>
+      <ol className="runlist">
         {status.steps.map((step) => (
-          <li key={step.step}>
+          <li key={step.step} data-state={step.state}>
             <StepLine step={step} />
           </li>
         ))}
       </ol>
 
       {status.failure !== undefined && (
-        <p role="status">
+        <p className="runnote" role="status">
           {status.failure.retryable
             ? // `brief §2.3`: a retryable failure is a FREE retry, and the word
               // free is the whole message — a customer watching a step go red
@@ -96,7 +113,11 @@ export function RunProgress({ initial }: { initial: RunStatus }): React.JSX.Elem
         </p>
       )}
 
-      {stale && <p role="status">Reconnecting…</p>}
+      {stale && (
+        <p className="runnote" role="status">
+          Reconnecting…
+        </p>
+      )}
     </section>
   );
 }
@@ -122,13 +143,9 @@ const STEP_LABEL: Record<StepStatus['step'], string> = {
 function StepLine({ step }: { step: StepStatus }): React.JSX.Element {
   return (
     <>
-      <span>{STEP_LABEL[step.step]}</span> — <span>{STATE_LABEL[step.state]}</span>
-      {step.detail !== undefined && (
-        <>
-          {' '}
-          <small>{step.detail}</small>
-        </>
-      )}
+      <span className="runstep">{STEP_LABEL[step.step]}</span>
+      <span className="runstate">{STATE_LABEL[step.state]}</span>
+      {step.detail !== undefined && <span className="rundetail">{step.detail}</span>}
     </>
   );
 }

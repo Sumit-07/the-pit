@@ -178,6 +178,20 @@ export function verifyRateLimitedPage(): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * The one press between paying and watching.
+ *
+ * A link and not a redirect. The capability URL is a bearer credential and this
+ * page is the only one that carries it in its body; forwarding through a query
+ * parameter would put it in a `Referer` and in a history entry. The path is
+ * `resolveSuccessRedirect`'s, signature and all, and it is empty whenever the
+ * return URL named no submission.
+ */
+function watchRun(statusPath: string | null | undefined): string {
+  if (statusPath === null || statusPath === undefined || statusPath === '') return '';
+  return `<p><a class="${BUTTON_CLASS}" href="${escapeHtml(statusPath)}">Watch your run</a></p>`;
+}
+
+/**
  * The success page, immediately after payment. The most important screen in the
  * capability design, because it is the only place the URL is handed over while
  * the customer is certain to be looking.
@@ -190,13 +204,14 @@ export function verifyRateLimitedPage(): string {
  * `resolveSuccessRedirect` in `@the-pit/payments` is explicit that the redirect
  * must never imply it knows the balance.
  */
-export function capabilityHandoffPage(input: { url: string; email: string }): string {
+export function capabilityHandoffPage(input: { url: string; email: string; statusPath?: string | null }): string {
   const safeUrl = escapeHtml(input.url);
   return document_(
     'Payment received',
     [
       '<h1>Payment received</h1>',
       '<p>Your run starts the moment the payment settles.</p>',
+      watchRun(input.statusPath),
       '<h2>Bookmark this — it is your account</h2>',
       '<p>No password, no expiry. Anyone who has it can reach your account.</p>',
       `<p class="urlline"><a href="${safeUrl}">${safeUrl}</a></p>`,
@@ -214,12 +229,13 @@ export function capabilityHandoffPage(input: { url: string; email: string }): st
  * error: the customer's account exists and their run is running, and the page
  * says so before it offers the two other ways in.
  */
-export function capabilityUnavailablePage(): string {
+export function capabilityUnavailablePage(statusPath?: string | null): string {
   return document_(
     'Payment received',
     [
       '<h1>Payment received</h1>',
       '<p>Your run starts the moment the payment settles.</p>',
+      watchRun(statusPath),
       '<p>Your account link isn’t shown here any more.</p>',
       '<p>It was emailed to the address on your receipt. If that has not arrived, ',
       'ask for a sign-in link instead.</p>',

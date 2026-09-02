@@ -272,6 +272,31 @@ describe('GET /checkout/success — the handover that needs no login', () => {
     expect(response.headers.get('set-cookie')).toBeNull();
   });
 
+  it('links forward to the run, carrying the submission and its signature', async () => {
+    // `brief` Part 6's status page is the thing the buyer actually wants next,
+    // and until this it was reachable from nowhere. The return URL names the
+    // submission; `resolveSuccessRedirect` turns that into one path.
+    const account = store.seedAccount(PAYER);
+    store.seedOrder({ accountId: account.accountId, providerPaymentId: 'pay_abc123', createdAt: new Date() });
+
+    const body = await (
+      await handleCheckoutSuccess(
+        get('/checkout/success?payment_id=pay_abc123&submission_id=sub_9&t=sig'),
+        handoff,
+      )
+    ).text();
+
+    expect(body).toContain('href="/status/s/sub_9?t=sig"');
+    expect(body).toContain('Watch your run');
+  });
+
+  it('offers no run link when the return URL named no submission', async () => {
+    const account = store.seedAccount(PAYER);
+    store.seedOrder({ accountId: account.accountId, providerPaymentId: 'pay_abc123', createdAt: new Date() });
+    const body = await (await handleCheckoutSuccess(get('/checkout/success?payment_id=pay_abc123'), handoff)).text();
+    expect(body).not.toContain('Watch your run');
+  });
+
   it('does not leak its own URL — the page has a live credential in its body', async () => {
     const account = store.seedAccount(PAYER);
     store.seedOrder({ accountId: account.accountId, providerPaymentId: 'pay_abc123', createdAt: new Date() });
