@@ -1995,3 +1995,67 @@ footer {
     scroll-behavior: auto !important;
   }
 }
+
+/* ---------- the verdict page's share row (lib/verdict/share.ts) ----------
+ *
+ * Four ways out of the verdict page on one line: two copy buttons, an intent
+ * link and the download. A button and an anchor have to be the same object here
+ * — they do the same kind of thing and sit in the same row — so `.sact` sets the
+ * geometry both need and resets the two properties a <button> brings that an <a>
+ * does not (its own font, and a background).
+ *
+ * The badge preview rides in the row rather than under it: it is the thing the
+ * button beside it copies, and a preview a reader has to scroll to is a preview
+ * they will not look at. It is served at 20px tall and shown at its own size, so
+ * what is on the page is what a README will fetch.
+ */
+.share-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 0;
+}
+.share-row .sact {
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--ink);
+  background: none;
+  border: 1px solid var(--line);
+  padding: 9px 13px;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.share-row .sact:hover,
+.share-row .sact:focus-visible {
+  border-color: var(--cut);
+  color: var(--cut);
+}
+/* The copied state is a text swap, so the width moves; a min-width keeps the row
+   from reflowing when a label of 17 characters becomes one of 6. */
+.share-row .sact[data-copy] {
+  min-width: 150px;
+  text-align: center;
+}
+.share-row .sbadge {
+  display: block;
+  height: 20px;
+  width: auto;
+  max-width: 100%;
+}
+
+@media (max-width: 560px) {
+  /* Four controls plus a badge do not fit 390px in a row, and a wrapped row of
+     half-width buttons reads as a broken grid. One per line, full width. */
+  .share-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .share-row .sact[data-copy] {
+    min-width: 0;
+  }
+}
