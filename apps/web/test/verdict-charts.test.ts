@@ -396,8 +396,8 @@ describe('the Floor', () => {
     expect(html).not.toContain('class="dbar"><span class="dk">Conviction');
     expect(html).not.toContain('<div class="pick">');
     // The explanation is what is there instead.
-    expect(html).toContain('No buyers were shown this product, because nothing in the category was close enough');
-    expect(html).toContain('that weight was moved onto merit rather than scored as a zero');
+    expect(html).toContain('Nothing close enough to compare. Ranked on merit alone.');
+    expect(html).toContain('The demand weight moved onto merit rather than scoring a zero.');
   });
 
   it('counts the buyers who declined rather than inventing rows for them', async () => {
@@ -412,11 +412,13 @@ describe('the Floor', () => {
     expect(chart?.rows).toHaveLength(5);
 
     const html = renderVerdictPage(verdict);
-    // The wording tightened when the prose moved below the charts; the rule it
-    // protects did not. The count is a COUNT, with its denominator, and never a
-    // list of personas the run does not record.
-    expect(html).toContain('<b>1</b> of the 6 buyers were shown it and reached for something else');
-    expect(html).toContain('reached for something else');
+    // The wording has tightened twice; the rule it protects has not. The count
+    // is a COUNT, with its denominator, and never a list of personas the run
+    // does not record.
+    expect(html).toContain('<b>1</b> of 6 reached for something else.');
+    for (const persona of ['Deniz Aksoy', 'Ravi Chandrasekaran']) {
+      expect(html).toContain(persona);
+    }
   });
 
   it('draws each buyer’s conviction at the strength they gave, first choices first', async () => {

@@ -760,7 +760,7 @@ export function juryRadial(verdict: Verdict): Radial | null {
     ),
     mandates: jurorMandates(verdict.panel, axes),
     baseline: baselineOf(comparison, context),
-    unit: 'health left per metric, out of the 100 each juror starts you on',
+    unit: 'health left, out of 100',
     medianOver: comparison?.boardSize ?? 0,
     boardSize: comparison?.boardSize ?? 0,
   };
@@ -813,7 +813,7 @@ export function buyerRadial(verdict: Verdict): Radial | null {
     marks: axes.map((persona) => (byPersona.get(persona)?.pick === 'second' ? ('2nd choice' as const) : null)),
     mandates: buyerMandates(verdict.panel, axes),
     baseline: baselineOf(comparison, context),
-    unit: 'conviction behind a first choice, 0–100',
+    unit: 'conviction, out of 100',
     medianOver: comparison?.votedSize ?? 0,
     boardSize: comparison?.boardSize ?? 0,
   };

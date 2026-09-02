@@ -70,7 +70,7 @@ describe('the public verdict URL', () => {
     expect(html).toMatch(/Unit [A-Za-z]+-\d{3}/);
     expect(html).not.toContain('Sequo');
     expect(html).toContain('of 48 products');
-    expect(html).toContain('Verdict &middot; Developer Tools');
+    expect(html).toContain('Developer Tools &middot; judged');
   });
 
   it('writes its canonical and share URLs against the request origin', async () => {
@@ -119,6 +119,6 @@ describe('a slug that resolves to nothing', () => {
     const html = await response.text();
     expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
     expect(html).not.toContain('<img src=x');
-    expect(html).toContain('Verdict URLs are permanent');
+    expect(html).toContain('Check the link.');
   });
 });

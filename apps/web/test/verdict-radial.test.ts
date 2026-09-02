@@ -187,8 +187,9 @@ describe('every plotted value derives from the payload', () => {
       expect(radii[2] as number).toBeCloseTo(unit * 75, 1);
     }
 
-    // And it is said out loud, so a reader never has to infer it.
-    expect(html).toContain('The centre is 0 and the outer ring is 100');
+    // And it is said out loud, in the description a screen reader gets, so the
+    // zero baseline is never something a reader has to infer from the drawing.
+    expect(html).toContain('from 0 at the centre to 100 at the outer ring where further out is better');
   });
 
   it('paints the health polygon --held, the hue that means survived', () => {
@@ -286,7 +287,7 @@ describe('the table twin lists the numbers the shapes encode', () => {
     if (radial === null) throw new Error('no jury radial');
     const html = renderVerdictPage(verdict, { origin: 'https://thepit.show' });
 
-    const table = /<table><caption>The Panel — who hurt you[\s\S]*?<\/table>/.exec(html)?.[0] ?? '';
+    const table = /<table><caption>The Panel &mdash; health left[\s\S]*?<\/table>/.exec(html)?.[0] ?? '';
     expect(table, 'the jury radial has a table twin').not.toBe('');
 
     for (const axis of radial.axes) expect(table).toContain(axis);
@@ -330,7 +331,7 @@ describe('the table twin lists the numbers the shapes encode', () => {
       expect(Math.hypot(x - cx, y - cy) / unit, radial.axes[index]).toBeCloseTo(plotted[index] as number, 1);
     });
 
-    const table = /<table><caption>The Panel — who hurt you[\s\S]*?<\/table>/.exec(html)?.[0] ?? '';
+    const table = /<table><caption>The Panel &mdash; health left[\s\S]*?<\/table>/.exec(html)?.[0] ?? '';
     for (const value of plotted) expect(table).toContain(`<td>${value.toFixed(1)}</td>`);
   });
 
@@ -498,10 +499,10 @@ describe('a solo cluster compares against the category, and says so', () => {
     expect(buyerRadial(verdict)).toBeNull();
 
     const html = renderVerdictPage(verdict);
-    // No buyer figure at all, and the heading does not promise one.
+    // No buyer figure at all, and no empty row where one would have been.
     expect(html).not.toContain('class="rfig rb"');
-    expect(html).toContain('<h2>Who hurt you</h2>');
-    expect(html).toContain('No buyers were shown this product');
+    expect(html).not.toContain('class="bgrid"');
+    expect(html).toContain('Nothing close enough to compare. Ranked on merit alone.');
   });
 
   it('gives its one chart the whole row instead of an empty second column', async () => {
@@ -512,41 +513,34 @@ describe('a solo cluster compares against the category, and says so', () => {
     const solo = parseVerdict(await seededVerdictNamed('developer-tools', 'Carillon'));
     const soloHtml = renderVerdictPage(solo);
 
-    expect(soloHtml).toContain('<div class="rgrid rsolo">');
-    expect(soloHtml).not.toContain('<div class="rgrid rpair">');
-    // Exactly one figure in the grid, and no placeholder standing in for the
-    // other: an empty slot is what this test exists to catch.
+    // The jury radial pairs with the heatmap in the top row; the buyers row is
+    // absent entirely rather than present with a hole in it.
+    expect(soloHtml).toContain('<div class="pgrid">');
+    expect(soloHtml).not.toContain('<div class="bgrid">');
     expect((soloHtml.match(/<figure class="rfig /g) ?? []).length).toBe(1);
     expect(soloHtml).not.toContain('<figure class="rfig rb"');
 
-    // A verdict that HAS both charts still gets both, and the class still says
-    // which page this is.
+    // A verdict that HAS both charts still gets both, in two rows.
     const paired = await withPeers('developer-tools');
     const pairedHtml = renderVerdictPage(paired);
-    expect(pairedHtml).toContain('<div class="rgrid rpair">');
+    expect(pairedHtml).toContain('<div class="pgrid">');
+    expect(pairedHtml).toContain('<div class="bgrid">');
     expect((pairedHtml.match(/<figure class="rfig /g) ?? []).length).toBe(2);
   });
 
-  it('lays every radial out the same way, on the page’s own rails', async () => {
-    // The layout used to fork: a solo verdict put its chart in one column and
-    // its words in the other, and a PAIR put two charts side by side in a band
-    // that broke 120px out of the 820px column on either side. That band was the
-    // only element on the page not aligned to its own heading — and a founder
-    // reading it said so. One rule now, for one figure or two, and it is the
-    // rule the majority case already used.
+  it('pairs the figures in halves of the measure, and stacks them on a phone', async () => {
+    // Two rules, one for each row, and both start single-column. A figure that
+    // columned unconditionally would put a 279px polygon in a 190px slot on a
+    // phone, which is where a shared verdict is opened.
     const paired = await withPeers('developer-tools');
     const solo = parseVerdict(await seededVerdictNamed('developer-tools', 'Carillon'));
 
     for (const html of [renderVerdictPage(paired), renderVerdictPage(solo)]) {
-      // Chart in the wide column, the words that explain it in the narrow one.
-      expect(html).toContain('.rfig{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(228px,1fr)');
-      expect(html).toContain('grid-template-areas:"t t" "chart side"');
-      // The grid itself stacks its figures and never columns them, so two charts
-      // are two rows rather than a wider band.
-      expect(html).toContain('.rgrid{display:grid;gap:22px;margin-top:16px;grid-template-columns:minmax(0,1fr)}');
-      expect(html).not.toMatch(/\.rgrid[^{]*\{[^}]*minmax\(0,1fr\) minmax\(0,1fr\)/);
-      // And nothing in the radial CSS reaches outside the measure any more.
-      expect(html).not.toContain('.rgrid{margin-inline:-');
+      expect(html).toContain('.pgrid,.bgrid{display:grid;gap:20px;margin-top:16px;grid-template-columns:minmax(0,1fr)');
+      expect(html).toMatch(
+        /@media \(min-width:1000px\)\{\s*\.pgrid,\.bgrid\{grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/,
+      );
+      // And nothing on the page reaches outside its own measure.
       expect(html).not.toMatch(/margin-inline:-\d+px/);
     }
   });
@@ -665,11 +659,18 @@ describe('the charts lead and the reasons follow', () => {
     const verdict = await withPeers('developer-tools');
     const html = renderVerdictPage(verdict);
 
-    const radials = html.indexOf('Who hurt you, who wanted you');
-    const heatmap = html.indexOf('Who cut you, and where');
+    // The page order: the header's two lines, the scorecard, the panel figures,
+    // then the ledger last.
+    const header = html.indexOf('<div class="vlines">');
+    const scorecard = html.indexOf('<h2>The scorecard</h2>');
+    const panel = html.indexOf('<h2>Who hurt you, who wanted you</h2>');
+    const heatmap = html.indexOf('Where the cuts landed');
     const ledger = html.indexOf("Every cut, in the juror's own words");
-    expect(radials).toBeGreaterThan(-1);
-    expect(radials).toBeLessThan(heatmap);
+    expect(header).toBeGreaterThan(-1);
+    expect(header).toBeLessThan(scorecard);
+    expect(scorecard).toBeLessThan(panel);
+    // The heatmap is inside the panel section, beside the jury radial.
+    expect(panel).toBeLessThan(heatmap);
     expect(heatmap).toBeLessThan(ledger);
 
     // `brief` Part 6 still binds: moving the prose below the figures is not

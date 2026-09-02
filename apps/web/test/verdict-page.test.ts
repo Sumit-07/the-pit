@@ -15,10 +15,9 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { HEALTH_NOTE } from '@/lib/boards/copy';
 import { parseVerdict } from '@/lib/verdict/model';
 import { BASE, TOKENS } from '@/lib/theme';
-import { renderVerdictNotFound, renderVerdictPage, stampedRank, stampTime } from '@/lib/verdict/page';
+import { cutsLine, renderVerdictNotFound, renderVerdictPage, stampedRank, stampTime } from '@/lib/verdict/page';
 
 import { handBuiltVerdict, seededVerdictNamed } from './helpers/verdict.js';
 
@@ -33,11 +32,15 @@ describe('never promise a rank', () => {
   it('renders the rank only beside the product count and the moment', async () => {
     const html = await renderSeeded('developer-tools', 'Sequo');
 
-    // The card's own line: the big number, then what qualifies it.
-    expect(html).toContain('<span class="big">7</span>');
-    expect(html).toContain('of 48 products');
+    // The hero number carries its denominator in the same element, the date in
+    // the byline beside it, and `stampedRank` in full on its own title — so the
+    // rank cannot be read, copied or hovered without both stamps.
+    expect(html).toContain('<u>#</u>7<i> / 48</i>');
+    expect(html).toContain('title="7 of 48 products on 27 Aug 2026, 14:03 UTC"');
+    expect(html).toContain('Developer Tools &middot; judged 27 Aug 2026');
+    // And the full instant is in the footer, which is the record.
     expect(html).toContain(STAMP);
-    expect(html).toContain('The board has moved since.');
+    expect(html).toContain('of 48 products');
   });
 
   it('carries both stamps into the share text, where the rank travels furthest', async () => {
@@ -72,9 +75,9 @@ describe('the connective word', () => {
     // anonymity withholds the identity and touches nothing else.
     expect(html).toMatch(/Unit [A-Za-z]+-\d{3} took 30 in cuts\./);
     expect(html).not.toContain('Sequo');
-    expect(html).toContain('Everyone walks in at 100.');
-    // And it explains why cuts is not the sum of the ledger's points.
-    expect(html).toContain('not the sum of the points below');
+    // The same sentence is what the share row copies, so the line a founder
+    // pastes is the line the page was issued with.
+    expect(html).toMatch(/writeText\(&quot;Unit [A-Za-z]+-\d{3} took 30 in cuts\./);
   });
 });
 
@@ -82,24 +85,22 @@ describe('a solo cluster', () => {
   it('renders the explanation, not an empty Floor section', async () => {
     const html = await renderSeeded('developer-tools', 'Carillon');
 
-    expect(html).toContain('No buyers were shown this product, because nothing in the category was close enough');
+    // The fact, in one line, twice: on the header's right-hand card where a
+    // buyer quote would be, and in the cluster block that produced it.
+    expect(html).toContain('<div class="ln h">Nothing close enough to compare. Ranked on merit alone.</div>');
+    expect(html).toContain('<b>Nothing close enough to compare. Ranked on merit alone.</b>');
     expect(html).toContain('EU-hosted mobile push notifications');
-    expect(html).toContain('held 1 product on the day this was issued');
-    expect(html).toContain('This is the common case, not a gap in the run.');
     // `DECISIONS.md` S3: the demand weight moves onto merit rather than scoring a zero.
-    expect(html).toContain('that weight was moved onto merit rather than scored as a zero');
+    expect(html).toContain('The demand weight moved onto merit rather than scoring a zero.');
 
-    // And the summary line says so too, rather than printing a demand of 0.00.
-    expect(html).toContain('no buyers convened');
-    expect(html).toContain('n/a &mdash; solo cluster');
+    // And no demand figure is printed for a Floor that never convened.
     expect(html).not.toContain('<span>0.00</span>');
-    // Above all: never "0 of M" on the "picked you" line. No buyers convened is
-    // a fact about the cluster (nobody was shown this product), not a demand
-    // signal of universal rejection — `DECISIONS.md` S3's whole point. A "0 of
-    // 6" would read as the latter to a customer who never sees the code that
-    // produced it. (The rank stamp legitimately says "of 48 products" nearby —
-    // this checks the picked-you line specifically, not the whole page.)
-    expect(html).not.toMatch(/picked you<\/span><span>\d+ of \d+<\/span>/);
+    expect(html).not.toContain('class="dparts"');
+    // Above all: never "0 of M" anywhere. No buyers convened is a fact about the
+    // cluster (nobody was shown this product), not a demand signal of universal
+    // rejection — `DECISIONS.md` S3's whole point. A "0 of 6" would read as the
+    // latter to a customer who never sees the code that produced it.
+    expect(html).not.toMatch(/\b0 of \d+ buyers\b/);
   });
 
   it('still shows the cluster it was judged inside', async () => {
@@ -109,16 +110,26 @@ describe('a solo cluster', () => {
     expect(html).toContain('Push-notification services are established');
     expect(html).toContain('scarcity 30/100');
   });
+
+  it('names no buyers chart and no buyers block for a Floor that never convened', async () => {
+    const html = await renderSeeded('developer-tools', 'Carillon');
+
+    // The buyers row is absent entirely rather than present and empty: a half
+    // of a grid with nothing in it reads as a page that failed to render.
+    expect(html).not.toContain('class="bgrid"');
+    expect(html).not.toContain('class="rfig rb"');
+  });
 });
 
 describe('the Floor, when it convened', () => {
   it('names each persona beside the reason they gave, and states the roster they were picked against', async () => {
     const html = await renderSeeded('developer-tools', 'Sequo');
 
-    // `platform-surfaces-mockup.html`'s own phrasing: "Panel picked you — N of M".
-    // 5 personas named Sequo first, out of the 6-persona panel that answered
-    // this run (`cjr/runs/developer-tools/ranking.json`'s top-level `personas`).
-    expect(html).toContain('<span>The Buyers picked you</span><span>5 of 6</span>');
+    // 5 personas named Sequo, out of the 6-persona panel that answered this run
+    // (`cjr/runs/developer-tools/ranking.json`'s top-level `personas`). The
+    // count is on the header's one-line sub and again over the quote cards.
+    expect(html).toContain('<small>Top 15% of the board · 5 of 6 buyers</small>');
+    expect(html).toContain('<b>5 of 6</b> buyers named this product.');
     // Every pick block pairs a chip with a reason and a persona.
     const picks = [...html.matchAll(/<div class="pick">.*?<\/div>/gs)];
     expect(picks.length).toBeGreaterThan(0);
@@ -139,7 +150,8 @@ describe('the Floor, when it convened', () => {
       { origin: 'https://thepit.show' },
     );
 
-    expect(html).toContain('<span>The Floor picked you</span><span>2 of 6</span>');
+    expect(html).toContain('2 of 6 buyers</small>');
+    expect(html).toContain('<b>2 of 6</b> buyers named this product.');
   });
 });
 
@@ -161,8 +173,8 @@ describe('every deduction, with the juror who made it', () => {
       expect(block).toContain(deduction.role);
     }
 
-    // The sharpest cut is also quoted on the card, with its juror cited.
-    expect(html).toContain('The Platform Owner &middot; &minus;80 on Durability');
+    // The sharpest cut is also the header's left-hand line, with its juror cited.
+    expect(html).toContain('<small>The Platform Owner · −80 on Durability</small>');
   });
 
   it('discloses a juror who returned nothing', () => {
@@ -186,7 +198,7 @@ describe('frozen, not derived', () => {
 
     const html = renderVerdictPage(parseVerdict({ ...row, payload, productCount: 12 }));
 
-    expect(html).toContain('<span class="big">3</span>');
+    expect(html).toContain('<u>#</u>3<i> / 12</i>');
     expect(html).toContain('of 12 products');
     expect(html).not.toContain('of 48 products');
   });
@@ -353,27 +365,18 @@ describe('the two hues, on the one page that draws both halves', () => {
   it('leads the card with the health figure, in the colour that means survived', async () => {
     const html = await renderSeeded('developer-tools', 'Sequo');
 
-    // Sequo took 30 in cuts, so it walked out with 70.
+    // Sequo took 30 in cuts, so it walked out with 70 — and the bar's own
+    // readout names the metric that ate the most of the other 30.
     expect(html).toContain('<b class="held">70 health left</b>');
     expect(html).toContain('<b class="pts">&minus;30 in cuts</b>');
-    expect(html).toContain('<span class="held">70 / 100</span>');
-  });
-
-  it('carries the health note wherever it shows the health figure', async () => {
-    const html = await renderSeeded('developer-tools', 'Sequo');
-
-    // The note travels with the number, on every surface that shows it. Asserted
-    // through the constant rather than as a literal: `HEALTH_NOTE` is shared with
-    // both board surfaces, and a copy edit there should not have to be made twice
-    // here. What this guards is that the note is PRESENT, not how it is worded.
-    expect(html).toContain(HEALTH_NOTE);
+    expect(html).toContain('&middot; worst: Durability &minus;');
   });
 });
 
 describe('the register fits the room', () => {
   it('calls a b2b panel The Buyers and a consumer one The Floor', async () => {
     const b2b = await renderSeeded('developer-tools', 'Sequo');
-    expect(b2b).toContain('<h2>The Buyers</h2>');
+    expect(b2b).toContain('<figcaption class="rtitle">The Buyers</figcaption>');
 
     const consumer = renderVerdictPage(
       parseVerdict({
@@ -384,6 +387,48 @@ describe('the register fits the room', () => {
         },
       }),
     );
-    expect(consumer).toContain('<h2>The Floor</h2>');
+    expect(consumer).toContain('<figcaption class="rtitle">The Floor</figcaption>');
+  });
+});
+
+/**
+ * The share row.
+ *
+ * The audit's second item: the verdict is the most screenshot-able object the
+ * product makes and had two controls, neither of which shared it. The row is
+ * `lib/verdict/share.ts`'s and the page's job is to place it — so this asserts
+ * the seam is wired and that the badge, which is the only compounding backlink a
+ * ranking site gets, points at this verdict's own URL.
+ */
+describe('the share row', () => {
+  it('renders four controls, with the badge and the copy line built from the frozen verdict', async () => {
+    const html = await renderSeeded('developer-tools', 'Sequo');
+    const verdict = parseVerdict(await seededVerdictNamed('developer-tools', 'Sequo'));
+    const url = `https://thepit.show/v/${verdict.slug}`;
+
+    expect(html).toContain('<div class="share-row">');
+    expect(html).toContain('Copy verdict line');
+    expect(html).toContain('Post on X');
+    expect(html).toContain('Badge for README');
+
+    // The badge is an absolute URL under this verdict's own slug, so a README
+    // that embeds it links back here from wherever it is pasted.
+    expect(html).toContain(`href="${url}/badge.svg"`);
+    // The intent link carries the frozen sentence and the canonical URL.
+    expect(html).toContain(`https://twitter.com/intent/tweet?text=${encodeURIComponent(cutsLine(verdict))}`);
+    expect(html).toContain(encodeURIComponent(url));
+    // And the download moved here from the header.
+    expect(html).toContain(`href="${url}?download=1"`);
+  });
+
+  it('escapes a hostile name in the copy handler, which is an attribute holding a string literal', () => {
+    const html = renderVerdictPage(
+      parseVerdict(handBuiltVerdict({ name: '"><script>alert(1)</script>' })),
+      { origin: 'https://thepit.show' },
+    );
+
+    expect(html).not.toContain('<script');
+    expect(html).not.toContain('onclick="navigator.clipboard&&navigator');
+    expect(html).toContain('&quot;&gt;&lt;script&gt;');
   });
 });

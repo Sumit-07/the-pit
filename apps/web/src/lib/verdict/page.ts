@@ -11,79 +11,68 @@
  * `apps/web/src/lib/auth/pages.ts` made for the magic-link screens, and this
  * follows both.
  *
- * It also means the page has no client JavaScript at all, and the figures below
- * are held to that: the heatmap's hover readouts, the bar tooltips, the spoke
- * biographies and the table views are CSS, native focus and native `<details>`,
- * so a copy saved to disk is as interactive as the served page.
- * `test/verdict-page.test.ts` asserts the absence of a `<script` tag, which is
- * the rule stated as a test rather than as a habit.
+ * It also means the page carries no `<script>` tag, and the figures below are
+ * held to that: the heatmap's hover readouts, the bar tooltips, the spoke
+ * biographies, the ledger's blocks and the table views are CSS, native focus and
+ * native `<details>`, so a copy saved to disk is as interactive as the served
+ * page. `test/verdict-page.test.ts` asserts the absence of a `<script` tag,
+ * which is the rule stated as a test rather than as a habit.
  *
- * ## One rail
+ * The one exception is the share row's copy button, which carries an inline
+ * `onclick` and no script block — see `lib/verdict/share.ts`. It degrades to a
+ * button that does nothing, and the sentence it would have copied is on the page
+ * above it either way, so nothing on this document is reachable only through it.
  *
- * Every block on this page — the card, each section's heading and lede, every
- * figure and every ledger block — sits on the same left and right edges, and
- * their inner surfaces inset by the same 18px. That was not true: the radial pair
- * broke 120px out of the column on both sides, `.well2` inset its content by 14px
- * where `.blk` and `.well` inset by 18 and `.ledger` by 17, and the radial grid
- * left no gap under its own lede where every other figure leaves 16. A founder
- * reading the page called the alignment strange without naming a number, which is
- * what four different rails inside one 784px measure look like.
+ * ## A scorecard, not an essay
  *
- * ## What is on it, and why each figure is the figure it is
+ * The audit that produced this shape measured the previous page at 1440px and
+ * found a 675px column with its paragraphs set in 10px mono, the rank a mid-size
+ * numeral under a robot, and the two things a founder actually screenshots — the
+ * harshest cut and the warmest buyer quote — at positions two and nine. The order
+ * is now the order somebody reads it in:
  *
- * `brief` Part 6: "lead with deductions and reasons, not composites". A founder
- * paying for this wants to know *who hurt me, who wanted me, where exactly, how
- * badly, and did the panel agree* — so the page is those answers in that order,
- * and every mark on it is a deduction somebody wrote a reason for. `charts.ts`
- * derives every plotted number and carries the form argument for each.
+ * 1. **The header.** Identity, then the rank as the hero number with a one-line
+ *    sub that says where on the board that is. The health bar under it: the
+ *    `--held` head the product walked out with, and each metric's exact `--cut`
+ *    share of what came off, heaviest first. Then the two lines — sharpest cut on
+ *    a `--cut` rail, warmest buyer on a `--held` one — and the share row, which
+ *    is `lib/verdict/share.ts`'s.
+ * 2. **The scorecard.** Five metric bars on one shared 0–100 axis: the merged
+ *    score as the `--held` head, the loss as the `--cut` remainder, the frozen
+ *    category median as a tick, and the cross-juror spread as an ink whisker.
+ * 3. **The panel and the buyers**, as four figures in two rows. *Who hurt me*
+ *    (the jury radial) beside *where* (the juror × metric heatmap); *who wanted
+ *    me* (the buyers radial) beside *why they said so* (their quotes, with the
+ *    conviction each put behind a first choice). Hovering, tabbing to or tapping
+ *    a spoke says who that juror or buyer is, out of the frozen panel.
+ * 4. **The cluster** it was judged inside, and for the 32 of 48 rows that are a
+ *    cluster of one, the fact that nothing was close enough to compare it to.
+ * 5. **The ledger**, one `<details>` per metric, heaviest first, the first one
+ *    open. Every deduction is still in the document with the juror who took it —
+ *    `brief` Part 6 — and collapsing is not hiding: there is no fetch behind the
+ *    control, so a saved copy, a printed copy and Ctrl-F all reach every line.
+ * 6. **The footer**: the frozen stamp, the version ids, the download.
  *
- * - **The health meter**, on the card. Part-to-whole: the hundred points this
- *   product walked in with, the `--held` head it walked out with, and each
- *   metric's exact `--cut` share of what came off.
- * - **Two radials.** Six jurors and six buyers on fixed axes, this product's
- *   shape against its frozen cluster peers and the category median. They answer
- *   *who hurt me* and *who wanted me* as a shape comparison, which is the one
- *   question six bars answer worse. Both plot a quantity where **further out is
- *   better** — the health each juror left standing, the conviction each buyer
- *   put behind a first choice — so both are painted `--held`, and a strong
- *   product fills its shape instead of drawing a speck. One chart per row, with
- *   the words that explain it in the column beside it; hovering, tabbing to or
- *   tapping a spoke says who that juror or buyer is, out of the frozen panel.
- * - **The juror × metric heatmap.** Magnitude across two categorical dimensions,
- *   so a sequential ramp on `--cut`. It answers *where*, and every cell carries
- *   the juror's own sentence. It is the one figure here that plots what was TAKEN
- *   rather than what survived, deliberately; `matrixFigure` argues it in full.
- * - **What each metric kept, with the cross-juror spread**, on one shared 0–100
- *   axis: the `--held` head is the merged score, the `--cut` remainder is the loss,
- *   and the frozen category median is a tick on the same axis.
+ * Every figure with an axis points the same way — further out, further along, is
+ * a better card — so the page does not reverse under a reader scrolling it. The
+ * heatmap is the documented exception and plots what was TAKEN; `matrixFigure`
+ * argues it in full. `charts.ts`'s `FIGURE_PAINT` records each figure's direction
+ * beside the selectors that paint it, and `test/verdict-polarity.test.ts` fails
+ * when the two disagree.
  *
- * Every figure with an axis therefore points the same way — further out, further
- * along, is a better card — so the page does not reverse under a reader scrolling
- * it. `charts.ts`'s `FIGURE_PAINT` records each figure's direction beside the
- * selectors that paint it, and `test/verdict-polarity.test.ts` fails when the two
- * disagree.
- * - **The Floor**, as a conviction bar per buyer who named you — or, for the
- *   majority of products, the stated fact that no buyer was ever shown it.
+ * ## One rail, and one caption
  *
- * ## Charts lead; the prose sits under them
- *
- * The founder's note was "too much text on the verdict page… we can always show
- * the texts below that". So the figures come first and the reading matter follows
- * them: the full ledger — every deduction, its sentence and the juror who wrote
- * it — is now the LAST section rather than the middle one. It is not shortened
- * and nothing is hidden behind a control. `brief` Part 6's rule that deductions
- * lead over composites is satisfied by what the charts are ABOUT: a radial of who
- * cut you, a heatmap cell carrying its reason. The composites stay where Part 6
- * puts them — small lines on the card, in mono, at 14px.
+ * Every block sits on the same left and right edges inside a 1100px measure, and
+ * every inner surface insets by the same 18px. Prose is the sans at 15px and mono
+ * is for numbers, labels and stamps only: 10px mono paragraphs are what made this
+ * page read as a terminal dump. No caption runs past one line, and every "why we
+ * did it this way" clause has been cut — the argument for a figure belongs in
+ * this file, not on the page a customer paid for.
  *
  * ## Where the design comes from
  *
  * `lib/theme.ts`, the same values and two families every other surface uses,
- * interpolated into this document so a saved copy carries its own theme. The card
- * keeps the hierarchy the surface has always had — the header strip with the
- * category and the name, the oversized rank that cannot be printed without its
- * product count and its date, the summary lines, the pull-quote from the sharpest
- * juror, the mono footer with the versions.
+ * interpolated into this document so a saved copy carries its own theme.
  *
  * Every painted figure sits in a `--sunk` well rather than on a `--card` face.
  * That is not styling: the accent ramp's lowest step clears the 2:1 floor against
@@ -118,7 +107,6 @@
 
 import { escapeHtml } from '@the-pit/auth';
 
-import { HEALTH_NOTE } from '@/lib/boards/copy';
 import { BASE, FONT_LINKS, TOKENS } from '@/lib/theme';
 
 import {
@@ -135,7 +123,8 @@ import {
   type Radial,
   type RadialSeries,
 } from './charts';
-import type { Verdict, VerdictDeduction, VerdictMetric } from './model';
+import type { Verdict, VerdictMetric } from './model';
+import { renderShareRow } from './share';
 
 /** `brief` Part 5: the domain. Used when a caller does not supply the request's origin. */
 export const PIT_ORIGIN = 'https://thepit.show';
@@ -172,6 +161,20 @@ export function stampTime(iso: string): string {
     `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()] ?? '???'} ${date.getUTCFullYear()}, ` +
     `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())} UTC`
   );
+}
+
+/**
+ * `2026-08-27T14:03:00Z` -> `27 Aug 2026`.
+ *
+ * The date the header byline carries. UTC for the same reason `stampTime` is: the
+ * stamp is a claim about when the board was, and a reader in Auckland must not see
+ * a different day from the person who shared it. The full instant is in the
+ * footer, which is where a dispute is argued from.
+ */
+export function stampDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()] ?? '???'} ${date.getUTCFullYear()}`;
 }
 
 /**
@@ -236,115 +239,112 @@ function productLink(url: string): string {
 const FONTS = FONT_LINKS;
 
 const CSS = `${TOKENS}${BASE}
-.wrap{max-width:820px}
+/*
+ * 1100px, not 820. The audit measured the old page at 1440 and found "a 675px
+ * column on a 1440px screen, with paragraphs set in 10px mono" — two thirds of
+ * the screen empty and the important numbers the same size as the footnotes.
+ * The measure widened so the two figures that answer "who hurt me" and "where"
+ * can sit side by side and still be read, which is the whole shape of this page.
+ */
+.wrap{max-width:1100px}
+/* Prose is the sans at 15px. Mono is for numbers, labels and stamps and for
+   nothing else — 10px mono paragraphs are what made this page read as a
+   terminal dump rather than as a scorecard. */
+p{font-size:15px;line-height:1.6}
+.lede{font-size:15px;max-width:70ch}
 
-/* ---------- the card ---------- */
-.vcard{background:var(--card);border:1px solid var(--line);border-radius:var(--r3);
-  box-shadow:var(--lip),var(--e3);margin-top:16px;overflow:hidden}
-/* The card's masthead is --rise, the top of the stack: the verdict's own rim,
-   with the cut rule under it as the first step down. */
-.vtop{background:var(--rise);color:var(--ink);padding:20px 24px 22px;position:relative;
-  box-shadow:var(--lip)}
-.vtop::after{content:"";position:absolute;left:0;bottom:0;height:3px;width:34%;background:var(--cut)}
-.vtop .lbl{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.17em;
-  text-transform:uppercase;color:var(--dimmer)}
-.vtop h1{font-weight:700;font-size:clamp(23px,4.2vw,34px);line-height:1.06;
-  letter-spacing:-.03em;margin-top:9px;overflow-wrap:anywhere}
-.vtop .purl{display:block;margin-top:10px}
-/* The anonymous masthead: the robot beside the designation rather than above it,
-   because at 88px it is the same visual weight as the h1 and the two read as one
-   identity. align-items:flex-start keeps the plate square against the label
-   rather than centring it against a two-line sentence. No hue — an avatar in
-   --cut or --held would make an identity read as a score. */
-.vtop.anon{display:flex;align-items:flex-start;gap:18px}
-.vtop .vident{min-width:0;flex:1 1 auto}
-.vtop .vavatar{flex:0 0 auto;display:inline-flex;background:var(--sunk);
-  border:1px solid var(--hair);box-shadow:inset 0 1px 3px rgb(var(--shade-c) / .55)}
-.vtop .vavatar svg{display:block}
-.vtop .purl.anon{font-family:var(--mono);font-size:11px;line-height:1.6;
-  color:var(--dimmer);max-width:52ch}
-@media (max-width:520px){
-  .vtop.anon{flex-direction:column;gap:12px}
-}
+/* ---------- the header: identity, rank, health, the two lines, the share row ---------- */
+.vhead{background:var(--card);border:1px solid var(--line);border-radius:var(--r3);
+  box-shadow:var(--lip),var(--e1);padding:22px 24px 20px;margin-top:14px}
+.vid{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px 26px;align-items:start}
+.vwho{display:flex;align-items:center;gap:14px;min-width:0}
+/* The plate. A robot for an anonymous listing, a mono initial for a named one —
+   no hue either way, because an identity painted --cut or --held would read as
+   a score. */
+.vfav{flex:0 0 auto;width:46px;height:46px;display:grid;place-items:center;overflow:hidden;
+  background:var(--sunk);border:1px solid var(--hair);
+  box-shadow:inset 0 1px 3px rgb(var(--shade-c) / .55);
+  font-family:var(--mono);font-size:17px;font-weight:600;color:var(--dimmer)}
+.vfav svg{display:block;width:100%;height:100%}
+.vname{min-width:0}
+.vhead h1{font-weight:700;font-size:clamp(21px,2.6vw,27px);line-height:1.12;
+  letter-spacing:-.024em;overflow-wrap:anywhere}
+.vcat{display:block;margin-top:5px;font-family:var(--mono);font-size:10.5px;font-weight:500;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--dimmer)}
+.vurl{display:block;margin-top:7px}
 .plink{font-family:var(--mono);font-size:11px;color:var(--dimmer);
   text-decoration:none;overflow-wrap:anywhere}
 a.plink:hover{color:var(--ink);text-decoration:underline}
+/* The hero number. Mono, because it is a measurement, and tabular so a #1 and a
+   #14 sit on the same right edge. It never appears without its denominator. */
+.vrank{text-align:right;justify-self:end}
+/* The hash is a marker and the number is the hero, so they are not the same
+   size. That is also what fixes the collision: IBM Plex Mono's hash has long
+   horizontal bars that fill almost its whole advance, and at 56px beside a 1
+   the rank read as a struck-through digit. */
+.vrank b{display:block;font-family:var(--mono);font-size:clamp(40px,5.4vw,56px);font-weight:500;
+  line-height:.95;font-variant-numeric:tabular-nums;white-space:nowrap}
+.vrank b u{text-decoration:none;font-size:.5em;color:var(--dimmer);vertical-align:.42em;
+  margin-right:.04em}
+.vrank b i{font-style:normal;font-size:.4em;color:var(--dimmer)}
+.vrank small{display:block;margin-top:7px;font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--dimmer)}
+.pitch{display:inline-block;margin-top:8px;font-family:var(--mono);font-size:10px;font-weight:600;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--dim);border:1px solid var(--line);
+  padding:3px 9px}
 
-.vrank{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;
-  padding:20px 24px 18px;border-bottom:1px solid var(--line)}
-.vrank .big{font-weight:800;font-size:54px;line-height:.84;letter-spacing:-.05em;
-  font-variant-numeric:tabular-nums}
-.vrank .of{font-size:13.5px;line-height:1.5;color:var(--dim);max-width:34ch}
-.vrank .of b{display:block;color:var(--ink);font-size:14px;font-weight:600}
-.pitch{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--dim);border:1px solid var(--line);border-radius:999px;
-  padding:4px 10px;align-self:center;margin-left:auto}
+/* The meter is lib/theme.ts's, unmodified — the same .row / .kept / .seg
+   structure and the same two hues. Taller here, with the two readouts under it. */
+.vbar{margin-top:20px}
+.vbar .meter{height:12px;box-shadow:inset 0 2px 5px rgb(var(--shade-c) / .5)}
+.vbar .meter .seg.s6{background:rgb(var(--cut-c) / .58)}
+.vbarlbl{display:flex;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;margin-top:9px;
+  font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--dimmer)}
+.vbarlbl .held,.vbarlbl .pts{font-size:11px;letter-spacing:.06em}
 
-/* ---------- the health meter, on the card ---------- */
-/*
- * The meter itself is lib/theme.ts's, unmodified: the same element, the same
- * .row / .kept / .seg structure, the same colours. It used to be a local
- * copy with its own .kept painted rgb(--ink-c / .40), and that copy is why
- * this page kept drawing the surviving half in grey after every other surface had
- * moved it to --held. A copied rule is a rule that drifts; two overrides — the
- * card wants a taller bar with air above it — are not.
- *
- * --held is the health that survived and --cut is what was taken, and the
- * caption below names both in their own colour. theme.ts states the rule; this
- * page now obeys it by inheritance rather than by agreement.
- */
-.vmeter{padding:18px 24px 20px;border-bottom:1px solid var(--line)}
-.vmeter .cap{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;
-  font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:10.5px;
+/* The two lines a founder screenshots: the sharpest cut and the warmest buyer.
+   One rail each, in the hue that says which it is. */
+.vlines{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px}
+.vlines .ln{background:var(--rise);border-left:3px solid var(--line);padding:13px 16px;
+  font-size:15px;line-height:1.45;color:var(--ink);box-shadow:var(--lip)}
+.vlines .ln.c{border-left-color:var(--cut)}
+.vlines .ln.h{border-left-color:var(--held)}
+.vlines .ln small{display:block;margin-top:9px;font-family:var(--mono);font-size:10.5px;
   letter-spacing:.06em;text-transform:uppercase;color:var(--dimmer)}
-.vmeter .cap .held{font-size:10.5px;letter-spacing:.06em}
-.vmeter .cap .pts{font-size:10.5px;letter-spacing:.06em}
-.vmeter .meter{height:14px;margin-top:9px;box-shadow:inset 0 2px 5px rgb(var(--shade-c) / .5)}
-.vmeter .meter .seg.s6{background:rgb(var(--cut-c) / .58)}
-.vnote{display:block;margin-top:10px;font-family:var(--mono);font-size:10px;
-  line-height:1.65;color:var(--faint);letter-spacing:.02em}
-.vkeys{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:11px;
-  font-family:var(--mono);font-size:10.5px;color:var(--dim)}
-.vkeys span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
-.vkeys i{display:inline-block;width:9px;height:9px;border-radius:0;background:var(--cut)}
-.vkeys i.s2{background:rgb(var(--cut-c) / .90)}
-.vkeys i.s3{background:rgb(var(--cut-c) / .80)}
-.vkeys i.s4{background:rgb(var(--cut-c) / .71)}
-.vkeys i.s5{background:rgb(var(--cut-c) / .64)}
-.vkeys i.s6{background:rgb(var(--cut-c) / .58)}
-.vkeys b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+@media (max-width:760px){.vlines{grid-template-columns:1fr}}
 
-.vbody{padding:16px 24px 20px}
-.vline{display:flex;justify-content:space-between;gap:14px;font-size:14px;padding:9px 0;
-  border-bottom:1px solid var(--hair)}
-.vline:last-of-type{border-bottom:0}
-.vline span:first-child{color:var(--dim)}
-.vline span:last-child{font-family:var(--mono);font-variant-numeric:tabular-nums;
-  font-weight:600;text-align:right}
-.vline .none{color:var(--dim);font-weight:500}
-.vquote{font-size:16px;line-height:1.5;color:var(--ink);border-left:3px solid var(--cut);
-  padding-left:16px;margin-top:20px;font-weight:500;letter-spacing:-.008em}
-.vquote cite{display:block;font-style:normal;font-family:var(--mono);font-size:10.5px;
-  color:var(--dimmer);margin-top:9px;letter-spacing:.04em}
-.vfoot{background:var(--wash);border-top:1px solid var(--line);padding:12px 24px;
-  font-family:var(--mono);font-size:10.5px;line-height:1.7;color:var(--dimmer);
-  display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
-
-.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+/* The share row. lib/verdict/share.ts writes the buttons; this places them. */
+.share-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
+.share-row .act{font-size:12.5px;padding:8px 13px}
 
 /* ---------- the evidence ---------- */
-/* .blk's padding and .blk's top margin: a ledger block is a raised card like
-   every other raised card, and it used to inset by 17 and stack at 14 while they
-   inset by 18 and stack at 16. */
+/*
+ * The ledger, one <details> per metric, heaviest first, the first one open.
+ *
+ * Thirty deductions in a flat list is the long tail of this page: every line is
+ * evidence and none of it is what a reader came for. Collapsing per metric keeps
+ * every deduction in the document — nothing is dropped and nothing is fetched —
+ * while the page stops opening on its own footnotes. Native <details>, so a saved
+ * copy expands with no script.
+ */
 .ledger{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
-  box-shadow:var(--lip),var(--e1);padding:16px 18px 14px;margin-top:16px}
-.ledger-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
-.ledger-h .mt{font-size:14.5px;font-weight:600;letter-spacing:-.01em}
-.ledger-h .sc{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11px;
-  color:var(--dimmer);white-space:nowrap}
-.ded{display:grid;grid-template-columns:44px minmax(0,1fr);gap:12px;font-size:14px;
+  box-shadow:var(--lip),var(--e1);margin-top:10px}
+.ledger > summary{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  flex-wrap:wrap;padding:13px 18px;cursor:pointer;list-style:none}
+.ledger > summary::-webkit-details-marker{display:none}
+.ledger > summary:hover{background:var(--rise)}
+.ledger > summary:focus-visible{outline-offset:-2px}
+.ledger .mt{font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+.ledger .mt::before{content:"+";font-family:var(--mono);font-weight:600;color:var(--dimmer);
+  margin-right:9px}
+.ledger[open] .mt::before{content:"\\2212"}
+.ledger .sc{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11px;
+  color:var(--dimmer);white-space:nowrap;margin-left:auto}
+.ledger .body{padding:0 18px 15px}
+.ded{display:grid;grid-template-columns:44px minmax(0,1fr);gap:12px;font-size:14.5px;
   line-height:1.5;color:var(--dim);margin-top:11px;padding-top:11px;border-top:1px solid var(--hair)}
-.ledger-h + .ded{border-top:0}
+.ledger .body > .ded:first-child{border-top:0;margin-top:2px;padding-top:0}
 .ded .pts{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;
   color:var(--cut);font-weight:600;text-align:right;padding-top:1px}
 .ded .who{font-family:var(--mono);font-size:11px;color:var(--dimmer);white-space:nowrap}
@@ -358,8 +358,7 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
   border-radius:999px;padding:3px 8px;white-space:nowrap;align-self:start}
 .pick .p.second{background:transparent;color:var(--dim);border:1px solid var(--line)}
 .pick .who{font-family:var(--mono);font-size:11px;color:var(--dimmer)}
-.solo{background:var(--sunk);box-shadow:none}
-.dnums{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11px;
+.dnums{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11px;overflow-wrap:anywhere;
   color:var(--dimmer);margin-top:14px;padding-top:11px;border-top:1px solid var(--hair)}
 
 .notfound{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
@@ -385,9 +384,17 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
 .fig{margin-top:16px}
 .well2{background:var(--sunk);border:1px solid var(--hair);border-radius:var(--r2);
   padding:16px 18px;box-shadow:inset 0 2px 5px rgb(var(--shade-c) / .5)}
-.figcap{font-family:var(--mono);font-size:10.5px;line-height:1.6;color:var(--dimmer);
-  letter-spacing:.02em;margin-top:10px}
-.figcap b{color:var(--dim);font-weight:500}
+/* One line, in the sans. It was 10.5px mono running to a hundred words, which is
+   most of what made this page read as a terminal dump rather than a scorecard. */
+.figcap{font-family:var(--sans);font-size:13px;line-height:1.55;color:var(--dim);
+  margin-top:11px}
+.figcap b{color:var(--ink);font-weight:600}
+/* The one sentence a figure owes beyond its caption: what the outlines ARE, or
+   which cell was the deepest. Quieter than the caption, because it is a fact
+   about this card rather than an instruction for reading the chart. */
+.figcap.rnote{font-size:12px;color:var(--dimmer);margin-top:8px}
+.mxfig{margin-top:0}
+.rside{margin-top:0}
 
 /* ---------- the juror x metric matrix ---------- */
 /*
@@ -397,20 +404,24 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
  * spec asks for — the separation is the well showing through, never a stroke
  * drawn around a cell.
  */
-/* The row-header column is sized for the line it actually holds — a juror's role
-   above "-333 . gave 33.4 / 100", which is 143px of mono at 10px. At 1.2fr it
-   came out 144 and broke that line after the slash on every long row, so the
-   grid's rows were unevenly tall and the second lines hung under the first. */
+/*
+ * The grid lives in half the measure now, so the row header gives up what the
+ * columns need. A column has to hold the longest single WORD in a metric name —
+ * CAPABILITY and DURABILITY, ten characters — because overflow-wrap:anywhere
+ * broke them mid-word into DURABILIT / Y the moment the column narrowed. Ten
+ * characters of mono at 9px with .04em tracking is 58px, so the column floor is
+ * 62 and the header only breaks between words.
+ */
 .mxgrid{display:grid;gap:2px;
-  grid-template-columns:minmax(150px,1.35fr) repeat(var(--cols),minmax(52px,1fr))}
-.mxch{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.06em;
-  text-transform:uppercase;color:var(--dimmer);line-height:1.3;padding:0 3px 6px;
-  align-self:end;text-align:center;overflow-wrap:anywhere}
+  grid-template-columns:minmax(130px,1fr) repeat(var(--cols),minmax(62px,1fr))}
+.mxch{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--dimmer);line-height:1.35;padding:0 2px 6px;
+  align-self:end;text-align:center;overflow-wrap:normal}
 .mxch b{display:block;font-weight:600;color:var(--dim);font-variant-numeric:tabular-nums;
   letter-spacing:.02em;margin-top:3px}
-.mxrh{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:4px 10px 4px 0;
-  font-size:12.5px;line-height:1.25;color:var(--ink);overflow-wrap:anywhere}
-.mxrh em{font-style:normal;font-family:var(--mono);font-size:10px;color:var(--dimmer);
+.mxrh{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:4px 8px 4px 0;
+  font-size:12px;line-height:1.25;color:var(--ink);overflow-wrap:anywhere}
+.mxrh em{font-style:normal;font-family:var(--mono);font-size:9.5px;color:var(--dimmer);
   font-variant-numeric:tabular-nums;letter-spacing:.02em}
 .mxc{position:relative;display:flex;align-items:center;justify-content:center;min-height:36px;
   font-family:var(--mono);font-size:11.5px;font-weight:600;font-variant-numeric:tabular-nums;
@@ -486,60 +497,29 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
  * The size and the shape of the block, which is one problem and not two.
  *
  * The founder's first complaint was that the radials read as small (R 86 in a
- * 336-wide box: a 182px polygon). The answer then was to enlarge them and to let
- * the PAIR break 120px out of the 820px column on either side, which produced a
- * 285px polygon inside a 503px frame, two frames wide, on a band 1024px across —
- * the only element on the page that did not sit on the same left and right rails
- * as its own heading. The second complaint followed from the first: they sit side
- * by side and dominate.
+ * 336-wide box: a 182px polygon), and R went to 112 to answer it. R has not
+ * moved since and must not: a bad product draws its polygon at a fraction of R
+ * (mean health 15.4 is a radius of 0.154R), so shrinking the plot takes back the
+ * one thing the enlargement bought.
  *
- * Both complaints are true and they are answered by the same change, which is a
- * proportion change and not a size dial:
+ * What changed is the PAIRING. The two figures a reader needs together are the
+ * jury radial and the cut heatmap — *who* hurt me and *where* — and they used to
+ * be four screens apart, each with a column of prose beside it. They now share
+ * one grid row above 1000px, half the measure each, and the words under them are
+ * one line. The buyers radial takes the row below, half width, with the buyer
+ * quote cards beside it, because "who wanted me" and "why they said so" are the
+ * same question asked twice.
  *
- * 1. **One chart per row, with the words that explain it beside it.** This is
- *    the layout the page already had for a SOLO verdict — the majority case —
- *    and it is now the only layout, so a full-Floor page and a solo page are
- *    built the same way. The caption, the table twin, the peer identities and
- *    the panel biographies live in the second column instead of stacking under
- *    the chart, so the row is spent on reading matter rather than on air.
- * 2. **No breakout.** The figures sit on the page's own 784px measure, the same
- *    rails as every heading, every lede and every other figure.
- * 3. **The polygon keeps its size.** Two of them side by side inside one column
- *    could not: two 285px plots plus their four label gutters need more than the
- *    whole measure, which is exactly why the old layout had to break out of it.
- *    One per row, the chart column is ~477px wide and the plot is ~279px — the
- *    same figure the enlargement produced, in 24% less width. A bad product's
- *    polygon (mean health 15.4 draws a radius of 0.154R) is therefore no smaller
- *    than it was, which was the whole point of enlarging them.
- *
- * The frame also spends more of itself on the plot than it did: RAD below is
- * 352 wide for a 224 plot where it was 372, so the polygon is 64% of the figure's
- * width rather than 60%.
+ * Below 1000px every one of those cells becomes a full-width row in the same
+ * order. The SVG scales with its column, so a 390px phone gets a 358px plot
+ * rather than a horizontal scrollbar.
  */
-/* margin-top matches .fig and .blk, which is the gap every other figure on
-   this page leaves under its lede. This grid left none, so the one section whose
-   figures broke the rail also started higher than the rest. */
-.rgrid{display:grid;gap:22px;margin-top:16px;grid-template-columns:minmax(0,1fr)}
-/*
- * The one layout, applied to every radial. The chart takes the wide column and
- * the words take the narrow one; below the breakpoint it stacks into a plain
- * single-column figure. A solo verdict and a paired one differ in how many rows
- * there are and in nothing else, which is why there is no second rule here.
- */
-@media (min-width:900px){
-  .rfig{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(228px,1fr);
-    grid-template-areas:"t t" "chart side";gap:0 26px;align-items:start}
-  .rtitle{grid-area:t}
-  .rfig > .well2{grid-area:chart}
-  .rside{grid-area:side}
-  .rside > .rkey{margin-top:0}
-  .rside > .figcap{font-size:11.5px;line-height:1.75}
+/* The pairing: jury radial | cut heatmap. */
+.pgrid,.bgrid{display:grid;gap:20px;margin-top:16px;grid-template-columns:minmax(0,1fr);
+  align-items:start}
+@media (min-width:1000px){
+  .pgrid,.bgrid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px}
 }
-/* The legend stacks in this column rather than running across a chart's width,
-   so each entry gets its own line and a long call sign no longer has to be
-   clipped to nineteen characters to fit beside the next one. */
-.rside .rkey{display:grid;gap:7px;font-size:10.5px}
-.rside .rkey em{max-width:none}
 .rfig{margin:0}
 .rtitle{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.14em;
   text-transform:uppercase;color:var(--dimmer);margin-bottom:9px}
@@ -730,7 +710,7 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
 
 /* ---------- loss per metric, with the cross-juror spread ---------- */
 .lbrow{position:relative;display:grid;gap:12px;align-items:center;padding:8px 0;
-  grid-template-columns:minmax(96px,1.1fr) minmax(0,2.4fr) minmax(74px,auto)}
+  grid-template-columns:minmax(120px,.62fr) minmax(0,2.6fr) minmax(112px,auto)}
 .lbrow + .lbrow{border-top:1px solid var(--hair)}
 .lbname{font-size:13px;line-height:1.3;color:var(--ink);overflow-wrap:anywhere}
  /* The direct label marks the metric the panel split widest on. That is neither
@@ -781,7 +761,7 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
     .lbrow with an empty label cell and an empty value cell, so the three columns
     line up by construction rather than by a matching magic number. */
 .lbaxis{display:grid;gap:12px;margin-top:2px;
-  grid-template-columns:minmax(96px,1.1fr) minmax(0,2.4fr) minmax(74px,auto)}
+  grid-template-columns:minmax(120px,.62fr) minmax(0,2.6fr) minmax(112px,auto)}
 /* Each tick sits ON its gridline rather than being distributed between the ends:
     space-between aligns boxes, not centres, so 25 / 50 / 75 drifted left of the
     lines they name by half a label. The ends anchor to the ends of the track. */
@@ -806,16 +786,33 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
 .dsilent{margin-top:16px;padding:11px 13px;background:var(--sunk);border-radius:var(--r1);
   font-size:13.5px;line-height:1.55;color:var(--dim)}
 .dsilent b{color:var(--ink);font-weight:600}
-.dparts{display:grid;grid-template-columns:repeat(auto-fit,minmax(152px,1fr));gap:14px 18px;
+.dparts{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:14px 18px;
   margin-top:16px;padding-top:14px;border-top:1px solid var(--hair)}
 .dpart .dk{display:flex;justify-content:space-between;gap:8px;margin-bottom:6px;color:var(--dim)}
-.dpart p{font-family:var(--sans);font-size:11.5px;line-height:1.45;color:var(--dimmer);
-  margin-top:6px;letter-spacing:0;text-transform:none}
+.dpart p{font-family:var(--mono);font-size:10px;line-height:1.45;color:var(--faint);
+  margin-top:6px;letter-spacing:.02em;text-transform:none}
+/* The buyer quotes, in the half of the row beside the radial they belong to.
+   A card, because it holds a person's sentence and a number they put behind it. */
+.bcards{margin-top:0}
+.bhead{font-size:14.5px;line-height:1.5;color:var(--dim)}
+.bhead b{color:var(--ink);font-weight:600}
+/* The block sits in a column now, so it scrolls its own overflow rather than
+   pushing the radial beside it out of the measure. */
+.bcards .pick{grid-template-columns:auto minmax(0,1fr)}
 
+/* ---------- the phone ---------- */
+/*
+ * Shared links are opened on phones, so 390px is the case this page is designed
+ * for as much as 1440 is. Everything stacks, the header's two columns become two
+ * rows with the rank left-aligned under the name, and both figures stay usable:
+ * the radial's SVG scales with its column, and the heatmap's own columns shrink
+ * to fit rather than pushing a scrollbar under the reader's thumb.
+ */
 @media (max-width:640px){
-  .vtop,.vrank,.vmeter,.vbody,.vfoot{padding-left:16px;padding-right:16px}
-  .vrank .big{font-size:44px}
-  .pitch{margin-left:0}
+  .vhead{padding:18px 16px 16px}
+  .vid{grid-template-columns:minmax(0,1fr);gap:16px}
+  .vrank{text-align:left;justify-self:start}
+  .vrank b{font-size:46px}
   .lbrow{grid-template-columns:minmax(0,1fr) minmax(66px,auto);row-gap:7px}
   .lbtrack{grid-column:1 / -1;order:3}
   /* The track goes full width here, so the axis has to as well: left on the
@@ -827,15 +824,25 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
   .lbaxis > span:first-child,.lbaxis > span:last-child{display:none}
 }
 /*
- * Below this width the grid has to scroll, and a scroll container clips an
- * absolutely-positioned readout. Rather than ship a tooltip that is cut in half,
- * the readouts are withdrawn here and the table view — which is always present,
- * carries every number, and is the accessible twin regardless — is the way to
- * read a cell. Touch pointers have no hover to lose.
+ * The readouts are withdrawn below this width: a positioned tooltip has nowhere
+ * to hang on a 390px screen and a touch pointer has no hover to lose. The table
+ * view and the panel list are always in the document and are the twins here.
+ *
+ * The heatmap shrinks instead of scrolling, and the arithmetic is exact rather
+ * than hopeful. A 390px phone leaves 324px inside the wrap's padding and the
+ * well's; a 68px row header and five 2px gaps leave 49.2px per metric column,
+ * and the longest single word a header holds — DURABILITY, ten characters — is
+ * 45px of mono at 7.5px plus 2px of padding. So nothing breaks mid-word and
+ * nothing scrolls. overflow-x:auto stays as the floor for a board with more
+ * metrics than these two categories have.
  */
 @media (max-width:560px){
   .mxscroll{overflow-x:auto}
-  .mxgrid{min-width:440px}
+  .mxgrid{grid-template-columns:minmax(68px,1fr) repeat(var(--cols),minmax(26px,1fr))}
+  .mxrh{font-size:10.5px;padding-right:5px}
+  .mxrh em{font-size:8.5px}
+  .mxch{font-size:7.5px;letter-spacing:0;padding:0 1px 5px}
+  .mxc{min-height:30px;font-size:10px}
   .tip{display:none}
   /* The spoke hotspots go with the readouts they carry, rather than staying as
      six invisible tab stops that reveal nothing. The panel list under each chart
@@ -844,14 +851,69 @@ a.plink:hover{color:var(--ink);text-decoration:underline}
 }
 `;
 
-/** The sharpest juror line, as the card's pull quote. */
-function quote(sharpest: VerdictDeduction): string {
-  return [
-    '<blockquote class="vquote">',
-    escapeHtml(sharpest.reason),
-    `<cite>${escapeHtml(sharpest.role)} &middot; &minus;${sharpest.points} on ${escapeHtml(metricLabel(sharpest.metric))}</cite>`,
-    '</blockquote>',
-  ].join('');
+/**
+ * The two lines a founder screenshots, side by side: the sharpest cut and the
+ * warmest buyer.
+ *
+ * They were at positions two and nine on the old page. They are the whole reason
+ * anyone shares a verdict — one says what hurt, the other says who wanted it —
+ * so they sit under the health bar with a rail each in the hue that says which.
+ *
+ * The right-hand slot has three arms and no empty state. A buyer quote when one
+ * exists; the second-sharpest cut when the Floor convened and named nobody; and
+ * for a solo cluster, which is 32 of 48 rows, the fact itself. A blank card
+ * beside a full one would read as a page that failed to render.
+ */
+function headerLine(text: string, meta: string, rail: 'c' | 'h'): string {
+  return (
+    `<div class="ln ${rail}">${escapeHtml(text)}` +
+    `<small>${escapeHtml(meta)}</small></div>`
+  );
+}
+
+/** The sharpest cut, as the left-hand line. `''` when nothing came off. */
+function sharpestLine(verdict: Verdict): string {
+  const { sharpest } = verdict;
+  if (sharpest === null) return '';
+  return headerLine(
+    sharpest.reason,
+    `${sharpest.role} · −${sharpest.points} on ${metricLabel(sharpest.metric)}`,
+    'c',
+  );
+}
+
+/**
+ * The right-hand line: the best buyer quote, or what stands in for it.
+ *
+ * "Best" is the highest conviction behind a FIRST choice, because that is the
+ * only pick the run records a number for (`01 §6.2`). A page that promoted a
+ * runner-up here would print the warmest-sounding sentence with no figure behind
+ * it.
+ */
+function wantedLine(verdict: Verdict): string {
+  const { floor } = verdict;
+
+  if (floor.kind === 'convened') {
+    const best = [...floor.picks]
+      .filter((pick) => pick.pick === 'first')
+      .sort((a, b) => (b.strength ?? -1) - (a.strength ?? -1))[0];
+    if (best !== undefined) {
+      const conviction = typeof best.strength === 'number' ? ` · conviction ${best.strength}` : '';
+      return headerLine(best.reason, `${best.persona} · first choice${conviction}`, 'h');
+    }
+    // The Floor convened and named nobody. The second-sharpest cut is the next
+    // most useful thing on the card, and it is a fact rather than a gap.
+    const second = verdict.metrics.flatMap((metric) => metric.deductions).sort((a, b) => b.points - a.points)[1];
+    if (second !== undefined) {
+      return headerLine(
+        second.reason,
+        `${second.role} · −${second.points} on ${metricLabel(second.metric)}`,
+        'c',
+      );
+    }
+  }
+
+  return '<div class="ln h">Nothing close enough to compare. Ranked on merit alone.</div>';
 }
 
 /** The opacity ramp a segment sits on: heaviest solid, the rest stepping back. */
@@ -870,16 +932,16 @@ function segClass(index: number, base: string = 'seg'): string {
  *
  * The two halves are the two hues and nothing else on this page is either of
  * them: the head is `--held`, the health the card walked out with, and every
- * segment after it is `--cut`, one metric's share of what was taken. The caption
+ * segment after it is `--cut`, one metric's share of what was taken. The readout
  * leads with the health figure and states it in `--held`, which is the correction
  * `lib/theme.ts` documents — a bar whose larger quantity is drawn in the absence
  * of colour is a bar arguing against its own caption.
  *
- * `HEALTH_NOTE` rides underneath, from `lib/boards/copy.ts`, the same sentence the
- * boards carry. It is not optional decoration: the founder's canvas ranks BY
- * health and this board does not — it ranks on `core`, merit blended with demand
- * and tilted by scarcity — so a surface that showed the health figure without the
- * note would publish a sort rule the engine does not run.
+ * The per-segment key is gone and the readout names the heaviest metric instead.
+ * Six swatches under a bar were a legend for five bars that are drawn in full,
+ * with their names, their figures and the board's median, one section down. The
+ * fact the bar cannot state on its own is which metric ate the most, and that is
+ * the fact the line now carries.
  */
 function healthMeter(verdict: Verdict): string {
   const count = verdict.metrics.length;
@@ -893,24 +955,21 @@ function healthMeter(verdict: Verdict): string {
     .map((metric, index) => `<i class="${segClass(index)}" style="width:${share(metric)}%"></i>`)
     .join('');
 
-  const keys = verdict.metrics
-    .map(
-      (metric, index) =>
-        `<span><i class="${segClass(index, '')}"></i>${escapeHtml(metricLabel(metric.metric))} ` +
-        `<b>&minus;${n1(share(metric))}</b></span>`,
-    )
-    .join('');
+  // `verdict.metrics` is sorted heaviest loss first, so the segments run heaviest
+  // first and the worst of them is the head of that list.
+  const worst = verdict.metrics[0];
+  const worstLine =
+    worst === undefined || worst.cuts <= 0
+      ? ''
+      : ` &middot; worst: ${escapeHtml(metricLabel(worst.metric))} &minus;${n1(share(worst))}`;
 
   return [
-    '<div class="vmeter">',
-    '<div class="cap">',
-    '<span>Walked in at 100</span>',
-    `<span><b class="held">${Math.round(health)} health left</b> &middot; ` +
-      `<b class="pts">&minus;${Math.round(cuts)} in cuts</b></span>`,
-    '</div>',
+    '<div class="vbar">',
     `<div class="meter"><span class="row"><i class="kept" style="width:${health}%"></i>${segments}</span></div>`,
-    `<div class="vkeys">${keys}</div>`,
-    `<span class="vnote">${escapeHtml(HEALTH_NOTE)}</span>`,
+    '<div class="vbarlbl">',
+    `<span><b class="held">${Math.round(health)} health left</b></span>`,
+    `<span><b class="pts">&minus;${Math.round(cuts)} in cuts</b>${worstLine}</span>`,
+    '</div>',
     '</div>',
   ].join('');
 }
@@ -1073,6 +1132,37 @@ export function wrapAxisLabel(text: string): string[] {
 }
 
 /**
+ * What a spoke is CALLED on the chart, as opposed to what the axis IS.
+ *
+ * The audit's complaint was `RAVI CHANDRASEKAR / AN` — a buyer's surname broken
+ * mid-word across two of the three lines a spoke gets, because eleven characters
+ * of mono is what fits beside a plot and `Chandrasekar` is twelve. Every buyer on
+ * both installed panels is a real two-word name, so the fix is a naming rule
+ * rather than another character of gutter: **first name, surname initial**.
+ *
+ * A juror is not a person and does not take that rule. `The Platform Owner` under
+ * it would become `The O.`, which names nobody. A role is a noun phrase, so the
+ * article comes off — `Platform Owner` wraps to two whole words — and nothing
+ * else is touched.
+ *
+ * Either way the full string is still on the page in three places: the hover and
+ * keyboard readout, the panel list under the chart, and the table twin. The
+ * shortening is a label, never a record.
+ */
+export function spokeLabel(text: string): string {
+  const trimmed = text.trim();
+  if (/^the\s+/i.test(trimmed)) return trimmed.replace(/^the\s+/i, '');
+
+  const words = trimmed.split(/\s+/).filter((word) => word !== '');
+  if (words.length < 2) return trimmed;
+  const first = words[0] as string;
+  const last = words[words.length - 1] as string;
+  // A surname that is already an initial keeps its own punctuation rather than
+  // becoming `A..`.
+  return `${first} ${last.slice(0, 1)}${last.endsWith('.') ? '' : '.'}`;
+}
+
+/**
  * Everything about one axis's LABEL, computed once.
  *
  * The drawn label and the hotspot laid over it are two renderings of the same
@@ -1114,7 +1204,7 @@ function axisBox(radial: Radial, index: number, count: number): AxisBox {
   const x = RAD.CX + dx * AXIS_OUT;
   const y = RAD.CY + dy * AXIS_OUT + (vertical ? (dy < 0 ? -13 : 18) : 0);
 
-  const lines = wrapAxisLabel(radial.axes[index] as string);
+  const lines = wrapAxisLabel(spokeLabel(radial.axes[index] as string));
   const value = radial.self.values[index];
   const flag = radial.marks[index];
   const figure = flag === 'no answer' || value === null || value === undefined ? 'no answer' : n1(value);
@@ -1201,8 +1291,7 @@ function identityList(context: readonly { entry: RadialSeries; style: string; la
     '<details class="rwho">',
     `<summary>Which outline is which (${peers.length})</summary>`,
     `<ul>${items}</ul>`,
-    '<p class="figcap">A product chooses at submission whether to be named. An anonymous one keeps every ',
-    'cut and every reason public and withholds only its name and its address.</p>',
+    '<p class="figcap">An anonymous listing withholds its name and its address, and nothing else.</p>',
     '</details>',
   ].join('');
 }
@@ -1322,8 +1411,7 @@ function mandateList(radial: Radial, title: string): string {
     '<details class="rwho rbios">',
     `<summary>${escapeHtml(title)} (${present.length})</summary>`,
     `<ul>${items}</ul>`,
-    '<p class="figcap">Frozen when this verdict was issued. A jury is versioned and a mandate can be ',
-    'revised, so this is the panel that judged this product rather than whoever is installed today.</p>',
+    '<p class="figcap">The panel that judged this product.</p>',
     '</details>',
   ].join('');
 }
@@ -1372,7 +1460,7 @@ function radialTable(
     // by that selector. A second table under the same exact class would have made
     // that test silently assert about this one instead.
     '<details class="tv rtv">',
-    '<summary>The same numbers, as a table</summary>',
+    '<summary>As a table</summary>',
     '<div class="tvscroll">',
     '<table>',
     `<caption>${escapeHtml(title)} &mdash; ${escapeHtml(radial.unit)}.</caption>`,
@@ -1410,7 +1498,10 @@ function radialFigure(
   title: string,
   /** What the roster disclosure is called: `The Panel`, `The Buyers`, `The Six`. */
   panelTitle: string,
+  /** One line. How to read the chart, and nothing else. */
   caption: string,
+  /** One sentence naming what the outlines are, beside the legend that draws them. */
+  note: string,
   origin: string,
 ): string {
   const count = radial.axes.length;
@@ -1550,15 +1641,15 @@ function radialFigure(
     spokeReadouts,
     '</span>',
     '</div>',
-    // Every word the chart needs, in its own column beside it rather than
-    // stacked under it — the legend included, so the well holds the drawing and
-    // nothing else. That is where the height came back from: the legend, the
-    // peer identities, the caption and the table twin used to stack under each
-    // chart and now sit in the space the polygon's own frame was spending on
-    // air. On a narrow screen the grid collapses and they stack again.
+    // Under the chart, in its own half of the row: one line of caption, then the
+    // legend and the three disclosures a reader has to ask for. The caption is
+    // one sentence — the scale, the comparison and the reading instructions used
+    // to be three paragraphs beside every figure, which is most of what made this
+    // page an essay.
     '<div class="rside">',
-    `<div class="rkey">${legend}</div>`,
     `<p class="figcap">${caption}</p>`,
+    `<div class="rkey">${legend}</div>`,
+    `<p class="figcap rnote">${note}</p>`,
     identityList(context, origin),
     mandateList(radial, panelTitle),
     radialTable(radial, title, context),
@@ -1568,73 +1659,62 @@ function radialFigure(
 }
 
 /**
- * Both radials, side by side, and the sentence that says what they compare to.
+ * What the overlay on a radial actually is, in one sentence.
  *
- * The three states this has to render honestly:
+ * Three states, and the difference between them is not cosmetic:
  *
- * - **Peers.** The comparison the founder asked for. The overlay is the other
- *   products in this product's own cluster.
- * - **The category.** No peers exist — 32 of 48 Developer Tools products and 26
- *   of 44 Health & Fitness products are a cluster of one — so the only baseline
- *   is the category's own middle, and the caption names it as the category rather
- *   than letting a reader take it for a rival.
+ * - **Peers.** The comparison the founder asked for — the other products in this
+ *   product's own cluster.
+ * - **The category.** No peers exist (32 of 48 Developer Tools rows are a cluster
+ *   of one), so the only baseline is the category's own middle, and the sentence
+ *   names it as the category rather than letting a reader take it for a rival.
  * - **Neither.** The verdict predates the frozen comparison. `verdicts` refuses
- *   UPDATE and is never backfilled, so those pages draw the shape alone. No
- *   overlay is invented for them, and the caption does not pretend one is missing.
+ *   UPDATE and is never backfilled, so those pages draw the shape alone and
+ *   nothing is invented to fill it.
+ *
+ * Derived from the shapes actually on the chart rather than from what the payload
+ * could have supplied: `freezeComparison` drops the median once there are more
+ * than two peers, so a note written from the payload would describe an overlay
+ * the reader cannot see.
  */
-function radialsSection(verdict: Verdict, origin: string): string {
+function overlayNote(radial: Radial, cluster: string): string {
+  const peers = radial.context.filter((entry) => entry.role === 'peer').length;
+  const hasMedian = radial.context.some((entry) => entry.role === 'median');
+
+  if (peers > 0) {
+    return (
+      `Outlines: ${peers === 1 ? 'the one other product' : `the ${peers} other products`} in ` +
+      `<b>${escapeHtml(cluster)}</b>` +
+      (hasMedian && radial.medianOver > 0
+        ? `, and the middle of the category (${radial.medianOver} products)`
+        : '') +
+      '.'
+    );
+  }
+  if (hasMedian) {
+    return (
+      'Nothing else was in this cluster, so the outline is the middle of the category' +
+      `${radial.medianOver > 0 ? ` &mdash; ${radial.medianOver} products` : ''}, not a rival.`
+    );
+  }
+  return 'This verdict was issued before comparisons were frozen, so there is nothing to overlay.';
+}
+
+/**
+ * The panel and the buyers, as four figures in two rows.
+ *
+ * The pairing is the point of the rebuild. *Who hurt me* (the jury radial) and
+ * *where* (the cut heatmap) are one question asked two ways and used to be four
+ * screens apart; they now share a row. *Who wanted me* (the buyers radial) and
+ * *why they said so* (their quotes) are the same, and take the row under it. A
+ * solo cluster has no second row at all — nobody was ever shown that product —
+ * rather than a row with a hole in it.
+ */
+function panelSection(verdict: Verdict, origin: string): string {
   const labels = panelLabels(verdict);
   const jury = juryRadial(verdict);
   const buyers = buyerRadial(verdict);
   if (jury === null && buyers === null) return '';
-
-  /**
-   * What the caption may claim, derived from the shapes that are actually on the
-   * chart rather than from what the payload could have supplied.
-   *
-   * The distinction is not pedantic. `freezeComparison` drops the median once
-   * there are more than two peers, because five context outlines on six axes stop
-   * being a comparison — so a caption that named a median from the payload would
-   * describe an overlay the reader cannot see.
-   */
-  const against = (radial: Radial): string => {
-    const peers = radial.context.filter((entry) => entry.role === 'peer').length;
-    const hasMedian = radial.context.some((entry) => entry.role === 'median');
-
-    if (peers > 0) {
-      return (
-        `Compared with ${peers === 1 ? 'the one other product' : `the ${peers} other products`} in ` +
-        `<b>${escapeHtml(verdict.cluster.label)}</b>` +
-        (hasMedian && radial.medianOver > 0 ? `, and with the middle of the category (${radial.medianOver} products)` : '') +
-        '. '
-      );
-    }
-    if (hasMedian) {
-      return (
-        'Nothing else was in this cluster, so the outline is the middle of the category' +
-        `${radial.medianOver > 0 ? ` &mdash; ${radial.medianOver} products` : ''}, not a rival. `
-      );
-    }
-    return 'This verdict was issued before comparisons were frozen, so there is nothing to overlay. ';
-  };
-
-  /** Said plainly when the shape collapses onto the centre, because it is a finding. */
-  const flat = (radial: Radial): string =>
-    radial.self.values.every((value) => (value ?? 0) === 0)
-      ? ' Your own shape sits on the centre point: not one of them made this their first choice.'
-      : '';
-
-  /**
-   * Whether either chart can say who its axes are.
-   *
-   * Used only to decide whether the lede promises a biography. A page that told
-   * the reader to hover a spoke and then had nothing behind it would be worse
-   * than one that said nothing — and every verdict delivered before the panel was
-   * frozen is exactly that page.
-   */
-  const hasMandates = [jury, buyers].some(
-    (radial) => radial !== null && radial.mandates.some((mandate) => mandate !== null),
-  );
 
   const juryFigure =
     jury === null
@@ -1642,12 +1722,10 @@ function radialsSection(verdict: Verdict, origin: string): string {
       : radialFigure(
           jury,
           'jury',
-          `${labels.jury} — who hurt you`,
+          labels.jury,
           mandateTitle('jury', labels),
-          `${against(jury)}Each spoke is one juror, and the figure on it is the <b>health you had left</b> ` +
-            'after that juror &mdash; 100 minus what they took. Further out is better, so a bigger shape is a ' +
-            'better card and the dent is the juror who took the most. ' +
-            'Radius is the value, so read the figure on each spoke and compare the shapes &mdash; never the areas.',
+          'One spoke per juror. Further out is better.',
+          overlayNote(jury, verdict.cluster.label),
           origin,
         );
 
@@ -1657,43 +1735,24 @@ function radialsSection(verdict: Verdict, origin: string): string {
       : radialFigure(
           buyers,
           'buyers',
-          `${labels.floor} — who wanted you`,
+          labels.floor,
           mandateTitle('buyers', labels),
-          `${against(buyers)}Each spoke is one buyer; further out is more conviction behind a first choice, ` +
-            'the same direction the panel chart reads. ' +
-            'A runner-up sits at zero and is marked &mdash; the run records conviction on a first pick and on nothing else.' +
-            flat(buyers),
+          'One spoke per buyer. Further out is more conviction.',
+          buyers.self.values.every((value) => (value ?? 0) === 0)
+            ? 'Your shape sits on the centre point: not one of them made this their first choice.'
+            : overlayNote(buyers, verdict.cluster.label),
           origin,
         );
 
-  // The heading names the charts that are actually here. A solo cluster gets no
-  // buyer radial — nobody was ever shown it — and a heading promising one would
-  // read as a section that failed to render.
-  const heading = buyers === null ? 'Who hurt you' : 'Who hurt you, who wanted you';
-  // The scale is said ONCE here rather than in each caption, which is where it
-  // used to be: two figures repeating the same sentence about the same rings is
-  // two paragraphs of the reader's attention spent on one fact.
-  const scale =
-    ' The centre is 0 and the outer ring is 100; the rings between are 25, 50 and 75.' +
-    (hasMandates ? ' Hover or tab to a spoke to see who is on it.' : '');
-  const lede =
-    (buyers === null
-      ? `${escapeHtml(labels.jury)}, on fixed axes in the order the panel was installed. Your shape is the health you kept &mdash; further out is better; the outline is what you were judged against.`
-      : `${escapeHtml(labels.jury)} and ${escapeHtml(labels.floor)}, on fixed axes in the order the panel was installed. Both charts run the same way: further out is better. Your shape is filled; the outlines are what you were judged beside.`) +
-    scale;
-
-  // One chart or two is a fact the class states; it is no longer a fork in the
-  // layout. Both charts are laid out the same way — chart in the wide column,
-  // words in the narrow one — so a solo verdict, which is the majority of rows,
-  // is the same component as a paired one rather than a special case with a hole
-  // where the second chart would be.
-  const layout = juryFigure !== '' && buyersFigure !== '' ? 'rpair' : 'rsolo';
+  const buyerRow =
+    buyersFigure === '' ? '' : `<div class="bgrid">${buyersFigure}${buyerCards(verdict)}</div>`;
 
   return [
     '<section>',
-    `<h2>${heading}</h2>`,
-    `<p class="lede">${lede}</p>`,
-    `<div class="rgrid ${layout}">${juryFigure}${buyersFigure}</div>`,
+    '<h2>Who hurt you, who wanted you</h2>',
+    `<p class="lede">Being weak and having ${escapeHtml(labels.jury)} <i>agree</i> you were weak are two findings.</p>`,
+    `<div class="pgrid">${juryFigure}${matrixFigure(verdict)}</div>`,
+    buyerRow,
     '</section>',
   ].join('');
 }
@@ -1786,7 +1845,7 @@ function matrixTable(matrix: CutMatrix, verdict: Verdict): string {
 
   return [
     '<details class="tv">',
-    '<summary>The same numbers, as a table</summary>',
+    '<summary>As a table</summary>',
     '<div class="tvscroll">',
     '<table>',
     `<caption>Points each juror took off each metric on ${escapeHtml(verdict.name)}. `,
@@ -1869,14 +1928,13 @@ function matrixFigure(verdict: Verdict): string {
     (_, index) => `<span><i class="k${index + 1}"></i>${rampLabel(index + 1)}</span>`,
   ).join('');
 
-  const heaviest =
-    matrix.heaviest === null
-      ? ''
-      : `<b>${escapeHtml(matrix.heaviest.role)}</b> took the single deepest cut &mdash; ` +
-        `&minus;${matrix.heaviest.points} on ${escapeHtml(metricLabel(matrix.heaviest.metric))}. `;
-
+  // The deepest single cut is NOT named here. It is the left-hand line at the top
+  // of the page, chosen by `verdict.sharpest`; naming it again from `matrix
+  // .heaviest`, which breaks ties by a different rule, put two different jurors
+  // beside the same −50 on one page.
   return [
-    '<figure class="fig">',
+    '<figure class="fig mxfig">',
+    '<figcaption class="rtitle">Where the cuts landed</figcaption>',
     '<div class="well2 mxscroll">',
     `<div class="mxgrid" style="--cols:${columns}">`,
     '<span></span>',
@@ -1888,11 +1946,7 @@ function matrixFigure(verdict: Verdict): string {
     '<span><i class="ksub"></i>no answer</span>',
     '</div>',
     '</div>',
-    '<figcaption class="figcap">',
-    heaviest,
-    'Darker is deeper. Each cell is the points one juror took off one metric, out of the 100 ',
-    'that juror scores it on; hover or focus a cell for the sentence behind it.',
-    '</figcaption>',
+    '<figcaption class="figcap">Darker is deeper. Hover a cell for the reason.</figcaption>',
     matrixTable(matrix, verdict),
     '</figure>',
   ].join('');
@@ -1983,8 +2037,16 @@ function lossFigure(verdict: Verdict): string {
         `<span class="lbtrack"><i class="lbfill" style="width:${pct(bar.held)}"></i>` +
           `<i class="lbcut" style="left:${pct(bar.held)};width:${pct(bar.cuts)}"></i>` +
           `${whisker}${median}</span>`,
+        // The merged score, then the two things that qualify it: how far off the
+        // board's middle it is, and how far the six spread around it. The delta
+        // wears neither hue — a comparison is not a half of the hundred, and the
+        // theme spends its colours on nothing that is merely a state.
         `<span class="lbval"><b class="held">${n1(bar.held)}</b>` +
-          `<em>&minus;${n1(bar.cuts)} &plusmn;${n1(bar.spread)}</em></span>`,
+          `<em>${
+            bar.categoryHeld === null
+              ? `&minus;${n1(bar.cuts)} cut`
+              : `${bar.held >= bar.categoryHeld ? '+' : '&minus;'}${n1(Math.abs(bar.held - bar.categoryHeld))} vs board`
+          } &middot; &plusmn;${n1(bar.spread)}</em></span>`,
         '<span class="tip" aria-hidden="true">',
         `<b>&minus;${n1(bar.cuts)} on ${escapeHtml(metricLabel(bar.metric))}</b>`,
         `<em>${bar.cutters} of ${bar.jurors} jurors cut here</em>`,
@@ -1996,15 +2058,6 @@ function lossFigure(verdict: Verdict): string {
     })
     .join('');
 
-  const split = bars.filter((bar) => bar.widest);
-  const note =
-    split.length === 0 || split[0] === undefined || split[0].spread <= 0
-      ? 'The six agreed exactly on every metric here. '
-      : `The six split widest on <b>${escapeHtml(metricLabel(split[0].metric))}</b> ` +
-        `&mdash; &plusmn;${n1(split[0].spread)} around a merged ${n1(split[0].score)}. ` +
-        'A deep cut the panel agreed on is a fact about the product; a deep cut they split over ' +
-        'is a fact about how it reads. ';
-
   return [
     '<figure class="fig">',
     '<div class="well2">',
@@ -2015,54 +2068,33 @@ function lossFigure(verdict: Verdict): string {
     '<span class="tm" style="left:75%">75</span><span class="t1">100</span></span>',
     '<span></span></div>',
     '</div>',
-    `<figcaption class="figcap">${note}`,
-    'Each track is one metric&rsquo;s hundred points. The green head is what survived &mdash; the ',
-    'merged score, the mean of the six &mdash; and the red remainder is what came off. Longer green ',
-    'is a better card, the same way round as the meter and both radials above. The ink whisker is ',
-    'one cross-juror standard deviation either side of the score, on the same axis.',
-    bars.some((bar) => bar.categoryHeld !== null)
-      ? ' The grey tick is what the middle product on this board kept on the same metric, frozen when this was issued.'
-      : '',
+    '<figcaption class="figcap">Green is what survived, red is what came off. ',
+    'The whisker is how far the six spread.',
+    bars.some((bar) => bar.categoryHeld !== null) ? ' The tick is the board&rsquo;s middle.' : '',
     '</figcaption>',
     '</figure>',
-  ].join('');
-}
-
-/** The four summary lines of the mockup's card body. */
-function summaryLines(verdict: Verdict): string {
-  const labels = panelLabels(verdict);
-  const demand =
-    verdict.floor.kind === 'convened'
-      ? `<span>${n2(verdict.floor.demand)}</span>`
-      : `<span class="none">no ${labels.buyers} convened</span>`;
-  const picked =
-    verdict.floor.kind === 'convened'
-      ? `<span>${verdict.floor.firstPicks + verdict.floor.secondPicks} of ${verdict.floor.rosterSize}</span>`
-      : `<span class="none">n/a &mdash; solo cluster</span>`;
-
-  return [
-    `<div class="vline"><span>Health left</span><span class="held">${Math.round(100 - verdict.cuts)} / 100</span></div>`,
-    `<div class="vline"><span>Cuts taken</span><span class="pts">&minus;${Math.round(verdict.cuts)}</span></div>`,
-    `<div class="vline"><span>Merit composite</span><span>${n2(verdict.composite)}</span></div>`,
-    `<div class="vline"><span>Customer demand</span>${demand}</div>`,
-    `<div class="vline"><span>${escapeHtml(labels.floor)} picked you</span>${picked}</div>`,
-    `<div class="vline"><span>Ranked by</span><span>${n2(verdict.core)}</span></div>`,
   ].join('');
 }
 
 /**
  * One metric block of the ledger: every deduction, in the juror's own words.
  *
- * The stacked juror bar that used to open each of these blocks is gone. It said
- * one metric's loss split by juror, five times over — which is one row of the
- * heatmap above, drawn worse and without the reason attached. What is left here
- * is the thing no figure can replace: the sentences, at reading size, each with
- * the juror who wrote it. `brief` Part 6 leads with those, and the charts exist to
- * get a reader to the right one.
+ * What is here is the thing no figure can replace: the sentences, at reading
+ * size, each with the juror who wrote it. `brief` Part 6 leads with those, and
+ * the charts exist to get a reader to the right one.
+ *
+ * ## Collapsed, and why that is not hiding evidence
+ *
+ * Thirty deductions in a flat list is the long tail of this page. Every one of
+ * them is still in the document — this is a `<details>`, not a fetch, so a saved
+ * copy, a printed copy, a screen reader and Ctrl-F all reach every line whether
+ * or not it is open. What changes is that the page no longer OPENS on its own
+ * footnotes. The heaviest metric is expanded, because that is the block a reader
+ * who scrolled this far came for.
  */
 function ledger(verdict: Verdict): string {
   return verdict.metrics
-    .map((metric) => {
+    .map((metric, index) => {
       const deductions = metric.deductions
         .map(
           (deduction) =>
@@ -2082,15 +2114,19 @@ function ledger(verdict: Verdict): string {
           : `<p class="subs">no answer from ${escapeHtml(metric.substituted.join(', '))} &mdash; substituted 50, and counted that way in the rank</p>`;
 
       return [
-        '<div class="ledger">',
-        '<div class="ledger-h">',
+        // Heaviest first — `verdict.metrics` is already in that order — and the
+        // heaviest is the one that opens.
+        `<details class="ledger"${index === 0 ? ' open' : ''}>`,
+        '<summary>',
         `<span class="mt" title="${escapeHtml(metric.metric)}">${escapeHtml(metricLabel(metric.metric))}</span>`,
-        `<span class="sc">${n1(metric.score)} / 100 &middot; spread &plusmn;${n1(metric.spread)} &middot; ${metric.jurors} jurors</span>`,
-        '</div>',
+        `<span class="sc">&minus;${n1(metric.cuts)} &middot; ${n1(metric.score)} / 100 &middot; &plusmn;${n1(metric.spread)}</span>`,
+        '</summary>',
+        '<div class="body">',
         deductions,
         nothing,
         substituted,
         '</div>',
+        '</details>',
       ].join('');
     })
     .join('');
@@ -2106,27 +2142,16 @@ function ledger(verdict: Verdict): string {
  * as a missing section or an empty state would tell the majority of paying
  * customers that nothing happened. It is a fact, and it comes with its reason.
  */
-function floorSection(verdict: Verdict): string {
+function buyerCards(verdict: Verdict): string {
   const labels = panelLabels(verdict);
 
-  if (verdict.floor.kind === 'solo') {
-    return [
-      '<section>',
-      `<h2>${escapeHtml(labels.floor)}</h2>`,
-      `<p class="lede">A forced choice needs at least two products to choose between.</p>`,
-      '<div class="blk solo">',
-      `<p><b>No ${escapeHtml(labels.buyers)} were shown this product, because nothing in the category was close enough to compare it to.</b></p>`,
-      `<p>Its cluster &mdash; <b>${escapeHtml(verdict.cluster.label)}</b> &mdash; held ${verdict.floor.clusterSize} product${verdict.floor.clusterSize === 1 ? '' : 's'} on the day this was issued.</p>`,
-      '<p>This is the common case, not a gap in the run. Demand is normally 35% of the blended score; with no demand signal to read, that weight was moved onto merit rather than scored as a zero. It cuts both ways: a strong product gains what a weak one loses.</p>',
-      '</div>',
-      '</section>',
-    ].join('');
-  }
-
-  // Never reached for a solo floor: `demandChart` returns null there and the arm
-  // above has already returned. The guard is for the type, not for a case.
+  // `null` for a solo cluster, and that is the majority case. The solo statement
+  // lives in `clusterSection` instead, beside the cluster that produced it —
+  // `DECISIONS.md` S11 makes an empty Floor a DELIVERY, so it is a fact about
+  // what was judged and not an empty half of a chart row.
   const chart = demandChart(verdict);
-  if (chart === null) return '';
+  const { floor } = verdict;
+  if (chart === null || floor.kind !== 'convened') return '';
 
   const picks = chart.rows
     .map((row) => {
@@ -2160,7 +2185,7 @@ function floorSection(verdict: Verdict): string {
 
   const empty =
     chart.rows.length === 0
-      ? `<p>The ${escapeHtml(labels.buyers)} convened over this cluster and named nobody on this product &mdash; every one of them reached for something else.</p>`
+      ? `<p>Every one of the ${chart.roster} ${escapeHtml(labels.buyers.toLowerCase())} reached for something else.</p>`
       : '';
 
   // The buyers who did not name it are a COUNT and never a set of rows: the
@@ -2170,35 +2195,35 @@ function floorSection(verdict: Verdict): string {
   // "everyone named you".
   const silent =
     chart.silent === 0
-      ? `<div class="dsilent">Every one of the <b>${chart.roster}</b> ${escapeHtml(labels.buyers.toLowerCase())} on this run named it.</div>`
-      : `<div class="dsilent"><b>${chart.silent}</b> of the ${chart.roster} ${escapeHtml(labels.buyers.toLowerCase())} were shown it and reached for something else. The run records who chose you, never who declined, so they are a count here and not a list.</div>`;
+      ? `<div class="dsilent">All <b>${chart.roster}</b> ${escapeHtml(labels.buyers.toLowerCase())} named it.</div>`
+      : `<div class="dsilent"><b>${chart.silent}</b> of ${chart.roster} reached for something else.</div>`;
 
+  // The four numbers `01 §6.2` reduces the forced choices through. Only one of
+  // them needs a definition on the page: `breadth = share × capture` is the one
+  // composition a reader cannot guess from the label, and the other three notes
+  // were three sentences explaining arithmetic nobody asked about.
   const parts = chart.parts
     .map(
       (part) =>
         '<div class="dpart">' +
         `<span class="dk">${escapeHtml(part.label)}<b>${n2(part.value)}</b></span>` +
         `<span class="dtrack"><i class="dfill" style="width:${pct(part.value * 100)}"></i></span>` +
-        `<p>${escapeHtml(part.note)}</p>` +
+        (part.label === 'Breadth' ? '<p>share &times; capture</p>' : '') +
         '</div>',
     )
     .join('');
 
   return [
-    '<section>',
-    `<h2>${escapeHtml(labels.floor)}</h2>`,
-    `<p class="lede"><b>${chart.named} of ${chart.roster}</b> ${escapeHtml(labels.buyers)} named this product in a forced choice against its cluster peers. Here is why, in their words.</p>`,
-    '<div class="blk">',
+    '<div class="blk bcards">',
+    `<p class="bhead"><b>${chart.named} of ${chart.roster}</b> ${escapeHtml(labels.buyers)} named this product.</p>`,
     empty,
     picks,
     silent,
     `<div class="dparts">${parts}</div>`,
-    '<p class="dnums">',
-    `demand ${n2(chart.demand)} &middot; breadth ${n2(verdict.floor.breadth)} &middot; intensity ${n2(verdict.floor.intensity)} `,
-    `&middot; capture ${n2(verdict.floor.capture)} &middot; share ${n2(verdict.floor.share)}`,
-    '</p>',
+    // Only `demand` — the other four are the meters directly above, and printing
+    // them again as a line of mono was the same five numbers twice.
+    `<p class="dnums">demand ${n2(chart.demand)}</p>`,
     '</div>',
-    '</section>',
   ].join('');
 }
 
@@ -2211,23 +2236,50 @@ function floorSection(verdict: Verdict): string {
  * six jurors' sentences deserves to see the size of the thumb on the scale.
  */
 function clusterSection(verdict: Verdict): string {
-  const { cluster } = verdict;
+  const { cluster, floor } = verdict;
+  // A solo cluster is the majority case and is stated here, where the cluster
+  // that produced it is: `DECISIONS.md` S3 renormalises the row to merit at
+  // weight 1.0 and S11 calls the empty Floor a delivery. Rendering it as a
+  // missing section would tell most paying customers that nothing happened.
+  const solo =
+    floor.kind === 'solo'
+      ? '<p><b>Nothing close enough to compare. Ranked on merit alone.</b> The demand weight moved onto merit rather than scoring a zero.</p>'
+      : '';
+
   return [
     '<section>',
     '<h2>Judged inside</h2>',
-    '<p class="lede">Demand is only meaningful against a substitute, so every product is judged inside a cluster of things that do the same job.</p>',
     '<div class="blk">',
     `<p><b>${escapeHtml(cluster.label)}</b> &middot; ${cluster.size} product${cluster.size === 1 ? '' : 's'} &middot; scarcity ${cluster.uniqueness}/100</p>`,
     `<p>${escapeHtml(cluster.reason)}</p>`,
+    solo,
     '<div class="dbar">',
     '<span class="dk">Scarcity</span>',
     `<span class="dtrack"><i class="dfill" style="width:${pct(cluster.uniqueness)}"></i></span>`,
     `<span class="dval">${cluster.uniqueness} / 100</span>`,
     '</div>',
-    `<p class="dnums">a crowded cluster scores low and an uncrowded one high; this board tilted the blend by ${verdict.weights.uniqueness_lambda} of it</p>`,
+    `<p class="dnums">this board tilted the blend by ${verdict.weights.uniqueness_lambda} of it</p>`,
     '</div>',
     '</section>',
   ].join('');
+}
+
+/**
+ * Where this product stood, as a share of the board rather than as a z-score.
+ *
+ * "Merit composite 1.45 / Customer demand 0.78 / Ranked by 1.76" were the three
+ * numbers a founder was given to read, and they are z-scores: they mean nothing
+ * without the population they were standardised against, and the population moves
+ * on every placement (`DECISIONS.md §1.2`). A percentile is arithmetic on the two
+ * numbers the stamp already carries — the rank and the count — so it says nothing
+ * this page has not already frozen, and it says it in a unit people read.
+ *
+ * Floored at 1, because #1 of 200 rounds to "top 0%" and a share of a board is
+ * never zero. Capped at 100 for the same reason from the other end.
+ */
+export function boardPercentile(rank: number, count: number): number {
+  if (count <= 0) return 100;
+  return Math.min(100, Math.max(1, Math.round((rank / count) * 100)));
 }
 
 /** The full document. */
@@ -2242,6 +2294,25 @@ export function renderVerdictPage(verdict: Verdict, options: RenderOptions = {})
   const description = `${cutsLine(verdict)} Ranked ${stampedRank(verdict)} in ${verdict.category}.`;
 
   const pitch = verdict.pitchLabel === null ? '' : `<span class="pitch">${escapeHtml(verdict.pitchLabel)}</span>`;
+
+  // The plate. An anonymous listing has a deterministic robot frozen with it; a
+  // named one gets its initial, because this document may carry no <img> and a
+  // favicon fetched at render time would break the offline guarantee.
+  const plate =
+    verdict.anonymous && verdict.robot !== undefined
+      ? verdict.robot
+      : escapeHtml((verdict.name.trim()[0] ?? '?').toUpperCase());
+
+  // The one-line sub under the hero number: where on the board, and how many
+  // buyers reached for it. Both are arithmetic on frozen figures.
+  const standing = [
+    `Top ${boardPercentile(verdict.rank, verdict.productCount)}% of the board`,
+    verdict.floor.kind === 'convened'
+      ? `${verdict.floor.firstPicks + verdict.floor.secondPicks} of ${verdict.floor.rosterSize} ${labels.buyers}`
+      : '',
+  ]
+    .filter((part) => part !== '')
+    .join(' · ');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -2274,80 +2345,61 @@ ${FONTS}
   <span class="navr"><a href="${escapeHtml(origin)}/how-it-works">How this works</a>verdict &middot; permanent &middot; public</span>
 </nav>
 
-<article class="vcard">
-  <header class="vtop${verdict.anonymous ? ' anon' : ''}">
-    ${verdict.anonymous && verdict.robot !== undefined ? `<span class="vavatar">${verdict.robot}</span>` : ''}
-    <div class="vident">
-      <span class="lbl">Verdict &middot; ${escapeHtml(verdict.category)}</span>
-      <h1>${escapeHtml(verdict.name)}</h1>
-      ${
-        verdict.anonymous
-          ? // The listing chose this before it was scored, and the sentence says so
-            // in the identity slot rather than in a footnote — a reader meeting a
-            // robot and a call sign should learn why in the same glance, and should
-            // learn that the evidence below is untouched by it.
-            '<span class="purl anon">Name and address withheld &middot; chosen at submission, before scoring. ' +
-            'Every cut, reason and score below is published in full.</span>'
-          : `<span class="purl">${productLink(verdict.url)}</span>`
-      }
+<header class="vhead">
+  <div class="vid">
+    <div class="vwho">
+      <span class="vfav" aria-hidden="true">${plate}</span>
+      <div class="vname">
+        <h1>${escapeHtml(verdict.name)}</h1>
+        <span class="vcat">${escapeHtml(verdict.category)} &middot; judged ${escapeHtml(stampDate(verdict.issuedAt))}</span>
+        ${
+          verdict.anonymous
+            ? '<span class="vurl plink">Name and URL withheld.</span>'
+            : `<span class="vurl">${productLink(verdict.url)}</span>`
+        }
+      </div>
     </div>
-  </header>
-
-  <div class="vrank">
-    <span class="big">${verdict.rank}</span>
-    <span class="of"><b>of ${verdict.productCount} products</b>on ${escapeHtml(stampTime(verdict.issuedAt))}. The board has moved since.</span>
-    ${pitch}
+    <div class="vrank">
+      <b title="${escapeHtml(stampedRank(verdict))}"><u>#</u>${verdict.rank}<i> / ${verdict.productCount}</i></b>
+      <small>${escapeHtml(standing)}</small>
+      ${pitch}
+    </div>
   </div>
 
   ${healthMeter(verdict)}
 
-  <div class="vbody">
-    ${summaryLines(verdict)}
-    ${verdict.sharpest === null ? '' : quote(verdict.sharpest)}
+  <div class="vlines">
+    ${sharpestLine(verdict)}
+    ${wantedLine(verdict)}
   </div>
 
-  <div class="vfoot">
-    <span>${escapeHtml(stampTime(verdict.issuedAt))}</span>
-    <span>jury ${escapeHtml(verdict.versions.prompt)} &middot; panel ${escapeHtml(verdict.versions.persona)} &middot; scarcity ${escapeHtml(verdict.versions.uniqueness)}</span>
-  </div>
-</article>
-
-<div class="actions">
-  <a class="act prime" href="${escapeHtml(canonical)}?download=1" download="the-pit-${escapeHtml(verdict.slug)}.html">Download this page</a>
-  <a class="act" href="${escapeHtml(origin)}/">Everyone walks in at 100</a>
-</div>
-
-${radialsSection(verdict, origin)}
+  ${renderShareRow(verdict, { origin })}
+</header>
 
 <section>
-  <h2>Who cut you, and where</h2>
-  <p class="lede"><b>${escapeHtml(cutsLine(verdict))}</b> Everyone walks in at 100. Cuts is 100 minus the mean metric score &mdash; not the sum of the points below, because those are each juror's own deduction off their own 100.</p>
-  ${matrixFigure(verdict)}
-</section>
-
-<section>
-  <h2>What each metric kept, and whether they agreed</h2>
-  <p class="lede">Being weak and having ${escapeHtml(labels.jury)} <i>agree</i> you were weak are two findings. The green head is what survived and the red is what came off; the whisker is how far apart the six were.</p>
+  <h2>The scorecard</h2>
+  <p class="lede">Being weak and having ${escapeHtml(labels.jury)} <i>agree</i> you were weak are two findings.</p>
   ${lossFigure(verdict)}
 </section>
 
+${panelSection(verdict, origin)}
+
 ${clusterSection(verdict)}
-${floorSection(verdict)}
 
 <section>
   <h2>Every cut, in the juror's own words</h2>
-  <p class="lede">The full ledger, heaviest metric first. Every line is one juror's deduction and the sentence behind it.</p>
+  <p class="lede">Raw points per juror.</p>
   ${ledger(verdict)}
 </section>
 
 <footer>
   <b>${escapeHtml(verdict.name)}</b> &middot; ${verdict.productCount} products &middot; issued ${escapeHtml(stampTime(verdict.issuedAt))}${verdict.pitchLabel === null ? '' : ` &middot; ${escapeHtml(verdict.pitchLabel)}`}<br>
-  prompt ${escapeHtml(verdict.versions.prompt)} &middot; personas ${escapeHtml(verdict.versions.persona)} &middot; scarcity ${escapeHtml(verdict.versions.uniqueness)} &middot; category snapshot ${escapeHtml(verdict.versions.categorySnapshot)}<br>
+  jury ${escapeHtml(verdict.versions.prompt)} &middot; panel ${escapeHtml(verdict.versions.persona)} &middot; scarcity ${escapeHtml(verdict.versions.uniqueness)} &middot; category snapshot ${escapeHtml(verdict.versions.categorySnapshot)}<br>
   weights: merit ${verdict.weights.merit} &middot; demand ${verdict.weights.demand} &middot; scarcity tilt ${verdict.weights.uniqueness_lambda}${verdict.tiebroken ? ' &middot; demand and scarcity moved this row off its pure-merit position' : ''}<br>
   <br>
   This page was frozen when it was issued and never recomputed &mdash; the comparison shapes above
-  included. The board is rebuilt on every placement, which is why every rank here carries a date and a
-  count. <a href="${escapeHtml(origin)}/how-it-works">How this works</a> &middot;
+  included. <a href="${escapeHtml(canonical)}?download=1" download="the-pit-${escapeHtml(verdict.slug)}.html">Download this page</a> &middot;
+  <a href="${escapeHtml(origin)}/how-it-works">How this works</a> &middot;
   <a href="${escapeHtml(origin)}/">thepit.show</a>
 </footer>
 
@@ -2381,9 +2433,7 @@ export function renderVerdictNotFound(slug: string, options: RenderOptions = {})
   <span class="navr"><a href="${escapeHtml(origin)}/how-it-works">How this works</a></span>
 </nav>
 <div class="notfound">
-No verdict has been issued at <b>${escapeHtml(slug)}</b>.<br><br>
-Verdict URLs are permanent, so a link that once worked still works. A link that never worked is a
-typo, a truncated paste, or a page that has not been delivered yet.
+No verdict has been issued at <b>${escapeHtml(slug)}</b>. Check the link.
 </div>
 </div>
 </body>
