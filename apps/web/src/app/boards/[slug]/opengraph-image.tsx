@@ -68,7 +68,14 @@ export default async function Image({ params }: { params: Promise<{ slug: string
           flexDirection: 'column',
           background: GROUND,
           color: INK,
-          padding: '48px 60px 44px',
+          // Explicit sides, not the three-value shorthand: satori expands
+          // `48px 60px 44px` without a padding-RIGHT, so a flex row's line box
+          // was 60px wider than the card's content column and the health bar
+          // ran off the canvas with its red tail clipped.
+          paddingTop: 48,
+          paddingRight: 60,
+          paddingBottom: 44,
+          paddingLeft: 60,
           borderLeft: `6px solid ${CUT}`,
         }}
       >

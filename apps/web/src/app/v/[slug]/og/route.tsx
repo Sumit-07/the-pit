@@ -75,6 +75,25 @@ const HELD = '#3E9C86';
 
 const SIZE = { width: 1200, height: 630 } as const;
 
+/** The rail, and the gutters inside it. The layout is measured off these. */
+const RAIL = 6;
+const PAD_X = 60;
+/**
+ * The column every element on the card is set in: 1074px.
+ *
+ * It is a NUMBER rather than a `100%`, because satori distributes a flex line
+ * from an available width that ignores this container's padding — the health bar
+ * beside the rank was handed `1200 − rank` instead of `1074 − rank` and ran 60px
+ * off the right edge with its red tail clipped away. Percentages inherited that
+ * same wrong basis, so the fix is to stop asking: the band below sets both of its
+ * columns from this constant, and they add up to it by construction.
+ */
+const CONTENT = SIZE.width - RAIL - PAD_X * 2;
+/** Room for `#48` at 180px beside `/ 48` at 46px, in tabular mono. */
+const RANK_COL = 420;
+const BAND_GAP = 40;
+const BAR_COL = CONTENT - RANK_COL - BAND_GAP;
+
 const SANS = 'Archivo';
 const MONO = 'IBM Plex Mono';
 
@@ -151,7 +170,14 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
           background: GROUND,
           color: INK,
           fontFamily: SANS,
-          padding: '48px 60px 44px',
+          // Explicit sides, not the three-value shorthand: satori expands
+          // `48px 60px 44px` without a padding-RIGHT, so a flex row's line box
+          // was 60px wider than the card's content column and the health bar
+          // ran off the canvas with its red tail clipped.
+          paddingTop: 48,
+          paddingRight: PAD_X,
+          paddingBottom: 44,
+          paddingLeft: PAD_X,
           borderLeft: `6px solid ${CUT}`,
         }}
       >
@@ -200,8 +226,8 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
           quote nothing to sit in; `lineHeight` is above 1 because at this size a
           line box of exactly 1em clips the crossbar off the `#`.
         */}
-        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', width: CONTENT }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', width: RANK_COL, flexShrink: 0 }}>
             <div style={{ display: 'flex', fontFamily: MONO, fontSize: 180, color: CUT, lineHeight: 1.16 }}>
               {fields.rankNumber}
             </div>
@@ -215,12 +241,13 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
             style={{
               display: 'flex',
               flexDirection: 'column',
-              flexGrow: 1,
-              marginLeft: 40,
+              width: BAR_COL,
+              flexShrink: 0,
+              marginLeft: BAND_GAP,
               marginBottom: 34,
             }}
           >
-            <div style={{ display: 'flex', width: '100%', height: 16, background: SUNK }}>
+            <div style={{ display: 'flex', width: BAR_COL, height: 16, background: SUNK }}>
               <div style={{ display: 'flex', width: `${fields.health}%`, height: '100%', background: HELD }} />
               <div style={{ display: 'flex', flexGrow: 1, height: '100%', background: CUT }} />
             </div>
