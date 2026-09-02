@@ -42,8 +42,8 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 
 import { HEALTH_NOTE, HOME_LEGEND } from '@/lib/boards/copy';
 import type { HomeBoard as HomeBoardData, HomeRow, TickerLine } from '@/lib/boards/home';
-import { depthOf, metricLabel, rank2, stampUtc } from '@/lib/boards/view';
-import { BoardHead, CutMeter, RowLead, RowNumbers } from '@/components/board-parts';
+import { depthOf, metricLabel, stampUtc } from '@/lib/boards/view';
+import { BoardHead, CutMeter, RankCell, RowLead, RowNumbers } from '@/components/board-parts';
 import { useRotation } from '@/components/home-rotation';
 
 /** How often a line joins the strip of cuts under the board. */
@@ -185,7 +185,7 @@ export function HomeBoard({ boards, ticker, deepest }: HomeBoardProps): ReactNod
                   }
                 >
                   {row.soloCluster ? <span className="flag" aria-hidden="true" /> : null}
-                  <span className="rk">{rank2(row.rank)}</span>
+                  <RankCell row={row} />
                   <RowLead row={row} />
                   <CutMeter row={row} />
                   <RowNumbers row={row} set="home" />

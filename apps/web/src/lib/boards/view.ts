@@ -52,6 +52,7 @@ import { redactRanking } from '@/lib/anon';
 import { SOLO_NOTE } from './copy';
 import { emptyFaviconIndex, faviconClass, faviconCss, faviconInitial, type FaviconIndex, type StoredFavicon } from './favicon';
 import { productIdentity } from './identity';
+import { rankMovement, type RankMovement } from './movement';
 import type { BoardDocument } from './source';
 
 /** One juror's deduction, as the board shows it: points, reason, and who took it. */
@@ -100,6 +101,18 @@ export interface DemandView {
 /** One row of a board. */
 export interface RowView {
   rank: number;
+  /**
+   * The engine's product id — the one key that survives a rebuild.
+   *
+   * `brief §1.2` moves every rank on every placement, so a rank is not an
+   * identity and cannot be used to ask "is this the same row as last time". The
+   * id can, which is what `lib/boards/movement.ts` compares two boards on and
+   * what `lib/boards/recent.ts` joins a delivered verdict back to its row with.
+   *
+   * Not new information on the wire: `verdictHref` below already spells this
+   * number into a URL. It is a field now so a surface does not have to parse one.
+   */
+  id: number;
   /**
    * What the row is called.
    *
@@ -214,6 +227,25 @@ export interface RowView {
   flagged: { source: string; reason: string; matched: string }[];
   /** The sentence a solo row carries, so the mark always arrives with its explanation. */
   soloNote?: string;
+  /**
+   * This row's verdict was delivered inside the last seven days.
+   *
+   * Absent on every row of a board nobody has pitched into. A seeded listing has
+   * no delivery instant of its own — `lib/verdict/service.ts` stamps it with the
+   * ranking file's mtime, which is when a checkout touched the disk — so calling
+   * one NEW would be a claim about a file, not about a product. See
+   * `lib/boards/recent.ts`, which owns the rule and applies it identically to the
+   * strip and to these rows.
+   */
+  isNew?: boolean;
+  /**
+   * Where this row sat on the board before this one, as a difference.
+   *
+   * Absent when there is no previous board to compare against, which is every
+   * board in filesystem mode: one snapshot, nothing behind it, and a dash on
+   * every row would be a claim about a comparison nobody made.
+   */
+  movement?: RankMovement;
 }
 
 /** One whole category board, ready to render. */
@@ -326,6 +358,7 @@ function projectRow(
 
   return {
     rank: row.rank,
+    id: row.id,
     name: row.name,
     url: anonymous ? '' : row.url,
     ...(categorySlug === ''
@@ -461,6 +494,49 @@ export function toBoardView(document_: BoardDocument): BoardView {
     generatedAt: document_.generatedAt,
     origin: document_.origin,
     ...(document_.caveat === undefined ? {} : { caveat: document_.caveat }),
+  };
+}
+
+/** What a board learns about itself from outside the snapshot it was projected from. */
+export interface BoardStamps {
+  /** The previous board's `(product id -> rank)`, or absent when there is no previous board. */
+  previous?: readonly { key: number; rank: number }[];
+  /** Product ids whose verdict was delivered inside the NEW window. */
+  newIds?: ReadonlySet<number>;
+}
+
+/**
+ * Add the two facts a snapshot cannot know about itself.
+ *
+ * A published board is one document, frozen at a placement. It cannot say what
+ * the board before it looked like, and it cannot say when the verdict behind a
+ * row was handed over — both of those live elsewhere and are looked up once per
+ * render, by the page, before this runs.
+ *
+ * A post-pass rather than an argument to `toBoardView`, because the lookup that
+ * feeds it depends on the projected board: `lib/boards/recent.ts` reads health
+ * and headline off these rows to build the strip, and then hands back which of
+ * them are new. Threading that into the projection would be a cycle; mapping over
+ * finished rows is one shallow copy and no re-derivation.
+ */
+export function stampBoard(board: BoardView, stamps: BoardStamps): BoardView {
+  const moved = rankMovement(
+    board.rows.map((row) => ({ key: row.id, rank: row.rank })),
+    stamps.previous,
+  );
+  const fresh = stamps.newIds;
+  if (moved.size === 0 && (fresh === undefined || fresh.size === 0)) return board;
+
+  return {
+    ...board,
+    rows: board.rows.map((row) => {
+      const movement = moved.get(row.id);
+      return {
+        ...row,
+        ...(movement === undefined ? {} : { movement }),
+        ...(fresh?.has(row.id) === true ? { isNew: true } : {}),
+      };
+    }),
   };
 }
 

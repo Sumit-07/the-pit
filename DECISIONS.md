@@ -331,6 +331,55 @@ changes.
 - Before dropping any seed, check it is not the last cluster peer of a paid product
   (that would silently push a paying customer into a solo cluster).
 
+### S14 RESOLVED — The feed is ordered by time, and the rank travels with its board
+
+**This supersedes the S14 entry the Open section carried, and closes it.**
+
+The question was whether a cross-category "landing now" feed may show ranks, given
+that `01` §9 rule 2 forbids a cross-category leaderboard. Both offered answers were
+wrong. Showing ranks in a shared ordering builds the forbidden leaderboard by
+accident: scores are z-normalised inside a category, so #3 of 12 and #3 of 200 are
+not comparable and a column of them invites exactly the comparison the rule bans.
+Hiding ranks and showing only names and cut totals is no better — a cut total is
+also category-relative, so the leaderboard is still there with a different column
+heading, and the feed loses the one fact that makes an arrival worth reading.
+
+**The resolution: the feed is ordered by TIME ONLY, every row carries its own
+category, and the rank is stamped as it was at delivery — "#12 of 49 in Developer
+Tools when judged". It is never sortable by rank.**
+
+Three properties, and each closes one half of the question:
+
+- **Time is the one ordering that ranks nothing.** "What came out most recently"
+  is a fact about clocks, not about merit, so an ordering built on it makes no
+  claim two categories could disagree about. `createPostgresRecentVerdicts` takes
+  no `orderBy` argument and `lib/boards/recent.ts` holds no second ordering, so
+  there is no parameter to widen later.
+- **The rank never appears without the board it was a rank on.** `#12` alone is
+  the promise `brief` Part 5 forbids; `#12 of 49 in Developer Tools when judged` is
+  a description of one board on one day, which is what `verdicts.product_count` and
+  `verdicts.delivered_at` are stamped for. The count and the category are rendered
+  in the same element as the rank, so the number cannot be lifted off the card.
+- **The surface is cards, not a table.** A column of ranks is a leaderboard
+  whatever its header says. Six cards each holding their own stamp cannot be read
+  down, because there is nothing to read down — and there is no control that would
+  re-order them.
+
+Nothing on the page argues for any of this. It says "Just judged" and prints what
+came out; `test/just-judged.test.ts` is where the property is enforced, including
+the assertion a rank-ordered feed cannot pass — a worse-ranked row from a newer
+board comes first.
+
+Two things fall out of the same decision and are recorded here because they are the
+parts most likely to be "fixed" by someone who did not read it. **The NEW chip is
+driven by the pitch ordinal, not by the clock**: a seeded listing has no delivery
+instant, `verdicts.attempt_number` is NULL on one (`brief` §2.4 counts pitches, and
+nobody has pitched an unclaimed row), and a window applied to its stand-in
+timestamp would light up every cold-start listing on a fresh checkout or a fresh
+seed. **The rank-movement mark renders nothing where there is no previous
+snapshot** rather than a dash: filesystem mode holds one board document per
+category, and "—" would be a claim about a comparison nobody made.
+
 ## Open
 
 Not blocking Phase 1. Needed before the phase named in brackets.
@@ -347,8 +396,10 @@ Not blocking Phase 1. Needed before the phase named in brackets.
   bumps on every placement and every nightly rebuild — so the cache on the only
   traffic-scaling cost line almost never hits. A rank BAND is coarse enough to survive
   population drift on `(description_hash, prompt_version)` alone.
-- **S14** [Ph.5] The "Landing now" feed is cross-category, and `01` §9 rule 2 forbids a
-  cross-category leaderboard. Does the feed show ranks, or only names and cut totals?
+- ~~**S14** [Ph.5] The "Landing now" feed is cross-category, and `01` §9 rule 2 forbids a
+  cross-category leaderboard.~~ **RESOLVED** above: the feed is ordered by time only,
+  each row carries its own category with the rank stamped at delivery, and it is
+  never sortable by rank.
 - ~~**S4-source** [Ph.1] 913 of 1028 seeded descriptions were written by outbid.lol,
   not by the founders.~~ **RESOLVED** above: seeded listings are published
   anonymously, so the question of re-scraping versus labelling no longer decides

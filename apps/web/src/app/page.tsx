@@ -68,9 +68,11 @@ import {
   tickerLines,
   type HomeBoard as HomeBoardData,
 } from '@/lib/boards/home';
+import { HOME_STRIP, recentVerdicts, stampBoards, stripIconCss } from '@/lib/boards/recent';
 import { defaultBoardSource } from '@/lib/boards/source';
 import { n1, toBoardView, type BoardView } from '@/lib/boards/view';
 import { HomeBoard } from '@/components/home-board';
+import { JustJudged } from '@/components/just-judged';
 import { HomeRotation } from '@/components/home-rotation';
 import { HeroVerdict } from '@/components/hero-verdict';
 
@@ -113,8 +115,25 @@ function HomeIconStyles({ boards }: { boards: readonly HomeBoardData[] }): React
   return <style>{[...rules].sort().join('\n')}</style>;
 }
 
+/** The strip's own icon rules. Empty when no card on it wears a favicon. */
+function StripIconStyles({ css }: { css: string }): ReactNode {
+  return css === '' ? null : <style>{css}</style>;
+}
+
 export default async function Home(): Promise<ReactNode> {
-  const boards = await loadBoards();
+  const read = await loadBoards();
+  /*
+    The strip, and then the same feed stamped back onto the rows.
+
+    One read, two surfaces: the cards at the top and the NEW chips on the board
+    below are the same list, so they can never disagree about which products
+    landed this week. `lib/boards/recent.ts` says why the movement mark comes
+    from the same call — it needs the board BEFORE this one, which only a
+    deployment with a database can produce, and both lookups sit behind one
+    dynamic import so a prerendered homepage opens no connection.
+  */
+  const recent = await recentVerdicts(HOME_STRIP, { boards: read });
+  const boards = await stampBoards(read, recent);
   const homeBoards = boards.map((board) => toHomeBoard(board));
   // Folded over the FULL boards, before the eight-row slice below.
   const stats = boardStats(boards);
@@ -236,6 +255,19 @@ export default async function Home(): Promise<ReactNode> {
             the network when it does.
           */}
             <HomeIconStyles boards={homeBoards} />
+            {/*
+              What just landed, between the plinth of numbers and the board those
+              numbers are folded from. It sits here because the four stats are
+              the site's standing claim and the board is its evidence — the strip
+              is the one row on this page that changes between two visits, and it
+              belongs where a returning reader's eye already is.
+
+              Its icons are emitted with it rather than borrowed from
+              `<HomeIconStyles>`: the strip is ordered by time, so a card can name
+              a product that is nowhere near the eight rows the rail ships.
+            */}
+            <StripIconStyles css={stripIconCss(boards, recent)} />
+            <JustJudged cards={recent} />
             <HomeBoard boards={homeBoards} ticker={tickerLines(boards)} deepest={stats.deepest} />
           </>
         )}

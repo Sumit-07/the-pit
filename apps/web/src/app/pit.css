@@ -2412,3 +2412,366 @@ body:has([data-page="boards"]) .navr .navlink[href="/boards"] {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ==================== BEGIN: just judged ==================== */
+/*
+ * The "Just judged" strip, the NEW chip, and the rank-movement mark.
+ *
+ * One block, appended, touching nothing above it. Every value below is a token
+ * already declared at the top of this file — there is no new colour, no new
+ * radius and no new shadow in the feature, because a strip that introduced its
+ * own surface stack would read as a widget bolted onto the page rather than as
+ * another part of it.
+ *
+ * ## What the strip is, structurally
+ *
+ * A horizontal scroller of cards between the stats plinth and the board. Cards
+ * and not rows, and that is `DECISIONS.md` S14 expressed in markup rather than in
+ * prose: the feed is cross-category, `01 §9` rule 2 forbids a cross-category
+ * leaderboard, and a COLUMN of ranks is a leaderboard whatever its header says.
+ * Six cards each carrying `#12 / 49 · Developer Tools` cannot be read down,
+ * because there is nothing to read down. `components/just-judged.tsx` carries the
+ * rest of that reasoning.
+ *
+ * ## The card's own depth
+ *
+ * `--card` on `--pit`, one hairline, one lip — the board's first row, exactly.
+ * The strip sits ABOVE the board in the page, so its cards are at the top of the
+ * descent and none of them darkens: `--depth` is a property of position in a
+ * ranking and these cards are not ranked. Hover lifts them the same two pixels
+ * `.bcard` lifts, using the same transition, because a second hover language on
+ * one page is one too many.
+ *
+ * ## The signature: two pixels of health
+ *
+ * Every card ends on a `--sunk` recess with a `--held` head as wide as the health
+ * that survived. It is `.meter` reduced to its single claim. The full segmented
+ * bar was tried here first and taken off: at 250px the segments are two pixels
+ * each, they cannot be told apart, and six cards of them read as texture rather
+ * than as a decomposition. One block, the figure beside it in words, and the
+ * whole ledger one click away.
+ */
+.justwrap {
+  margin-top: 30px;
+}
+/*
+ * The scroller.
+ *
+ * `overflow-x: auto` with proximity snapping, so a swipe settles on a card edge
+ * without fighting a reader who wanted to stop between two. It is focusable
+ * (`tabindex` in the component) because a scrollable region that cannot be
+ * reached by keyboard is content behind a gesture.
+ *
+ * The negative side margins and matching padding are what let a card bleed to the
+ * viewport edge on a phone while the rest of `.wrap` keeps its gutter — the strip
+ * is the one element on the page that should look like it continues past the
+ * screen, because it does.
+ */
+.juststrip {
+  list-style: none;
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-left: 2px;
+  padding: 2px 2px 12px;
+  /* A thin, unobtrusive scrollbar where the platform draws one at all. */
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--ink-c) / 0.2) transparent;
+  /*
+   * The right edge fades out, so a card cut by the container reads as a row that
+   * continues rather than as a card that failed to fit. Six cards never fit
+   * `.wrap`'s 1020px at any viewport, so the overflow is a certainty and the fade
+   * is always telling the truth — this is not a hint that appears conditionally.
+   *
+   * A mask and not a gradient overlay: an overlay would sit above the anchor and
+   * eat the click on the last visible card.
+   */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent);
+}
+.juststrip:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.justcard {
+  flex: 0 0 clamp(228px, 23vw, 272px);
+  scroll-snap-align: start;
+}
+/*
+ * The board index. Same strip, more room: there is no category rail and no board
+ * under it competing for the row, so a card can be wider and a reason gets fewer
+ * line breaks. The hairline is what stops the strip from reading as part of the
+ * page head it sits directly beneath.
+ */
+.justwrap.wide {
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid var(--hair);
+}
+.justwrap.wide .justcard {
+  flex-basis: clamp(244px, 26vw, 300px);
+}
+.justcard > a {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  height: 100%;
+  padding: 14px 15px 13px;
+  background: var(--card);
+  border: 1px solid var(--hair);
+  border-radius: var(--r2);
+  box-shadow: var(--lip), var(--e1);
+  color: inherit;
+  text-decoration: none;
+  transition: box-shadow 0.16s ease, transform 0.16s ease, background 0.16s ease;
+}
+/* The board's own hover, at the same magnitude. See `.bcard` and `.rowlink`. */
+.justcard > a:hover {
+  background: var(--rise);
+  box-shadow: var(--lip), var(--e2);
+  transform: translateY(-2px);
+}
+.justcard > a:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -3px;
+}
+
+.justname {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.justname > b {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.014em;
+  line-height: 1.25;
+  /* One line. A card is a fixed width and a forty-character product name would
+     push the stamp under it on one card and not on its neighbour. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/*
+ * The stamp: the rank, the size of the board it was a rank on, and the category.
+ *
+ * They are one line and one `title` because they are one fact. `brief` Part 5
+ * forbids promising a rank, and the defence against promising one is never
+ * printing it alone: `#12` on its own is a claim about the future, `#12 / 49 ·
+ * Developer Tools` is a description of one board on one day. The full sentence,
+ * ending in `when judged`, is the element's `title`.
+ */
+.juststamp {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  letter-spacing: -0.01em;
+  color: var(--dimmer);
+  cursor: help;
+  min-width: 0;
+}
+.juststamp > b {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.juststamp .of {
+  color: var(--faint);
+}
+.juststamp > i {
+  font-style: normal;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  /* The category is the half of the stamp that must not be croppable to nothing:
+     a rank without its board is the thing Part 5 forbids. */
+  flex: 1 1 auto;
+}
+/* A hairline between the identity and the judgement, the same divider the board
+   index uses under a card's meta. */
+.juststamp {
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--hair);
+}
+
+/*
+ * The cut. Three lines of the REASON, clamped — a juror's reason is prose and
+ * this is a card. The juror who took it is `.justwho` below, outside the clamp.
+ *
+ * Three lines of reason and not two: at two, most real reasons on the seeded
+ * boards clipped one word short and the card ended on `rejection.…` — a sentence
+ * that had finished, wearing an ellipsis that said it had not.
+ *
+ * `-webkit-line-clamp` with a `max-height` fallback so a browser without it crops
+ * rather than growing one card taller than the five beside it.
+ */
+.justcut {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-height: calc(12.5px * 1.45 * 3);
+  flex: 1 1 auto;
+}
+.justcut .pts {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--cut);
+  letter-spacing: -0.02em;
+}
+/*
+ * The juror, on its own line and outside the clamp.
+ *
+ * `brief` Part 6: every deduction shows the juror who took it. It is the one part
+ * of a cut a card may not shorten, so it is a sibling of the clamped reason
+ * rather than its last line — which is what it was, and what the clamp ate.
+ */
+.justwho {
+  margin-top: -4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.justfoot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 1px;
+}
+/* The mechanic, at two pixels: what walked out of the hundred it walked in with. */
+.justmeter {
+  flex: 1 1 100%;
+  height: 3px;
+  background: var(--sunk);
+  box-shadow: inset 0 1px 2px rgb(var(--shade-c) / 0.55);
+  overflow: hidden;
+}
+.justmeter > i {
+  display: block;
+  height: 100%;
+  width: var(--held-w, 0%);
+  background: var(--held);
+}
+.justheld {
+  font-size: 11px;
+  color: var(--faint);
+  flex: 1 1 auto;
+}
+.justheld > b {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--held);
+}
+.justfoot > time {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+  white-space: nowrap;
+}
+
+/*
+ * On a phone the same row swipes, and the next card is deliberately half in
+ * frame. A caption telling somebody to swipe is a caption apologising for an
+ * affordance that is not there; a card cut by the screen edge is the affordance.
+ */
+@media (max-width: 760px) {
+  .justcard {
+    flex-basis: 78vw;
+  }
+  .juststrip {
+    /* `.wrap` is `padding: 0 18px`; this cancels it and puts it back inside the
+       scroller, so a card can run to the screen edge while the page does not. */
+    margin-inline: -18px;
+    padding-inline: 18px;
+  }
+}
+
+/* ---------- the NEW chip ---------- */
+/*
+ * The one tag that is about WHEN rather than about what.
+ *
+ * `--cut` at an alpha, outlined, never filled — exactly `.tag.fl`'s treatment and
+ * for the same reason: the hue means *this was taken*, and arriving is not a
+ * deduction. Borrowing the accent says "look here" without claiming the row lost
+ * something. A filled vermilion chip on a board of hairlines would be the loudest
+ * thing on the page, spent on a fact that stops being true in seven days.
+ */
+.tag.new {
+  border: 1px solid rgb(var(--cut-c) / 0.55);
+  color: var(--cut);
+  background: rgb(var(--cut-c) / 0.1);
+  cursor: default;
+}
+
+/* ---------- the rank-movement mark ---------- */
+/*
+ * `▲3` under the rank, in the rank column, nine pixels of mono.
+ *
+ * It does not move, and that is the point. `brief` Part 6 bans motion from rank
+ * churn because `brief §1.2` moves every z-score on every placement — rows
+ * reshuffle for products that did nothing. A static difference says that out loud
+ * instead of hiding it, and costs the page no animation to do it.
+ *
+ * Both hues are licensed here, which is the one place on a row they are: climbing
+ * is what survived a rebuild and falling is what it took off you, which is what
+ * `--held` and `--cut` already mean everywhere else on this site. `same` and
+ * `new` take neither — a dash is not a gain, and a row's arrival is not a loss.
+ *
+ * `lib/boards/movement.ts` puts the same fact in words in a `title` on every one
+ * of these, because the glyph announces as "black up-pointing triangle" and the
+ * colour is unavailable to a large share of readers.
+ */
+.rk .mv {
+  display: block;
+  margin-top: 3px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: var(--faint);
+  cursor: help;
+}
+.rk .mv-up {
+  color: var(--held);
+}
+.rk .mv-down {
+  color: var(--cut);
+}
+.rk .mv-new {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 8.5px;
+  color: var(--dimmer);
+}
+/* ==================== END: just judged ==================== */

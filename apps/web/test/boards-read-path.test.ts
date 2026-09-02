@@ -69,6 +69,15 @@ const FORBIDDEN = [
   '@/lib/pipeline/run',
   '@/lib/pipeline/local',
   '@/lib/engine',
+  // The two far sides of the "what just landed" seam. `lib/boards/recent.ts` IS
+  // on this graph — the strip renders on `/` and `/boards` — and it reaches these
+  // two only through `await import(...)`, inside the branch that has already
+  // decided the deployment has a database. Naming them here is what stops that
+  // seam from being flattened into a static import by somebody tidying up: the
+  // day either of them appears at the top of a module a board route can reach, a
+  // prerendered board loads a Postgres driver to draw six cards.
+  '@/lib/boards/pg-recent',
+  '@/lib/boards/pg-history',
 ];
 
 interface Edge {

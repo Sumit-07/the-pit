@@ -14,8 +14,10 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
+import { INDEX_STRIP, recentVerdicts, stripIconCss } from '@/lib/boards/recent';
 import { defaultBoardSource } from '@/lib/boards/source';
 import { stampUtc, toBoardView, type BoardView } from '@/lib/boards/view';
+import { JustJudged } from '@/components/just-judged';
 
 export const revalidate = 86400;
 
@@ -51,6 +53,18 @@ function deepestCut(board: BoardView): string {
 
 export default async function Boards(): Promise<ReactNode> {
   const boards = await loadBoards();
+  /*
+    Eight cards here rather than the homepage's six: this page has the full
+    column and no rail competing for it, and the index is where somebody who
+    already knows the site comes to see what moved.
+
+    The boards are NOT stamped on this page. There are no rows on it — a card is
+    a whole category — so there is nothing for a NEW chip or a movement mark to
+    attach to, and running the previous-snapshot lookup to attach nothing would
+    be a query per category for a mark this surface does not draw.
+  */
+  const recent = await recentVerdicts(INDEX_STRIP, { boards });
+  const iconCss = stripIconCss(boards, recent);
 
   return (
     <div className="wrap" data-page="boards">
@@ -62,6 +76,9 @@ export default async function Boards(): Promise<ReactNode> {
           Open a category, open a row: every deduction, the reason, and the juror who took it.
         </p>
       </div>
+
+      {iconCss === '' ? null : <style>{iconCss}</style>}
+      <JustJudged cards={recent} width="wide" />
 
       {boards.length === 0 ? (
         <div className="empty">No boards yet.</div>

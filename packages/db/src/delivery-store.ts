@@ -62,7 +62,7 @@
  * rows exist. Nothing here reorders them.
  */
 
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 
 import type { Database } from './client.js';
 import { attemptRow, verdictRow, type DeliveredVerdict, type LedgerEntry } from './identity.js';
@@ -286,6 +286,77 @@ export function createPostgresVerdictStore(db: Database): PostgresVerdictStore {
         deliveredAt:
           row.deliveredAt instanceof Date ? row.deliveredAt : new Date(String(row.deliveredAt)),
       };
+    },
+  };
+}
+
+/**
+ * The newest delivered verdicts, across every category. `brief` Part 6's
+ * "arriving verdicts", read back.
+ *
+ * ## A separate factory, and why it is not a method on `PostgresVerdictStore`
+ *
+ * That store is one method on purpose. Its header states the reason: the public
+ * verdict route has no session, and a store reachable from it that could
+ * enumerate an account's verdicts would cross the line `brief §2.1` draws —
+ * "verdict URLs are public; attempt balance and history sit behind a session".
+ * Adding a `list` there would weaken a documented guarantee for a feature that
+ * does not need it.
+ *
+ * This read is a different shape and gets a different name. It takes no account
+ * and selects no `account_id` or `job_id`, so it cannot be pointed at a person
+ * even by a caller that wanted to: it answers "what came out of the pit most
+ * recently", and every row it returns is a page anybody already holds a URL to.
+ *
+ * ## Ordered by `delivered_at`, and by nothing else
+ *
+ * `DECISIONS.md` S14: a cross-category feed must not become a cross-category
+ * leaderboard, because `01 §9` rule 2 forbids one — scores are z-normalised
+ * inside a category, so ordering two categories' rows against each other invents
+ * a comparison the engine never made. Time is the one ordering that ranks
+ * nothing, so it is the only ordering this query offers. There is no `orderBy`
+ * parameter, and adding one would be re-opening a resolved decision in the layer
+ * furthest from the surface that shows it.
+ *
+ * `attempt_number` is in the projection because the page needs to tell a PITCH
+ * from a seeded listing: a cold-start row carries NULL there (`brief §2.4` counts
+ * pitches, and nobody has pitched an unclaimed row), and its `delivered_at` is a
+ * stamp of convenience rather than a moment anything happened. A "NEW" chip
+ * driven by the timestamp alone would fire for all of them.
+ */
+export interface PostgresRecentVerdicts {
+  /** The newest `limit` verdicts by `delivered_at`, newest first. */
+  recent(limit: number): Promise<StoredVerdictRow[]>;
+}
+
+export function createPostgresRecentVerdicts(db: Database): PostgresRecentVerdicts {
+  return {
+    async recent(limit: number): Promise<StoredVerdictRow[]> {
+      // A feed is a handful of cards. Clamping here rather than trusting the
+      // caller keeps a mistyped argument from selecting every payload in the
+      // table — each one is a whole rendered verdict document.
+      const take = Math.max(0, Math.min(50, Math.trunc(limit)));
+      if (take === 0) return [];
+
+      const rows = await db
+        .select({
+          publicSlug: verdicts.publicSlug,
+          payload: verdicts.payload,
+          productCount: verdicts.productCount,
+          attemptNumber: verdicts.attemptNumber,
+          deliveredAt: verdicts.deliveredAt,
+        })
+        .from(verdicts)
+        .orderBy(desc(verdicts.deliveredAt))
+        .limit(take);
+
+      return rows.map((row) => ({
+        publicSlug: row.publicSlug,
+        payload: row.payload,
+        productCount: Number(row.productCount),
+        attemptNumber: row.attemptNumber === null ? null : Number(row.attemptNumber),
+        deliveredAt: row.deliveredAt instanceof Date ? row.deliveredAt : new Date(String(row.deliveredAt)),
+      }));
     },
   };
 }

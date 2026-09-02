@@ -35,6 +35,9 @@ export const HOME_ROWS = 8;
 export type HomeRow = Pick<
   RowView,
   | 'rank'
+  // The join key a rank is not. `brief §1.2` moves every rank on every placement,
+  // so `id` is what carries "the same product" between two boards.
+  | 'id'
   | 'name'
   | 'iconClass'
   // The identity slot. `RowLead` draws the mark from these, and the homepage
@@ -53,6 +56,11 @@ export type HomeRow = Pick<
   | 'tiebroken'
   | 'headline'
   | 'soloNote'
+  // What the feed learned about this row: whether it just landed, and how far it
+  // moved to get where it is. Both are absent in filesystem mode, where there is
+  // one snapshot and nothing behind it — see `lib/boards/recent.ts`.
+  | 'isNew'
+  | 'movement'
   // The row's own verdict. Every row on the homepage board is a link to it —
   // the board's whole job is to make a reader want one, and until this field
   // came down with the slice the eight most visible rows on the site were the
@@ -198,6 +206,7 @@ export function boardStats(boards: readonly BoardView[]): BoardStats {
 function toHomeRow(row: RowView): HomeRow {
   return {
     rank: row.rank,
+    id: row.id,
     name: row.name,
     // A class name, not the icon's bytes. The homepage board is a CLIENT
     // component, so everything on this row is serialized into the page's
@@ -218,6 +227,8 @@ function toHomeRow(row: RowView): HomeRow {
     tiebroken: row.tiebroken,
     headline: row.headline,
     ...(row.soloNote === undefined ? {} : { soloNote: row.soloNote }),
+    ...(row.isNew === undefined ? {} : { isNew: row.isNew }),
+    ...(row.movement === undefined ? {} : { movement: row.movement }),
     ...(row.verdictHref === undefined ? {} : { verdictHref: row.verdictHref }),
     url: row.url,
     deductionCount: row.deductionCount,

@@ -86,6 +86,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 
 import { SOLO_NOTE } from '@/lib/boards/copy';
+import { movementClass, movementText, movementTitle } from '@/lib/boards/movement';
 import { RobotAvatar } from '@/components/robot-avatar';
 import { metricLabel, n1, n2, rank2, type MetricView, type RowView } from '@/lib/boards/view';
 
@@ -112,12 +113,27 @@ export function segClass(index: number): string {
  * and a solo cluster took nothing from anyone.
  */
 function RowTags({ row }: { row: RowView }): ReactNode {
-  if (!row.anonymous && !row.soloCluster && !row.tiebroken && row.flagged.length === 0) return null;
+  if (row.isNew !== true && !row.anonymous && !row.soloCluster && !row.tiebroken && row.flagged.length === 0) {
+    return null;
+  }
   return (
     <span className="tags">
       {/*
-       * First, because it explains the two things a reader has already noticed
-       * about the row — the robot and the designation — before they wonder
+       * Before everything else, because it is the only tag that is about WHEN
+       * rather than about what: a reader scanning a rebuilt board wants to know
+       * which rows were not here last week before they read anything about them.
+       * An outline in `--cut` and not a fill — the hue means "taken", and arriving
+       * is not a deduction, so it borrows the colour at an alpha the way
+       * `.tag.fl` does rather than wearing a block of it.
+       */}
+      {row.isNew === true ? (
+        <span className="tag new" title="Delivered in the last seven days.">
+          new
+        </span>
+      ) : null}
+      {/*
+       * First of the state tags, because it explains the two things a reader has
+       * already noticed about the row — the robot and the designation — before they wonder
        * whether something failed to load. The tag is a plain state chip and takes
        * neither hue: withholding a name is not a deduction and not health.
        */}
@@ -229,6 +245,43 @@ export function RowMark({ row }: { row: MarkRow }): ReactNode {
     );
   }
   return <span className={`fav favimg ${row.iconClass}`} aria-hidden="true" />;
+}
+
+/**
+ * The rank column: the position, and how far the row moved to reach it.
+ *
+ * ## Why a board that forbids rank animation prints a rank difference
+ *
+ * `brief` Part 6 bans motion from rank churn and `brief §1.2` explains it —
+ * appending one product moves every z-score, so rows reshuffle for products that
+ * did nothing. The mark is the opposite of animating that. It does not move, it
+ * is nine pixels of mono under the rank, and it says out loud the thing the ban
+ * exists to stop the page from hiding: this number is not stable, and here is how
+ * much it moved.
+ *
+ * ## Nothing at all is a state, and it is the common one
+ *
+ * `movement` is absent on every board in filesystem mode, because there is one
+ * snapshot on disk and nothing to compare against. A dash on every row would read
+ * as "held its position" — a claim about a comparison nobody made — so the cell is
+ * simply the rank, as it was. `lib/boards/movement.ts` keeps that distinction in
+ * the data rather than in a component.
+ *
+ * The glyph is never the only carrier. `▲3` announces as "black up-pointing
+ * triangle three" and its colour is unavailable to a third of readers, so the
+ * `title` says it in words on every row.
+ */
+export function RankCell({ row }: { row: RowView }): ReactNode {
+  return (
+    <span className="rk">
+      {rank2(row.rank)}
+      {row.movement === undefined ? null : (
+        <span className={movementClass(row.movement)} title={movementTitle(row.movement)}>
+          {movementText(row.movement)}
+        </span>
+      )}
+    </span>
+  );
 }
 
 /**
@@ -626,7 +679,7 @@ export function BoardRow({ row, depth, first }: { row: RowView; depth: string; f
       <summary>
         <span className="rowhead" style={{ '--depth': depth } as CSSProperties}>
           {row.soloCluster ? <span className="flag" aria-hidden="true" /> : null}
-          <span className="rk">{rank2(row.rank)}</span>
+          <RankCell row={row} />
           <RowLead row={row} />
           <CutMeter row={row} />
           <RowNumbers row={row} set="board" />

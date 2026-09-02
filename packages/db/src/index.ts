@@ -55,11 +55,16 @@ export type {
   DeliveryTxOptions,
   PostgresDeliveryStore,
   PostgresDeliveryTx,
+  PostgresRecentVerdicts,
   PostgresVerdictStore,
   StoredVerdictRow,
   WithPostgresDeliveryTx,
 } from './delivery-store.js';
-export { createPostgresDeliveryStore, createPostgresVerdictStore } from './delivery-store.js';
+export {
+  createPostgresDeliveryStore,
+  createPostgresRecentVerdicts,
+  createPostgresVerdictStore,
+} from './delivery-store.js';
 
 export type { RankedRow, VerdictPayloadContext } from './verdict-payload.js';
 export { verdictPayload, verdictPayloadFor, VerdictRowMissingError } from './verdict-payload.js';
