@@ -15,9 +15,28 @@
  * vote cache holds 6 x 48 = 288 rows. The stored phases are stamped
  * `category_version: "v2"` and the installed jury's `prompt_version` is `"v2"`,
  * which is the default `FileCategorySource` supplies — so the phases resume.
+ *
+ * ## What a fresh checkout has, and what it does not
+ *
+ * `products.json`, `ranking.json` and both approved panels are committed, so the
+ * `rank` step, the pinned ids and the panels are read the same way everywhere.
+ * The three MODEL phases are not: `cjr/runs/<slug>/phases/` is git-ignored, and the
+ * score, uniqueness and customer envelopes are the only record of them. A fresh
+ * checkout therefore has a board with no phases behind it, which the status page
+ * honestly reports as one completed step rather than four.
+ *
+ * The assertions that need those envelopes say so with `skipIf`. A fixture copy
+ * was considered and rejected: at full fidelity it is ~1.08 MB of artifacts this
+ * repository already has, and a trimmed copy would be a board whose z-scores and
+ * health were computed over a population it no longer contains — a run that never
+ * happened, asserted against as though it had. `test/status.test.ts` already
+ * proves every step-state and vote-cache rule against built fixtures; what these
+ * two add is that the real files on disk deserialize into them, which is a claim
+ * only the real files can make.
  */
 
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
@@ -36,6 +55,13 @@ const WORKDIR = fileURLToPath(new URL('../../../cjr', import.meta.url));
 
 /** The seeded categories are committed, but a checkout could be missing them. */
 const seeded = existsSync(WORKDIR);
+
+/**
+ * Whether the run's persisted phase envelopes are beside its board. See the
+ * module header: `phases/` is git-ignored, so this is true on the machine that
+ * produced the run and false in a fresh checkout.
+ */
+const hasPhases = existsSync(join(WORKDIR, 'runs', 'developer-tools', 'phases', 'score.json'));
 
 function bindings(): RunnerBindings {
   return {
@@ -59,7 +85,24 @@ describe.skipIf(!seeded)('a seeded category on disk', () => {
     expect(input?.config.categoryVersion).toBe('v2');
   });
 
-  it('reconstructs a finished run as delivered work, from the artifacts alone', async () => {
+  it('reads the committed board back as a ranked, undelivered run', async () => {
+    const lookup = await loadRunStatus('developer-tools', bindings());
+    expect(lookup.found).toBe(true);
+    if (!lookup.found) throw new Error('unreachable');
+
+    const byStep = new Map(lookup.status.steps.map((step) => [step.step, step]));
+    // `ranking.json` is committed, so `rank` reads as done in every checkout.
+    expect(byStep.get('rank')?.state).toBe('done');
+    // No snapshot has ever been published for this category — the Phase 1 seed
+    // ran the engine's CLI, not this pipeline. So `deliver` is honestly pending.
+    expect(byStep.get('deliver')?.state).toBe('pending');
+    // Four with the phase envelopes on disk; one — `rank` alone — without them,
+    // which is the honest answer rather than a board credited with model work
+    // whose record is gone.
+    expect(lookup.status.completed).toBe(hasPhases ? 4 : 1);
+  });
+
+  it.skipIf(!hasPhases)('reconstructs a finished run as delivered work, from the artifacts alone', async () => {
     const lookup = await loadRunStatus('developer-tools', bindings());
     expect(lookup.found).toBe(true);
     if (!lookup.found) throw new Error('unreachable');
@@ -68,14 +111,9 @@ describe.skipIf(!seeded)('a seeded category on disk', () => {
     expect(byStep.get('score')?.state).toBe('done');
     expect(byStep.get('cluster')?.state).toBe('done');
     expect(byStep.get('persona')?.state).toBe('done');
-    expect(byStep.get('rank')?.state).toBe('done');
-    // No snapshot has ever been published for this category — the Phase 1 seed
-    // ran the engine's CLI, not this pipeline. So `deliver` is honestly pending.
-    expect(byStep.get('deliver')?.state).toBe('pending');
-    expect(lookup.status.completed).toBe(4);
   });
 
-  it('counts every banked juror vote', async () => {
+  it.skipIf(!hasPhases)('counts every banked juror vote', async () => {
     const lookup = await loadRunStatus('developer-tools', bindings());
     if (!lookup.found) throw new Error('unreachable');
     // 6 jurors x 48 products.
@@ -92,6 +130,9 @@ describe.skipIf(!seeded)('a seeded category on disk', () => {
     });
     // `PROMPT_VERSION` is this suite's fixture version, not the seeded `v2`. A
     // stored phase under a version that has moved is a stale answer, not a saving.
+    // Without `phases/` on disk the cache is empty for the duller reason that
+    // there is nothing to read; the version gate itself is asserted against built
+    // fixtures in `test/status.test.ts`, which runs everywhere.
     expect(cache.size).toBe(0);
   });
 
