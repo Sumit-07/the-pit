@@ -168,6 +168,11 @@ export function mailTransport(): MailTransport {
   return new ResendMailTransport({ apiKey, fetch: (url, init) => fetch(url, init) });
 }
 
+/** `From:` on every message this app sends. One answer, so the three cannot drift. */
+export function mailFrom(): string {
+  return process.env['AUTH_MAIL_FROM'] ?? 'The Pit <no-reply@thepit.show>';
+}
+
 /** `https://thepit.show` in production; whatever `APP_ORIGIN` says elsewhere. */
 export function appOrigin(): string {
   return process.env['APP_ORIGIN'] ?? 'https://thepit.show';
@@ -234,6 +239,19 @@ export function githubProvider(): OAuthProvider | null {
     return null;
   }
   return new GitHubOAuthProvider({ clientId, clientSecret, fetch: (url, init) => fetch(url, init) });
+}
+
+/**
+ * An account's CURRENT capability slug, or `null`, by the same precedence as
+ * every other resolver here.
+ *
+ * A one-method window onto `IdentityStore` for the callers that need the account
+ * URL and nothing else — the delivery email is the only one today. Deliberately
+ * not the store itself: `rotateCapabilitySlug` and `linkIdentity` have no
+ * business on a path that sends mail.
+ */
+export function capabilitySlugFor(accountId: string): Promise<string | null> {
+  return resolveIdentityStore().capabilitySlugFor(accountId);
 }
 
 /** The capability path's dependencies. */
@@ -326,7 +344,7 @@ export function authDeps(): AuthHandlerDeps {
       store,
       limiter,
       mail: mailTransport(),
-      mailFrom: process.env['AUTH_MAIL_FROM'] ?? 'The Pit <no-reply@thepit.show>',
+      mailFrom: mailFrom(),
       verifyUrl: new URL('/auth/verify', appOrigin()).toString(),
       // The response-time floor that closes the enumeration oracle an identical
       // body leaves open. See `@the-pit/auth`'s `timing.ts`.

@@ -156,6 +156,11 @@ export { capabilityHandoff, HANDOFF_WINDOW_MS } from './capability/handoff.js';
 export type { CapabilityMessageInput } from './mail/capability-render.js';
 export { capabilityIdempotencyKey, renderCapabilityEmail } from './mail/capability-render.js';
 
+// --- The one email that is not about signing in: a delivered verdict ---
+
+export type { VerdictMessageInput, VerdictSharpestCut } from './mail/verdict-render.js';
+export { renderVerdictEmail, verdictCutsLine, verdictIdempotencyKey } from './mail/verdict-render.js';
+
 // --- The second store seam: slugs and provider links ---
 
 export type { AccountIdentity, AccountStore, IdentityStore, RotateSlugResult } from './identity-store.js';

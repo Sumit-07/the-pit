@@ -1,5 +1,5 @@
 /**
- * The two emails are the only surfaces in the product a customer sees before the
+ * The emails are the only surfaces in the product a customer sees before the
  * website, and the only ones that cannot use the token system: mail clients strip
  * `<style>` blocks and do not resolve CSS custom properties, so every colour has
  * to be an inline literal.
@@ -23,6 +23,7 @@ import { describe, expect, it } from 'vitest';
 import { renderCapabilityEmail } from '../src/mail/capability-render.js';
 import { renderMagicLinkEmail } from '../src/mail/render.js';
 import { MAIL_GROUND, MAIL_INK, MAIL_MUTED } from '../src/mail/theme.js';
+import { renderVerdictEmail } from '../src/mail/verdict-render.js';
 
 const MAGIC = renderMagicLinkEmail({
   email: 'founder@example.com',
@@ -39,9 +40,26 @@ const CAPABILITY = renderCapabilityEmail({
   url: 'https://thepit.show/a/k7m2q9x4hd82',
 });
 
-const BOTH = [
+const VERDICT = renderVerdictEmail({
+  email: 'founder@example.com',
+  from: 'The Pit <no-reply@thepit.show>',
+  name: 'Runlet',
+  cuts: 96.7,
+  rankStamp: '4 of 48 products on 27 Aug 2026, 14:03 UTC',
+  sharpest: { role: 'Skeptic', reason: 'The pricing page names no number.' },
+  url: 'https://thepit.show/v/quiet-anvil-4821',
+  accountUrl: 'https://thepit.show/a/k7m2q9x4hd82',
+  accountId: 'acct_1',
+});
+
+/**
+ * Every email the product sends. A new one that skipped this list would be the
+ * exact drift this file exists to catch, so it is a list and not two constants.
+ */
+const EVERY_EMAIL = [
   ['the sign-in email', MAGIC.html],
   ['the account-link email', CAPABILITY.html],
+  ['the verdict email', VERDICT.html],
 ] as const;
 
 function channels(hex: string): [number, number, number] {
@@ -63,7 +81,7 @@ function contrast(a: string, b: string): number {
 }
 
 describe('the emails are the same product as the site', () => {
-  for (const [name, html] of BOTH) {
+  for (const [name, html] of EVERY_EMAIL) {
     it(`${name} is set on the site's ground, in the site's ink`, () => {
       expect(html).toContain(`background:${MAIL_GROUND}`);
       expect(html).toContain(`color:${MAIL_INK}`);
@@ -78,9 +96,11 @@ describe('the emails are the same product as the site', () => {
       expect(html).toContain('Archivo');
     });
 
-    it(`${name} spends no colour, because nothing has been taken in it`, () => {
-      // `--cut` is the system's only hue and it means exactly one thing. A
-      // sign-in email has no deduction in it, so it has no colour in it.
+    it(`${name} spends no colour, because a mail client cannot be trusted with one`, () => {
+      // `--cut` is the system's only hue and it means exactly one thing: a
+      // quantity taken, read off a chart. None of these messages draws one — the
+      // verdict email points AT the page that does — and a hue that appeared here
+      // would be decoration wearing the meaning of a deduction.
       const hexes = new Set((html.match(/#[0-9a-fA-F]{3,6}/g) ?? []).map((found) => found.toUpperCase()));
       for (const found of hexes) {
         const [r, g, b] = channels(found);
@@ -91,7 +111,7 @@ describe('the emails are the same product as the site', () => {
 });
 
 describe('the small print survives a dark ground', () => {
-  for (const [name, html] of BOTH) {
+  for (const [name, html] of EVERY_EMAIL) {
     it(`${name} states its muted colour instead of leaning on opacity`, () => {
       // `opacity:.7` is inconsistently supported across mail clients, and the
       // tone it landed on here was below AA. A resolved hex is both portable and
@@ -101,7 +121,7 @@ describe('the small print survives a dark ground', () => {
     });
   }
 
-  it('clears WCAG AA for every tone either email puts on the ground', () => {
+  it('clears WCAG AA for every tone these emails put on the ground', () => {
     expect(contrast(MAIL_INK, MAIL_GROUND)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(MAIL_MUTED, MAIL_GROUND)).toBeGreaterThanOrEqual(4.5);
     // The one button inverts — the ground becomes the type on a lit fill.
@@ -121,6 +141,12 @@ describe('re-theming changed nothing a reader reads', () => {
     expect(CAPABILITY.subject).toBe('Your account link for The Pit');
     expect(CAPABILITY.html).toContain('Open my account');
     expect(CAPABILITY.html).toContain('Bookmark this.');
+  });
+
+  it('leaves the verdict email saying what it said', () => {
+    expect(VERDICT.subject).toBe('Your verdict is in: Runlet took 97 in cuts');
+    expect(VERDICT.html).toContain('Read the verdict');
+    expect(VERDICT.html).toContain('It is public and permanent; share it.');
   });
 
   it('still escapes the link it was handed, which the styling sits next to', () => {

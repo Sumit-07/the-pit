@@ -47,7 +47,7 @@ import { runPlacement, type PlacementOutcome } from './placement';
 import { runPipeline, type PipelineResult } from './run';
 import { defaultBindings, type RunnerBindings } from './service';
 import { PlacementPhaseStore } from './store';
-import { deliveryBindings } from '@/lib/delivery/config';
+import { deliveryBindings, deliveryMail } from '@/lib/delivery/config';
 import { nextBoardInvalidator } from '@/lib/delivery/revalidate';
 import { settleDelivery } from '@/lib/delivery/settle';
 
@@ -360,7 +360,17 @@ export const settleDeliveryFunction = inngest.createFunction(
       const result = await settleDelivery(record, {
         bindings: deliveryBindings(),
         invalidator: nextBoardInvalidator(),
+        mail: deliveryMail(),
       });
+      if (result.outcome === 'settled' && !result.mailed) {
+        // The verdict is written, public and permanent; the customer has not been
+        // told. Not a throw and not a retry — a replay would report
+        // `already_settled` and send nothing, and the page is already on their
+        // account. This line is how anyone finds out.
+        console.error(
+          `[delivery] ${record.slug} verdict ${result.verdictSlug} was delivered but not emailed`,
+        );
+      }
       if (result.outcome === 'not_settleable') {
         // Loud, and not a throw. The customer has paid, the board is published,
         // and the attempt is still on their balance — what is owed is a verdict

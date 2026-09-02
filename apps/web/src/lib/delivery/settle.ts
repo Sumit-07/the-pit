@@ -43,6 +43,15 @@
  * the transaction is idempotent, so a retry either completes it or reports
  * `already_settled`.
  *
+ * ## The email is outside the transaction, and outside the result
+ *
+ * A settled delivery also tells the customer. That send happens AFTER the
+ * transaction commits and cannot affect it: a provider outage produces
+ * `mailed: false` beside a `settled` outcome, never a rolled-back verdict. It
+ * fires only on the pass that actually settled, which is what stops an Inngest
+ * retry mailing twice — see `verdict-mail.ts` for why that is the ledger's
+ * idempotency key rather than a column.
+ *
  * ## The invalidation is here and not in the sink
  *
  * `SNAPSHOT_PURGE_URL` purges the board JSON at the CDN. The RENDERED pages —
@@ -64,6 +73,7 @@ import { deterministicUuid, verdictSlug } from '@the-pit/db';
 import type { DeliveryRecord } from '@/lib/pipeline/types';
 
 import type { BoardInvalidator } from './revalidate';
+import { mailVerdict, type VerdictMailDeps } from './verdict-mail';
 
 /**
  * The two reads and the one transaction a settle needs, as a seam.
@@ -107,6 +117,15 @@ export interface SettleDeps {
   readonly bindings: DeliveryBindings | null;
   /** The rendered pages to invalidate. Absent outside a Next request context. */
   readonly invalidator?: BoardInvalidator;
+  /**
+   * How to tell the customer. Absent means nothing is sent.
+   *
+   * Optional because a settle is correct without it — `brief §2.3`'s clause is
+   * about the ledger, and the verdict is public the instant the transaction
+   * commits. Every existing settle test therefore mails nobody by construction,
+   * and a deployment with no mail provider still delivers.
+   */
+  readonly mail?: VerdictMailDeps;
   readonly now?: () => Date;
 }
 
@@ -119,14 +138,28 @@ export type SettleResult =
       readonly verdictId: string;
       readonly productId: string;
       readonly balance: number;
+      /**
+       * Whether "your verdict is in" reached the customer.
+       *
+       * A flag and not a failure: the send happens after the transaction has
+       * committed, so `false` means a delivered, public, permanent verdict that
+       * nobody was told about — a line for the log and, at worst, a support
+       * conversation. It is never a reason to retry a settle.
+       */
+      readonly mailed: boolean;
     }
-  /** The same run settled twice. The verdict stands; the customer is charged once. */
+  /**
+   * The same run settled twice. The verdict stands; the customer is charged once,
+   * and — because `mailed` is only ever true on the pass that settled — emailed
+   * once.
+   */
   | {
       readonly outcome: 'already_settled';
       readonly verdictSlug: string;
       readonly verdictId: string;
       readonly productId: string;
       readonly balance: number;
+      readonly mailed: false;
     }
   /** Nobody paid for this delivery, so there is nothing to spend. */
   | { readonly outcome: 'unpaid' }
@@ -234,11 +267,43 @@ export async function settleDelivery(
 
   const result = await ledger.deliver({ decision, verdict, now });
 
+  if (result.outcome !== 'delivered') {
+    // A replay. The verdict stands, the customer was charged once, and they were
+    // told once — on the pass below, whenever that was.
+    return {
+      outcome: 'already_settled',
+      verdictSlug: publicSlug,
+      verdictId: result.verdictId,
+      productId: listing.productId,
+      balance: result.balance,
+      mailed: false,
+    };
+  }
+
+  // AFTER the commit, and outside it. `mailVerdict` never rejects; the worst it
+  // can do to a delivered verdict is decline to announce it.
+  const mailed =
+    deps.mail === undefined
+      ? false
+      : await mailVerdict(
+          {
+            to: listing.submittedByEmail,
+            accountId: paid.accountId,
+            publicSlug,
+            payload: paid.payload,
+            productCount: record.product_count,
+            attemptNumber: paid.attemptNumber,
+            deliveredAt: new Date(record.delivered_at),
+          },
+          deps.mail,
+        );
+
   return {
-    outcome: result.outcome === 'delivered' ? 'settled' : 'already_settled',
+    outcome: 'settled',
     verdictSlug: publicSlug,
     verdictId: result.verdictId,
     productId: listing.productId,
     balance: result.balance,
+    mailed,
   };
 }

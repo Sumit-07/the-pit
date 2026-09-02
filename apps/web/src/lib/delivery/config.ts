@@ -31,7 +31,10 @@ import {
 } from '@the-pit/db';
 import { AttemptsLedger } from '@the-pit/payments';
 
+import { appOrigin, capabilitySlugFor, mailFrom, mailTransport } from '@/lib/auth/config';
+
 import type { DeliveryBindings } from './settle';
+import type { VerdictMailDeps } from './verdict-mail';
 
 let registered: DeliveryBindings | null | undefined;
 let handle: Database | null = null;
@@ -107,5 +110,30 @@ export function deliveryBindings(): DeliveryBindings | null {
           productCount: input.productCount,
         }),
       ),
+  };
+}
+
+/**
+ * How a settled delivery tells the customer, or `undefined`.
+ *
+ * `undefined` under exactly the condition `deliveryBindings()` answers `null`:
+ * no database means no `verdicts` row, no account and no slug to build an account
+ * URL out of, so there is nothing to announce. The two are resolved separately
+ * rather than folded together because they fail differently — a settle with no
+ * ledger is a customer owed a verdict, and a settle with no mail is a customer
+ * who has one and has not been told.
+ *
+ * The transport is `lib/auth/config.ts`'s, which is Resend when `RESEND_API_KEY`
+ * is set and a logging fixture when it is not. That fallback is what makes the
+ * whole path exercisable locally, and it is loud about what it is doing.
+ */
+export function deliveryMail(): VerdictMailDeps | undefined {
+  if (!hasDatabaseUrl()) return undefined;
+
+  return {
+    transport: mailTransport(),
+    from: mailFrom(),
+    origin: appOrigin(),
+    capabilitySlugFor: (accountId: string) => capabilitySlugFor(accountId),
   };
 }
