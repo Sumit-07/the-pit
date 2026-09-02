@@ -150,8 +150,6 @@ export default async function Home(): Promise<ReactNode> {
               </a>
               <span className="terms" id="terms">
                 {COPY.terms}
-                <br />
-                <i>$5. Public forever.</i>
               </span>
             </div>
             {/*

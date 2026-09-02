@@ -33,7 +33,7 @@ export const COPY = {
   /** `brief` Part 5 — Sub. */
   sub: 'Everyone walks in at 100. Fewest cuts wins.',
   /** `brief` Part 5 — Terms line. */
-  terms: "$5 to enter. That's all money does here.",
+  terms: "$5 to enter. Public forever.",
   /** `brief` Part 5 — CTA. */
   cta: 'Throw it in · $5',
   /** `brief` Part 5 — Closer. */

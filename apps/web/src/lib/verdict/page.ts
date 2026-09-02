@@ -2366,7 +2366,7 @@ ${FONTS}
 
 <nav>
   <a class="mark" href="${escapeHtml(origin)}/">THE <i>PIT</i></a>
-  <span class="navr"><a href="${escapeHtml(origin)}/how-it-works">How this works</a>verdict &middot; permanent &middot; public</span>
+  <span class="navr"><a href="${escapeHtml(origin)}/how-it-works">How it works</a> <a href="${escapeHtml(origin)}/boards">Boards</a> <a href="${escapeHtml(origin)}/auth/sign-in">Sign in</a></span>
 </nav>
 
 <header class="vhead">
@@ -2454,7 +2454,7 @@ export function renderVerdictNotFound(slug: string, options: RenderOptions = {})
 <div class="wrap">
 <nav>
   <a class="mark" href="${escapeHtml(origin)}/">THE <i>PIT</i></a>
-  <span class="navr"><a href="${escapeHtml(origin)}/how-it-works">How this works</a></span>
+  <span class="navr"><a href="${escapeHtml(origin)}/how-it-works">How it works</a> <a href="${escapeHtml(origin)}/boards">Boards</a> <a href="${escapeHtml(origin)}/auth/sign-in">Sign in</a></span>
 </nav>
 <div class="notfound">
 No verdict has been issued at <b>${escapeHtml(slug)}</b>. Check the link.

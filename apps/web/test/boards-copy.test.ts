@@ -37,7 +37,7 @@ describe('the five fixed strings', () => {
   it('are `brief` Part 5, exactly', () => {
     expect(COPY.headline).toBe("You can't outbid the pit.");
     expect(COPY.sub).toBe('Everyone walks in at 100. Fewest cuts wins.');
-    expect(COPY.terms).toBe("$5 to enter. That's all money does here.");
+    expect(COPY.terms).toBe("$5 to enter. Public forever.");
     expect(COPY.cta).toBe('Throw it in · $5');
     expect(COPY.closer).toBe('Throwing money in the pit just makes noise.');
   });
@@ -90,7 +90,7 @@ describe('the homepage says them', () => {
     expect(html).not.toContain('<input');
     expect(html).not.toContain('disabled=""');
     expect(html).toMatch(/<a class="cta" href="\/submit"[^>]*>/);
-    expect(textOf(html)).toContain('$5. Public forever.');
+    expect(textOf(html)).toContain('$5 to enter. Public forever.');
   });
 
   it('states the wait once, under the CTA, and nowhere else', async () => {
