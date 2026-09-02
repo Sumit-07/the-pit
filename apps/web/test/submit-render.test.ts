@@ -231,6 +231,42 @@ describe('GET /submit renders with no DATABASE_URL', () => {
     expect(page.body).not.toMatch(/<script[^>]*\ssrc=/);
   });
 
+  it('offers the free door FIRST, on the same form, with one email field', async () => {
+    // `DECISIONS.md` S15-free. One form, five fields and two submit buttons: the
+    // free one carries `formaction`, the $5 one rides the form's own action.
+    const page = await renderSubmit();
+
+    expect(page.body).toContain('formaction="/api/free"');
+    expect(page.body).toContain('Throw it in &middot; free →');
+    expect(page.body).toContain('name="email"');
+    expect(page.body).toMatch(/<input type="email" name="email"/);
+
+    // FIRST in tree order, which is what makes it the form's default button —
+    // pressing Enter on a phone keyboard takes the free path rather than the
+    // paid one. If these ever swap, the page silently starts charging people who
+    // never reached for a button.
+    expect(page.body.indexOf('formaction="/api/free"')).toBeLessThan(page.body.indexOf('id="pay"'));
+  });
+
+  it('does not require the address, because that would block the $5 button', async () => {
+    // One form, two doors: `required` on a field only one of them reads would
+    // stop the browser submitting the other. The server decides instead.
+    const page = await renderSubmit();
+    const field = /<input type="email" name="email"[^>]*>/.exec(page.body)?.[0] ?? '';
+
+    expect(field).not.toContain('required');
+    // The whole phone story, in one attribute.
+    expect(field).toContain('autocomplete="email"');
+  });
+
+  it('says which button buys which byline, under the control that sets it', async () => {
+    // S17 is unchanged and a free run has only one of the two on offer. Saying it
+    // here is what stops somebody picking the robot, pressing the free button and
+    // finding their name on the board.
+    const page = await renderSubmit();
+    expect(page.body).toContain('Free throws publish under the product’s name. $5 buys the robot.');
+  });
+
   it('carries the pitch field beside the description, labelled differently', async () => {
     const page = await renderSubmit();
 

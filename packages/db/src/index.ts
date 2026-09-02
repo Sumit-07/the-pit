@@ -31,6 +31,7 @@ export {
 export type {
   AccountIdentityRow,
   AccountRow,
+  CreatedAccountRow,
   EnsuredAccount,
   PostgresHandoffStore,
   PostgresIdentityStore,
@@ -89,12 +90,14 @@ export type {
   AttemptsStoreOptions,
   PaymentsStoreOptions,
   PostgresAttemptsStore,
+  PostgresFreeRunGrants,
   PostgresSubmissionStore,
   PostgresWebhookStore,
   SubmissionDraftRow,
 } from './payments-store.js';
 export {
   createPostgresAttemptsStore,
+  createPostgresFreeRunGrants,
   createPostgresSubmissionStore,
   createPostgresWebhookStore,
   DEFAULT_PAYMENTS_PROVIDER,

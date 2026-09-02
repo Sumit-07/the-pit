@@ -1,19 +1,27 @@
 /**
  * The second persistence seam: capability slugs and provider links.
  *
- * `store.ts` has three methods and deliberately no `createAccount`, because
- * `brief §2.1` creates an account in exactly one place — the signed Dodo
- * webhook, from the email the provider verified. Nothing here changes that.
- * Every method below either READS an account that the webhook already made or
- * attaches something to it; none of them can bring one into existence.
+ * `store.ts` has three methods and deliberately no `createAccount`, because the
+ * magic-link path must not be able to mint one. That is unchanged. What HAS
+ * changed is the rule this file used to state, and `DECISIONS.md` S15 records the
+ * change:
  *
- * That is the property the whole design rests on, so it is worth stating as a
- * rule rather than as an accident of the current method list:
+ * > **An account is a purchase, OR a confirmed email with a free run.** A row in
+ * > `accounts` means somebody paid $5, or somebody proved they hold an inbox and
+ * > took the one free throw a product ever gets. There is still no signup, no
+ * > invitation, and no "sign in with GitHub to get started".
  *
- * > **An account is a purchase.** A row in `accounts` means someone paid. There
- * > is no signup, no invitation, and no "sign in with GitHub to get started".
- * > A GitHub identity with no matching purchase is a person we have never met,
- * > and the honest answer is to say so — not to open an empty account for them.
+ * The second arm is `createAccountForEmail`, and it is deliberately on THIS
+ * interface rather than on `AuthStore`. `verifyMagicLink` takes an `AuthStore`
+ * with three methods and cannot reach past them, so redeeming a sign-in link for
+ * an address nobody has ever confirmed still answers `no_account` — the arm below
+ * is reachable only from the free-run confirm, which has verified a signature over
+ * the address it is creating an account for.
+ *
+ * A GitHub identity with no matching account is still a person we have never met:
+ * `completeOAuthSignIn` answers `no_purchase_found` and does not call the method
+ * below, because a verified GitHub address is proof of a GitHub account and not of
+ * anybody having thrown anything into the pit.
  *
  * ## Why the link table exists
  *
@@ -68,6 +76,22 @@ export interface AccountIdentity {
   readonly linkedEmail: string;
 }
 
+/**
+ * What `createAccountForEmail` reports.
+ *
+ * `created` is the whole result. The free-run confirm is retried by a person
+ * pressing a button twice and by every mail client that keeps a copy of the page,
+ * so "the account is already there" is a SUCCESS and not an error — and the
+ * caller needs to be able to tell the two apart for the log, never for the
+ * response.
+ */
+export interface CreatedAccount {
+  readonly accountId: string;
+  readonly email: string;
+  /** `false` when the address already had an account. Not a failure. */
+  readonly created: boolean;
+}
+
 /** What `rotateCapabilitySlug` reports. There is no partial success. */
 export type RotateSlugResult =
   | { readonly outcome: 'rotated' }
@@ -75,6 +99,28 @@ export type RotateSlugResult =
   | { readonly outcome: 'unknown_account' };
 
 export interface IdentityStore {
+  /**
+   * Find or create the account for a CONFIRMED address.
+   *
+   * The second way an account comes into existence, beside the signed Dodo
+   * webhook's `ensureAccount`. `DECISIONS.md` S15 records why it exists: the free
+   * first throw is keyed on the product URL and gated on a confirmed email, and a
+   * flow that granted an attempt would have nowhere to put it without an account.
+   *
+   * **The confirmation is the caller's job and it is not optional.** This method
+   * takes an address and makes it an account; it cannot tell a confirmed one from
+   * a typed one. Exactly one caller may reach it — the free-run confirm POST,
+   * after `verifyFreeRunToken` has checked our own signature over that address —
+   * and every other path in the product resolves an account it did not create.
+   *
+   * Idempotent on the address, because the confirm button is pressable twice.
+   */
+  createAccountForEmail(input: {
+    /** Normalized, lowercase. `accounts_email_lowercase` is the same rule in SQL. */
+    readonly email: string;
+    readonly now: Date;
+  }): Promise<CreatedAccount>;
+
   /**
    * The account a capability slug resolves to, or `null`.
    *

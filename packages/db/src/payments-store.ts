@@ -418,3 +418,48 @@ export function createPostgresSubmissionStore(db: Database): PostgresSubmissionS
     },
   };
 }
+
+/**
+ * Who already holds the free throw for one product.
+ *
+ * ## Why this read exists at all
+ *
+ * The free first throw is granted as an adjustment keyed
+ * `free:url:<normalized url>`, and `attempts_idempotency_key_uk` is what makes
+ * "one free run per product" a fact about the database rather than a rule a
+ * handler remembers. The index answers the write perfectly and answers the
+ * QUESTION ambiguously: a `duplicate` back from `append` means somebody already
+ * took this product's free throw, and it does not say whether that somebody is
+ * the person pressing the button again.
+ *
+ * Those two are different outcomes on the same code path. A founder who pressed
+ * the confirm button twice — or whose mail client re-posted the page — must land
+ * on their run, and a second address trying to take one more free run for the
+ * same URL must be told it is gone. One indexed lookup on the unique key
+ * separates them; guessing would either refuse a customer their own run or hand
+ * out a second free one.
+ *
+ * It is a READ, and there is nothing else on this interface. A module that could
+ * also write here would be a module that could grant an attempt outside the two
+ * places `brief §2.3` allows.
+ */
+export interface PostgresFreeRunGrants {
+  /** The account the entry with this idempotency key belongs to, or `null`. */
+  holderOf(idempotencyKey: string): Promise<string | null>;
+}
+
+export function createPostgresFreeRunGrants(db: Database): PostgresFreeRunGrants {
+  return {
+    async holderOf(idempotencyKey: string): Promise<string | null> {
+      // `attempts_idempotency_key_uk` answers this from the index, and it can
+      // match at most one row by construction — so there is no ordering here and
+      // no second row to disagree with the first.
+      const rows = await db
+        .select({ accountId: attempts.accountId })
+        .from(attempts)
+        .where(eq(attempts.idempotencyKey, idempotencyKey))
+        .limit(1);
+      return rows[0]?.accountId ?? null;
+    },
+  };
+}

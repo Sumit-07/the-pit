@@ -32,10 +32,30 @@ export const COPY = {
   headline: "You can't outbid the pit.",
   /** `brief` Part 5 — Sub. */
   sub: 'Everyone walks in at 100. Fewest cuts wins.',
-  /** `brief` Part 5 — Terms line. */
-  terms: "$5 to enter. Public forever.",
-  /** `brief` Part 5 — CTA. */
-  cta: 'Throw it in · $5',
+  /**
+   * `brief` Part 5 — Terms line, amended once.
+   *
+   * Part 5 wrote "$5 to enter. Public forever." and $5 is no longer what it costs
+   * to enter: `DECISIONS.md` S15 gives every product one free throw, keyed on its
+   * URL and gated on a confirmed email. A terms line that still said $5 would be
+   * the page's one factual sentence being the one that was wrong.
+   *
+   * The half that is Part 5's argument is untouched. **Public forever** is the
+   * whole deal, it is what makes a board worth reading, and it applies to a free
+   * throw exactly as it applies to a paid one.
+   */
+  terms: 'First throw free. Public forever.',
+  /** `brief` Part 5 — CTA, now the free door. */
+  cta: 'Throw it in · free',
+  /**
+   * The second door, beside it.
+   *
+   * $5 is no longer the price of entry; it is the price of the robot and of every
+   * throw after the first. It is a real offer and it is secondary, so it is a
+   * second CTA rather than a footnote under the first — a page with one button
+   * and a sentence about a different price is a page that has hidden the price.
+   */
+  ctaPaid: '$5 · as a robot',
   /** `brief` Part 5 — Closer. */
   closer: 'Throwing money in the pit just makes noise.',
 } as const;

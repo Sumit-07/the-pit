@@ -91,10 +91,11 @@ no extra identity system and no guest-payment claiming flow." Both clauses still
   `no_purchase_found` when there is none. It never becomes the identity; it resolves to
   the one §2.1 chose.
 - **It cannot mint an account.** `AuthStore` has `findAccountByEmail` and deliberately
-  no `createAccount`; `IdentityStore` has none either. The only INSERT into `accounts`
-  in the repository is `createPostgresWebhookAccounts.ensureAccount`, called from the
-  signed Dodo webhook. **An account is a purchase** — there is no signup, no invitation
-  and no "sign in with GitHub to get started".
+  no `createAccount`; `completeOAuthSignIn` answers `no_purchase_found` and creates
+  nothing. A verified GitHub address is proof of a GitHub account and not of anybody
+  having thrown anything into the pit. (The rule it used to cite — *an account is a
+  purchase* — has since been amended; see **S15-free** below. The GitHub path is
+  unaffected by that amendment and still creates nothing.)
 - **There is still no guest-payment claiming flow.** Claiming would mean an unpaid
   identity acquiring a paid account. What GitHub does is the reverse: a session that
   already proves the account attaches a provider link to it, or a verified provider
@@ -130,6 +131,76 @@ Anything proposed later that cannot be put in one of those two columns is refuse
 `packages/engine` is where that is enforced structurally: nothing in `rank/` takes an
 account, a session, or an identity, so a positional perk cannot be implemented without a
 new argument someone has to review.
+
+### S15-free — An account is a purchase, **or** a confirmed email with a free run
+
+**This amends S15's account rule and nothing else about S15.** The perk constraint
+above is untouched — GitHub perks stay procedural or informational, never positional
+— and so is the payer identity, the absence of a claiming flow, and the rule that
+nothing sits on the buying path.
+
+What changed is the sentence "an account is a purchase". It now reads:
+
+> **An account is a purchase, OR a confirmed email with a free run.** A row in
+> `accounts` means somebody paid $5, or somebody proved they hold an inbox and took
+> the one free throw a product ever gets. There is still no signup, no invitation and
+> no "sign in with GitHub to get started".
+
+**Why it had to change.** The founder's free first throw (3 Sep 2026) is keyed on the
+product URL and gated on a confirmed email, and it grants one attempt. An attempt
+lands on a ledger, a ledger row names an account, and there was no way to create one
+outside the Dodo webhook. The alternatives were worse in the ways that matter: a
+shadow "pre-account" table would have given one person two balances and two
+histories; granting against the paying customer's account would have been wrong when
+there is no paying customer; and putting GitHub in front of the free run is the thing
+the founder refused, because it blocks somebody on a phone.
+
+**What creates one now, and what still cannot.** The insert is still exactly one
+statement — `createPostgresWebhookAccounts.ensureAccount`'s upsert — and the new
+`IdentityStore.createAccountForEmail` delegates to it rather than writing a second
+one, so the two arrivals cannot drift about `xmax`, about the capability slug, or
+about what a conflict means. A customer who paid last month and then takes a free
+throw on a new product resolves to their existing row: one person, one balance.
+
+The method is on `IdentityStore` and deliberately **not** on `AuthStore`.
+`verifyMagicLink` takes the three-method `AuthStore` and cannot reach past it, so
+redeeming a sign-in link for an address nobody ever confirmed still answers
+`no_account`. Exactly one caller may reach the new arm — `POST /free/confirm`, after
+`verifyFreeRunToken` has checked our own HMAC over that submission and that address.
+
+**What "confirmed" means, and where it is enforced.** `GET /free/confirm` renders a
+button and is given no dependencies at all; the `POST` does the work. That is
+`brief §2.1`'s Outlook Safe Links defence applied to a run instead of a token, and
+the stake is higher: a mail scanner that started the run would buy six juror calls
+before the founder opened the message.
+
+**One free run per product is a database fact, not a policy.** The grant is an
+`attempts` adjustment with `actor = 'free_first_throw'` and
+`idempotency_key = 'free:url:<normalized url>'`, and `attempts_idempotency_key_uk`
+refuses the second one. `apps/web/src/lib/free/policy.ts` holds the abuse rules that
+are *not* structural — disposable domains, a per-IP window, a daily cap — and it is a
+stub on this branch that says yes to everything. That is safe precisely because the
+axis that costs money is closed by an index rather than by the stub.
+
+A duplicate is a **success**, and which success depends on who arrived: the same
+account gets its run and its redirect with no second grant, and a second address gets
+"This product has already had its free throw. $5 for another." with the $5 form
+pre-filled. `createPostgresFreeRunGrants.holderOf` is the one lookup that separates
+them; guessing would either refuse somebody their own run or hand out a second free
+one.
+
+**S17 is unchanged and is enforced rather than trusted.** Free runs publish under the
+product's name. `anonymous: false` is written from a literal on the free path — the
+posted byline is read so the form can echo it back and is never consulted — so an
+edited radio buys nothing and neither does an honest mistake. The byline is still
+chosen before scoring and still frozen; on the free path there is only one of it, and
+the form says which button buys which byline. $5 buys the robot.
+
+**What the money line becomes.** `brief` Part 5's terms line said "$5 to enter", and
+that stopped being true, so it now reads "First throw free. Public forever." The half
+that is Part 5's actual argument — *public forever* — is untouched and applies to a
+free throw exactly as it applies to a paid one. `test/boards-copy.test.ts` pins the
+new pair and the other three strings unchanged.
 
 ### S16 — The cycle cap's clock reads `products`, never `submissions`
 `brief §2.4` caps pitches at one per product per recalibration cycle, and the obvious

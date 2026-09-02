@@ -325,6 +325,26 @@ a.navlink:hover {
   opacity: 0.58;
 }
 /*
+ * The second door: $5, beside the free throw.
+ *
+ * Same box, same padding, same hit area — only the fill is dropped. "Secondary"
+ * on this page means "not the one we are pushing", never "harder to press": the
+ * hero is read on a phone and a smaller control here would just be a control the
+ * thumb misses.
+ */
+.cta.second {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+.cta.second small {
+  color: var(--dimmer);
+}
+.cta.second:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+/*
  * These were white at .50 and .34 on the ink slab. On dark the same alphas land
  * at 2.6:1 and 1.8:1 — the exact place a dark theme fails, small mono at a low
  * alpha — so they are the system's own stops now and both clear AA.

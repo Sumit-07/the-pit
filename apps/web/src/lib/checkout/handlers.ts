@@ -259,13 +259,19 @@ function str(value: unknown): string {
  * result travels beside the values: `values.anonymous` is what the form re-renders
  * with, and `byline` is what decides whether the request proceeds at all.
  */
-interface ParsedSubmission {
+export interface ParsedSubmission {
   readonly values: SubmitFormValues;
   readonly byline: BylineCheck;
 }
 
-/** What the visitor sent, whatever shape they sent it in. */
-async function readValues(request: Request): Promise<ParsedSubmission> {
+/**
+ * What the visitor sent, whatever shape they sent it in.
+ *
+ * Exported because `lib/free/handlers.ts` takes the SAME form. Two parsers for
+ * one form is how the two paths start disagreeing about what a field is called,
+ * and the field they would disagree about first is the byline.
+ */
+export async function readSubmissionValues(request: Request): Promise<ParsedSubmission> {
   const contentType = request.headers.get('content-type') ?? '';
 
   if (contentType.includes('application/json')) {
@@ -280,6 +286,11 @@ async function readValues(request: Request): Promise<ParsedSubmission> {
         description: str(body['description']),
         pitch: str(body['pitch']),
         categorySlug: str(body['category'] ?? body['categorySlug']),
+        // Read on both paths and used on one. `handleCheckoutCreate` never looks
+        // at it — `brief §2.1` gets the payer's address from Dodo — and the free
+        // handler validates it. Echoed back on a re-render either way, so a
+        // refusal is an edit rather than a retype.
+        email: str(body['email']),
         tier: str(body['tier']) === '' ? 'single' : str(body['tier']),
         // An unreadable value re-renders as NAMED, which is what the refusal page
         // then shows pre-checked. That is the honest echo: we did not understand
@@ -304,6 +315,7 @@ async function readValues(request: Request): Promise<ParsedSubmission> {
       description: field('description'),
       pitch: field('pitch'),
       categorySlug: field('category') === '' ? field('categorySlug') : field('category'),
+      email: field('email'),
       tier: tier === '' ? 'single' : tier,
       anonymous: byline.ok && byline.anonymous,
     },
@@ -341,11 +353,22 @@ function submitterAccountId(request: Request, deps: SessionSource, now: Date = n
   }
 }
 
-async function pageView(
+/**
+ * One `SubmitPageView` from a roster and a set of values.
+ *
+ * Exported for the same reason `readSubmissionValues` is: `lib/free/handlers.ts`
+ * re-renders the same page, and a second assembler would be a second answer to
+ * which categories are on offer and which panels are installed.
+ *
+ * `paidOnly` withholds the free door from the render. It is passed on exactly one
+ * path — a `FreeRunPolicy` refusal — and defaults to absent everywhere else.
+ */
+export async function submitPageView(
   candidateCategories: () => Promise<readonly string[]>,
   values: SubmitFormValues,
   signedIn: boolean,
   notice?: string,
+  paidOnly?: boolean,
 ): Promise<SubmitPageView> {
   const categories = await candidateCategories();
   return {
@@ -359,6 +382,7 @@ async function pageView(
     descriptionLimit: SANITIZE_LIMIT,
     signedIn,
     ...(notice === undefined ? {} : { notice }),
+    ...(paidOnly === true ? { paidOnly: true } : {}),
   };
 }
 
@@ -402,7 +426,7 @@ function refuse(
  */
 export async function handleSubmitPage(request: Request, deps: SubmitPageDeps): Promise<Response> {
   const signedIn = submitterAccountId(request, deps) !== null;
-  const view = await pageView(deps.candidateCategories, emptyFormFrom(request), signedIn);
+  const view = await submitPageView(deps.candidateCategories, emptyFormFrom(request), signedIn);
   return html(renderSubmitPage(view), 200);
 }
 
@@ -418,6 +442,11 @@ function emptyFormFrom(request: Request): SubmitFormValues {
     description: '',
     pitch: '',
     categorySlug: params.get('category') ?? '',
+    // NOT prefillable from the query string either, and for a plainer reason than
+    // the byline: an address in a link is an address somebody else typed, and the
+    // one thing the free path must be sure of is that the person filling this in
+    // owns the inbox the confirmation lands in.
+    email: '',
     // Not read from the query string. One tier is on sale and a link that named
     // another would render a form that cannot be posted; `tierFor` is what
     // refuses a wrong value, and it refuses it on the POST where it costs
@@ -450,9 +479,9 @@ export interface CheckoutCreated {
  */
 export async function handleCheckoutCreate(request: Request, deps: CheckoutHandlerDeps): Promise<Response> {
   const now = (deps.now ?? (() => new Date()))();
-  const { values, byline } = await readValues(request);
+  const { values, byline } = await readSubmissionValues(request);
   const accountId = submitterAccountId(request, deps, now);
-  const form = await pageView(
+  const form = await submitPageView(
     () => deps.guards.candidateCategories(),
     values,
     accountId !== null,
@@ -473,7 +502,7 @@ export async function handleCheckoutCreate(request: Request, deps: CheckoutHandl
       ? json({ status: 'rejected', code: 'byline_unreadable', message: byline.message, charged: false }, 422)
       : html(
           renderSubmitPage(
-            await pageView(() => deps.guards.candidateCategories(), values, accountId !== null, byline.message),
+            await submitPageView(() => deps.guards.candidateCategories(), values, accountId !== null, byline.message),
           ),
           422,
         );
@@ -498,7 +527,7 @@ export async function handleCheckoutCreate(request: Request, deps: CheckoutHandl
         )
       : html(
           renderSubmitPage(
-            await pageView(() => deps.guards.candidateCategories(), values, accountId !== null, pitch.message),
+            await submitPageView(() => deps.guards.candidateCategories(), values, accountId !== null, pitch.message),
           ),
           422,
         );

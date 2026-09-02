@@ -271,8 +271,17 @@ export default async function HowItWorks(): Promise<ReactNode> {
       </section>
 
       <div className="actrow">
+        {/*
+          The same two doors the homepage offers, in the same order. This page
+          argues the method; the row at the bottom of it has to state the price
+          the way every other surface does, or the one page that explains the
+          system is the page whose price is out of date.
+        */}
         <a className="cta" href="/submit">
-          Throw it in <small>&middot; $5</small>
+          Throw it in <small>&middot; free</small>
+        </a>
+        <a className="cta second" href="/submit#pay">
+          $5 <small>&middot; as a robot</small>
         </a>
         <span className="terms">
           {COPY.terms}

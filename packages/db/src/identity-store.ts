@@ -81,8 +81,16 @@ export interface AccountIdentityRow {
 /** Mirrors `RotateSlugResult` in `@the-pit/auth`. */
 export type RotateSlugOutcome = { readonly outcome: 'rotated' } | { readonly outcome: 'unknown_account' };
 
+/** Mirrors `CreatedAccount` in `@the-pit/auth`. */
+export interface CreatedAccountRow {
+  readonly accountId: string;
+  readonly email: string;
+  readonly created: boolean;
+}
+
 /** Mirrors `IdentityStore` in `@the-pit/auth`. */
 export interface PostgresIdentityStore {
+  createAccountForEmail(input: { readonly email: string; readonly now: Date }): Promise<CreatedAccountRow>;
   findAccountByCapabilitySlug(slug: string): Promise<AccountRow | null>;
   capabilitySlugFor(accountId: string): Promise<string | null>;
   rotateCapabilitySlug(input: {
@@ -121,8 +129,35 @@ export interface EnsuredAccount {
   readonly capabilitySlug: string;
 }
 
-export function createPostgresIdentityStore(db: Database): PostgresIdentityStore & PostgresHandoffStore {
+export function createPostgresIdentityStore(
+  db: Database,
+  options: { readonly mintSlug?: () => string } = {},
+): PostgresIdentityStore & PostgresHandoffStore {
+  const accounts_ = createPostgresWebhookAccounts(
+    db,
+    options.mintSlug === undefined ? {} : { mintSlug: options.mintSlug },
+  );
+
   return {
+    /**
+     * `DECISIONS.md` S15's second arm: an account for a CONFIRMED address.
+     *
+     * The same upsert `ensureAccount` runs, delegated rather than re-stated. That
+     * is deliberate and it is the point: there is still exactly ONE statement in
+     * this repository that inserts into `accounts`, so the two ways an account
+     * can come into existence are two callers of one upsert rather than two
+     * different pieces of SQL that will one day disagree about `xmax`, about the
+     * slug, or about what a conflict means.
+     *
+     * The caller supplies the confirmation. `@the-pit/auth`'s interface says so
+     * at length; this method cannot tell a signed address from a typed one and
+     * does not try.
+     */
+    async createAccountForEmail(input: { email: string; now: Date }): Promise<CreatedAccountRow> {
+      const ensured = await accounts_.ensureAccount(input);
+      return { accountId: ensured.accountId, email: ensured.email, created: ensured.created };
+    },
+
     async findAccountByCapabilitySlug(slug: string): Promise<AccountRow | null> {
       // Exact match. No `lower()`, no trim, no prefix — `accounts_capability_slug_uk`
       // answers this from the index, and a lookup that normalized would accept
@@ -248,9 +283,16 @@ export function createPostgresIdentityStore(db: Database): PostgresIdentityStore
  * capability slug.
  *
  * This is `WebhookStore.ensureAccount` from `@the-pit/payments`, implemented.
- * It is the ONLY function in this repository that inserts into `accounts`, which
- * is what makes "an account is a purchase" true rather than aspirational — the
- * auth paths have no method that could, by construction.
+ * The upsert below is still the ONLY statement in this repository that inserts
+ * into `accounts` — `createAccountForEmail` above delegates to it rather than
+ * writing a second one, so the two ways an account can arrive cannot drift about
+ * `xmax`, about the slug, or about what a conflict means.
+ *
+ * What it no longer makes true on its own is the RULE. `DECISIONS.md` S15-free
+ * amends "an account is a purchase" to "a purchase, **or** a confirmed email with
+ * a free run", and this function is the first arm: a payment Dodo signed for. The
+ * second arm has its own caller and its own precondition, and neither of them is
+ * an auth path — `AuthStore` still has no method that could create one.
  *
  * `mintSlug` is injected so `@the-pit/db` does not depend on `@the-pit/auth` at
  * runtime; `apps/web` passes `mintCapabilitySlug`. The default falls back to the

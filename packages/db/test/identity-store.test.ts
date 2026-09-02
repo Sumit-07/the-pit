@@ -31,6 +31,7 @@ import type {
   PostgresIdentityStore,
 } from '../src/identity-store.js';
 import { createPostgresIdentityStore, createPostgresWebhookAccounts } from '../src/identity-store.js';
+import { createPostgresFreeRunGrants } from '../src/payments-store.js';
 import { readMigrations } from '../src/migrations.js';
 import * as schema from '../src/schema/index.js';
 
@@ -55,7 +56,7 @@ beforeAll(async () => {
     for (const statement of migration.statements) await pg.exec(statement);
   }
   db = drizzle(pg, { schema });
-  store = createPostgresIdentityStore(db);
+  store = createPostgresIdentityStore(db, { mintSlug: mintCapabilitySlug });
   webhook = createPostgresWebhookAccounts(db, { mintSlug: mintCapabilitySlug });
 }, 120_000);
 
@@ -64,7 +65,14 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await pg.exec('DELETE FROM account_identities; DELETE FROM orders; DELETE FROM accounts;');
+  // TRUNCATE, for the reason `payments-store.test.ts` gives: `attempts_immutable`
+  // (migration 0002) refuses a DELETE outright — the ledger is append-only, and
+  // that guard is one of the things the free-run tests below rely on. TRUNCATE is
+  // a table-level operation row triggers do not see, which is the only way to
+  // reset a table whose whole point is that rows never leave it. `attempts` also
+  // has to go before `accounts`: the foreign key is ON DELETE RESTRICT, because a
+  // balance must not be deletable by removing its owner.
+  await pg.exec('truncate attempts, account_identities, orders, accounts restart identity cascade;');
 });
 
 const rejection = async (body: Promise<unknown>): Promise<string> => {
@@ -359,5 +367,132 @@ describe('the success-page handoff', () => {
       windowMs: 30 * 60 * 1000,
     });
     expect(found?.slug).toBe(fresh);
+  });
+});
+
+/**
+ * `DECISIONS.md` S15's second arm, against the real table.
+ *
+ * The invariant this repository shipped with was "an account is a purchase", and
+ * it was true because `ensureAccount` — called only from the signed Dodo webhook
+ * — was the one INSERT into `accounts`. S15 amends the RULE, not the mechanism:
+ * `createAccountForEmail` delegates to that same upsert, so there is still one
+ * statement, and what changed is that a second caller may reach it.
+ *
+ * Everything below is a property the free-run confirm depends on. It is a button
+ * somebody presses twice, on a phone, and it must never open two accounts for
+ * one address.
+ */
+describe('createAccountForEmail — the free-run arm of S15', () => {
+  it('creates an account for a confirmed address, with a capability slug', async () => {
+    const created = await store.createAccountForEmail({ email: 'confirmed@example.com', now: AT });
+
+    expect(created.created).toBe(true);
+    expect(created.email).toBe('confirmed@example.com');
+    // The slug is not optional. An account without one is somebody who cannot
+    // reach what they have, and the confirm hands them a session and a status
+    // link and nothing else.
+    expect(await store.capabilitySlugFor(created.accountId)).toMatch(CAPABILITY_SLUG_PATTERN);
+  });
+
+  it('is idempotent on the address, because the button is pressable twice', async () => {
+    const first = await store.createAccountForEmail({ email: 'twice@example.com', now: AT });
+    const second = await store.createAccountForEmail({
+      email: 'twice@example.com',
+      now: new Date(AT.getTime() + 60_000),
+    });
+
+    expect(second.accountId).toBe(first.accountId);
+    expect(second.created).toBe(false);
+  });
+
+  it('does not lose a concurrent race', async () => {
+    // `accounts_email_uk` decides, not a SELECT: two presses arriving together
+    // both reach the upsert and exactly one inserts.
+    const results = await Promise.all([
+      store.createAccountForEmail({ email: 'racing@example.com', now: AT }),
+      store.createAccountForEmail({ email: 'racing@example.com', now: AT }),
+      store.createAccountForEmail({ email: 'racing@example.com', now: AT }),
+    ]);
+
+    expect(new Set(results.map((row) => row.accountId)).size).toBe(1);
+    expect(results.filter((row) => row.created)).toHaveLength(1);
+  });
+
+  it('finds the account a PAYMENT already made, rather than making a second', async () => {
+    // The customer who paid last month and takes a free throw on a new product.
+    // One person, one row, one balance — which is the whole reason the two
+    // callers share an upsert instead of each having their own INSERT.
+    const paid = await webhook.ensureAccount({ email: 'both@example.com', now: AT });
+    const free = await store.createAccountForEmail({ email: 'both@example.com', now: AT });
+
+    expect(free.accountId).toBe(paid.accountId);
+    expect(free.created).toBe(false);
+  });
+
+  it('keeps the slug the customer already bookmarked', async () => {
+    const paid = await webhook.ensureAccount({ email: 'bookmarked-free@example.com', now: AT });
+    const before = await store.capabilitySlugFor(paid.accountId);
+
+    await store.createAccountForEmail({ email: 'bookmarked-free@example.com', now: AT });
+
+    // Re-minting on every arrival would silently invalidate the URL they have
+    // been using — a rotation nobody asked for.
+    expect(await store.capabilitySlugFor(paid.accountId)).toBe(before);
+  });
+
+  it('refuses an address the table refuses', async () => {
+    // `accounts_email_lowercase`. One address is one person, and `A@b.com` and
+    // `a@b.com` must not become two accounts with two balances.
+    await expect(store.createAccountForEmail({ email: 'MiXeD@example.com', now: AT })).rejects.toThrow();
+  });
+});
+
+/**
+ * The one read that separates a repeat press from a second person.
+ *
+ * `attempts_idempotency_key_uk` refuses the second free grant for a URL and says
+ * nothing about WHO holds the first. `apps/web/src/lib/free/handlers.ts` needs
+ * that name to decide between "here is your run" and "that throw is gone".
+ */
+describe('holderOf — who already took a product’s free throw', () => {
+  it('names the account behind an idempotency key, and null for one nobody used', async () => {
+    const grants = createPostgresFreeRunGrants(db);
+    const account = await store.createAccountForEmail({ email: 'holder@example.com', now: AT });
+
+    expect(await grants.holderOf('free:url:nobody.example')).toBeNull();
+
+    await db.insert(schema.attempts).values({
+      accountId: account.accountId,
+      delta: 1,
+      kind: 'adjustment',
+      actor: 'free_first_throw',
+      note: 'url:holder.example',
+      idempotencyKey: 'free:url:holder.example',
+      createdAt: AT,
+    });
+
+    expect(await grants.holderOf('free:url:holder.example')).toBe(account.accountId);
+  });
+
+  it('is the unique index that refuses the second grant, not any code above it', async () => {
+    const first = await store.createAccountForEmail({ email: 'first@example.com', now: AT });
+    const second = await store.createAccountForEmail({ email: 'second@example.com', now: AT });
+
+    const row = (accountId: string): typeof schema.attempts.$inferInsert => ({
+      accountId,
+      delta: 1,
+      kind: 'adjustment',
+      actor: 'free_first_throw',
+      note: 'url:contested.example',
+      idempotencyKey: 'free:url:contested.example',
+      createdAt: AT,
+    });
+
+    await db.insert(schema.attempts).values(row(first.accountId));
+    await expect(db.insert(schema.attempts).values(row(second.accountId))).rejects.toThrow();
+
+    const grants = createPostgresFreeRunGrants(db);
+    expect(await grants.holderOf('free:url:contested.example')).toBe(first.accountId);
   });
 });

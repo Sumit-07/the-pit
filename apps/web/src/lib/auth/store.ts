@@ -31,6 +31,7 @@
  * shutdown hook to close it in. The pool dies with the instance.
  */
 
+import { mintCapabilitySlug } from '@the-pit/auth';
 import {
   createDatabase,
   createPostgresAuthStore,
@@ -72,7 +73,14 @@ export function postgresAuthStore(): PostgresAuthStore {
  * was while the other two paths get what they need.
  */
 export function postgresIdentityStore(): PostgresIdentityStore & PostgresHandoffStore {
-  identities ??= createPostgresIdentityStore(database());
+  // `mintCapabilitySlug` for the same reason `lib/payments/config.ts` passes it
+  // to the webhook store: every slug a customer is handed comes from
+  // `CAPABILITY_CSPRNG`, and the column's own DEFAULT is a floor that exists so
+  // an account can never be created without one. `createAccountForEmail` — the
+  // free-run arm of `DECISIONS.md` S15 — creates accounts through this store, so
+  // without this line a free-run account would get the floor rather than the
+  // generator every paid one gets.
+  identities ??= createPostgresIdentityStore(database(), { mintSlug: mintCapabilitySlug });
   return identities;
 }
 

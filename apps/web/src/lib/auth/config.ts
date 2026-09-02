@@ -283,6 +283,7 @@ export function capabilityDeps(): CapabilityHandlerDeps {
 function composeAccountStore(auth: AuthStore, identity: IdentityStore): AccountStore {
   return {
     findAccountByEmail: (email) => auth.findAccountByEmail(email),
+    createAccountForEmail: (input) => identity.createAccountForEmail(input),
     createToken: (token) => auth.createToken(token),
     consumeToken: (input) => auth.consumeToken(input),
     findAccountByCapabilitySlug: (slug) => identity.findAccountByCapabilitySlug(slug),

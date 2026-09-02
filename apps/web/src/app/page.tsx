@@ -141,12 +141,25 @@ export default async function Home(): Promise<ReactNode> {
             </p>
             <div className="herorow">
               {/*
-                `brief` Part 5's CTA, word for word, and now a real link. The paid path
-                is complete end to end, so `/submit` is where this goes — guest
-                checkout, no login, `brief §2.1`.
+                Two doors, and the order is the offer. `DECISIONS.md` S15 gives
+                every product one free throw, so the free one is the filled
+                button and the $5 one stands beside it in outline.
+
+                Both are `brief` Part 5's CTA register, word for word from
+                `lib/boards/copy.ts`, and both are real links to the same page:
+                `/submit` renders one form with two submit buttons, and the free
+                one is first in the document so a phone keyboard's Enter takes
+                it. Nothing here is a separate flow.
+
+                The paid door is named and not explained. "$5 · as a robot" is
+                the whole difference a reader needs at this distance — the terms
+                of the byline are on the form, under the control that sets it.
               */}
               <a className="cta" href="/submit" aria-describedby="terms">
-                Throw it in <small>&middot; $5</small>
+                Throw it in <small>&middot; free</small>
+              </a>
+              <a className="cta second" href="/submit#pay" aria-describedby="terms">
+                $5 <small>&middot; as a robot</small>
               </a>
               <span className="terms" id="terms">
                 {COPY.terms}

@@ -143,6 +143,14 @@ button.act{margin-top:22px;font-size:15px;padding:13px 20px;
 button.act:hover{background:#FFFBF6;border-color:#FFFBF6}
 a.act{margin-top:16px}
 
+/* The second door: the $5 button beside the free one.
+   It keeps every dimension of the first and drops the fill. "Less prominent"
+   must not become "smaller to press" — this page is filled in on a phone, and a
+   secondary control with a smaller hit area is a control the thumb misses. */
+.second{display:inline-block;margin-left:10px}
+.second button.act{background:transparent;color:var(--ink);border-color:var(--line);box-shadow:none}
+.second button.act:hover{background:transparent;border-color:var(--ink)}
+
 .warn{border-left:3px solid var(--cut)}
 .warn h2{color:var(--cut)}
 .when{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;color:var(--ink);
@@ -219,6 +227,14 @@ const ICON_ID = 'site-icon';
 const STATE_ID = 'site-state';
 /** The button that takes the money. It names the price, so it has to be findable. */
 const PAY_ID = 'pay';
+/** The button that takes nothing. First in the document — see `buttons`. */
+const FREE_ID = 'free';
+/** Where the free button posts. The form's own action stays `/api/checkout`. */
+const FREE_ACTION = '/api/free';
+const EMAIL_ID = 'f-email';
+
+/** The field name on the form and in the JSON body, named once. */
+export const EMAIL_FIELD = 'email';
 
 /**
  * How long a pause in typing counts as "they have stopped".
@@ -513,6 +529,15 @@ export interface SubmitFormValues {
   readonly pitch: string;
   readonly categorySlug: string;
   /**
+   * Where the confirmation goes, on the free path.
+   *
+   * Empty is the ordinary value and not an omission: the paid path has never
+   * asked for an address and still does not — `brief §2.1` gets it from Dodo —
+   * so this field is filled in only by somebody taking the free throw, and the
+   * $5 button ignores whatever is in it.
+   */
+  readonly email: string;
+  /**
    * What was posted in the `tier` field, as text, before anything checks it.
    *
    * `string` rather than `PriceTierId` on purpose: this is the wire value, and
@@ -542,6 +567,7 @@ export const EMPTY_FORM: SubmitFormValues = {
   description: '',
   pitch: '',
   categorySlug: '',
+  email: '',
   tier: 'single',
   anonymous: false,
 };
@@ -581,6 +607,15 @@ export interface SubmitPageView {
    * form that appears to have silently ignored the button.
    */
   readonly notice?: string;
+  /**
+   * Withhold the free path from this render.
+   *
+   * Set exactly once: on the refusal a `FreeRunPolicy` produced. Somebody who has
+   * just been told this product has had its free throw must not be shown the free
+   * button again — offering a door that was closed a second ago is worse than not
+   * offering it. Every other render carries both, free first.
+   */
+  readonly paidOnly?: boolean;
 }
 
 function categoryOptions(view: SubmitPageView): string {
@@ -683,8 +718,20 @@ function bylineChoice(view: SubmitPageView): string {
     '<span>Your name and your address are withheld. Nothing else is.</span>',
     '</label>',
     '</div>',
+    view.paidOnly === true ? '' : `<p class="hint">${FREE_BYLINE_TERMS}</p>`,
   ].join('');
 }
+
+/**
+ * What the free throw does to the choice above it, said in two sentences.
+ *
+ * The robot costs $5, and that is a fact about the offer rather than a defence of
+ * it. `DECISIONS.md` S17 is unchanged: the byline is chosen before scoring and
+ * frozen, and a free run simply has only one of the two on offer. Saying it here,
+ * under the control, is what stops somebody picking the robot, pressing the free
+ * button, and finding their name on the board.
+ */
+export const FREE_BYLINE_TERMS = 'Free throws publish under the product’s name. $5 buys the robot.';
 
 /** The terms of the second card, printed under it. Full copy; see `bylineChoice`. */
 function bylineTerms(): string {
@@ -788,7 +835,65 @@ function panelColumn(view: SubmitPageView): string {
 }
 
 /**
- * The form. Four fields, a price, and a button.
+ * Where the confirmation goes, on the free path.
+ *
+ * ## Why an address is on the buying page at all
+ *
+ * `brief §2.1` promises that nothing sits between a visitor and their purchase,
+ * and this field does not: the $5 button ignores it, the browser does not require
+ * it, and a paid submission with the box empty is the same request it always was.
+ * What it buys is the other door. A free run has no Dodo receipt to resolve an
+ * identity from, so the address IS the identity — and it has to be confirmed,
+ * because an unconfirmed one is a free run anybody can spend on anybody.
+ *
+ * `type="email"` and `inputmode="email"` and nothing else: no `required`, because
+ * `required` would stop the paid button, and no pattern, because the server
+ * decides. `autocomplete="email"` is the whole phone story — one tap.
+ */
+function emailField(view: SubmitPageView): string {
+  if (view.paidOnly === true) return '';
+  return [
+    '<div class="sh" style="margin-top:22px">Your email</div>',
+    '<label>',
+    `<input type="email" name="${EMAIL_FIELD}" id="${EMAIL_ID}" inputmode="email" autocomplete="email" ` +
+      `placeholder="you@example.com" value="${escapeHtml(view.values.email)}">`,
+    '<span class="hint">We send one link. Press it and the panel starts reading.</span>',
+    '</label>',
+  ].join('');
+}
+
+/**
+ * The two doors, free first.
+ *
+ * ## The order of the buttons is the flow
+ *
+ * The free button is FIRST in the document, and that is load-bearing rather than
+ * layout: the HTML spec makes the first submit button in tree order a form's
+ * default button, so pressing Enter in any field submits to its `formaction`.
+ * Somebody filling this in on a phone keyboard, who never scrolls to a button at
+ * all, takes the free path — which is the path the page is offering.
+ *
+ * The form's own `action` stays `/api/checkout`, so the $5 button needs no
+ * `formaction` and the paid path is the same three-attribute element it was
+ * before this page grew a second door.
+ *
+ * `paidOnly` renders the $5 button on its own. That is the policy refusal: the
+ * free throw for this product is gone, and a button offering it again would be
+ * the page contradicting the sentence above it.
+ */
+function buttons(view: SubmitPageView, paidLabel?: string): string {
+  const paid = `<button class="act" type="submit" id="${PAY_ID}">${escapeHtml(
+    paidLabel ?? payLabel(selectedTier(view)),
+  )}</button>`;
+  if (view.paidOnly === true) return paid;
+  return [
+    `<button class="act" type="submit" id="${FREE_ID}" formaction="${FREE_ACTION}">Throw it in &middot; free →</button>`,
+    `<span class="second">${paid}</span>`,
+  ].join('');
+}
+
+/**
+ * The form. Five fields, a price, and two buttons.
  *
  * `novalidate` is deliberately absent and `required` is deliberately present:
  * browser validation is fast feedback and costs nothing. It is not the check.
@@ -800,10 +905,14 @@ export function renderSubmitPage(view: SubmitPageView): string {
   const panel = panelColumn(view);
   const body = [
     '<header class="page">',
-    '<div class="sh">Throw it in</div>',
-    '<h1>Five dollars. One honest verdict.</h1>',
-    '<p class="lede">Paste the URL, name it, say what it does. Pay. ' +
-      '<b>No account, no login, no email.</b></p>',
+    // The eyebrow follows the doors. A page that has just refused the free
+    // throw must not still be advertising it two lines above the refusal.
+    view.paidOnly === true
+      ? '<div class="sh">Five dollars.</div>'
+      : '<div class="sh">First throw is free.</div>',
+    '<h1>One honest verdict.</h1>',
+    '<p class="lede">Paste the URL, name it, say what it does. ' +
+      '<b>No account, no login.</b></p>',
     view.signedIn
       ? '<p class="lede"><span class="linked">Signed in</span> This pitch attaches to your account.</p>'
       : '',
@@ -863,7 +972,8 @@ export function renderSubmitPage(view: SubmitPageView): string {
     '<div class="sh" style="margin-top:22px">What you are buying</div>',
     whatYouAreBuying(view),
 
-    `<button class="act" type="submit" id="${PAY_ID}">${escapeHtml(payLabel(selectedTier(view)))}</button>`,
+    emailField(view),
+    buttons(view),
     '</form>',
     '</section>',
 
@@ -976,7 +1086,8 @@ function renderFormOnly(view: SubmitPageView): string {
     bylineChoice(view),
     '<span class="hint">A robot withholds your name and URL. Nothing else.</span>',
     whatYouAreBuying(view),
-    '<button class="act" type="submit">Try again →</button>',
+    emailField(view),
+    buttons(view, 'Try again →'),
     '</form>',
   ].join('');
 }

@@ -37,8 +37,13 @@ describe('the five fixed strings', () => {
   it('are `brief` Part 5, exactly', () => {
     expect(COPY.headline).toBe("You can't outbid the pit.");
     expect(COPY.sub).toBe('Everyone walks in at 100. Fewest cuts wins.');
-    expect(COPY.terms).toBe("$5 to enter. Public forever.");
-    expect(COPY.cta).toBe('Throw it in · $5');
+    // Amended once, and only these two. `DECISIONS.md` S15 gives every product
+    // one free throw, so "$5 to enter" stopped being true and the CTA that named
+    // the price stopped naming the first one. `Public forever` — the half that is
+    // Part 5's actual argument — is untouched, and so are the other three strings.
+    expect(COPY.terms).toBe('First throw free. Public forever.');
+    expect(COPY.cta).toBe('Throw it in · free');
+    expect(COPY.ctaPaid).toBe('$5 · as a robot');
     expect(COPY.closer).toBe('Throwing money in the pit just makes noise.');
   });
 
@@ -90,7 +95,10 @@ describe('the homepage says them', () => {
     expect(html).not.toContain('<input');
     expect(html).not.toContain('disabled=""');
     expect(html).toMatch(/<a class="cta" href="\/submit"[^>]*>/);
-    expect(textOf(html)).toContain('$5 to enter. Public forever.');
+    expect(textOf(html)).toContain('First throw free. Public forever.');
+    // Both doors, and both of them links to the same page. The free one is the
+    // filled button; the $5 one is beside it and never behind it.
+    expect(textOf(html)).toContain(COPY.ctaPaid);
   });
 
   it('states the wait once, under the CTA, and nowhere else', async () => {

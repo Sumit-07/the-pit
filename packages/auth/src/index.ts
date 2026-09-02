@@ -23,11 +23,15 @@
  * | Capability URL | nothing | `openCapabilityUrl`, shown at `capabilityHandoff` |
  * | GitHub | GitHub being up | `startOAuthSignIn` → `completeOAuthSignIn` |
  *
- * All three end at the same `accounts` row, keyed on the verified payment email.
- * There is no path here that creates one: `AuthStore` has no `createAccount`,
- * `IdentityStore` has none either, and `completeOAuthSignIn` answers
- * `no_purchase_found` rather than inventing an account for a stranger. An
- * account is a purchase — see `identity-store.ts`.
+ * All three end at the same `accounts` row. None of them creates it: `AuthStore`
+ * has no `createAccount`, and `completeOAuthSignIn` answers `no_purchase_found`
+ * rather than inventing an account for a stranger.
+ *
+ * `IdentityStore` now has exactly one method that can — `createAccountForEmail`,
+ * `DECISIONS.md` S15-free's free-run arm — and it is deliberately NOT on
+ * `AuthStore`, so `verifyMagicLink` still takes three methods and still answers
+ * `no_account` for an address nobody has ever confirmed. See
+ * `identity-store.ts` for the precondition its one legitimate caller supplies.
  *
  * `brief §2.1` says "No GitHub, no Google", and it says it as the answer to
  * *"what identifies the payer"*. That answer is unchanged: the payment email
@@ -122,6 +126,15 @@ export {
   verifyRunStatusToken,
 } from './session/run-status-token.js';
 
+export type { FreeRunClaim } from './session/free-run-token.js';
+export {
+  FREE_RUN_SUBMISSION_PARAM,
+  FREE_RUN_TOKEN_PARAM,
+  FREE_RUN_TOKEN_TTL_MS,
+  mintFreeRunToken,
+  verifyFreeRunToken,
+} from './session/free-run-token.js';
+
 export type { TimingFloor } from './timing.js';
 export { DEFAULT_REQUEST_FLOOR_MS, noTimingFloor, padTo, systemTimingFloor } from './timing.js';
 
@@ -162,6 +175,11 @@ export { capabilityHandoff, HANDOFF_WINDOW_MS } from './capability/handoff.js';
 export type { CapabilityMessageInput } from './mail/capability-render.js';
 export { capabilityIdempotencyKey, renderCapabilityEmail } from './mail/capability-render.js';
 
+// --- The free first throw: one confirmed address, one product, one run ---
+
+export type { FreeRunMessageInput } from './mail/free-run-render.js';
+export { freeRunConfirmUrl, freeRunIdempotencyKey, renderFreeRunEmail } from './mail/free-run-render.js';
+
 // --- The one email that is not about signing in: a delivered verdict ---
 
 export type { VerdictMessageInput, VerdictSharpestCut } from './mail/verdict-render.js';
@@ -169,7 +187,13 @@ export { renderVerdictEmail, verdictCutsLine, verdictIdempotencyKey } from './ma
 
 // --- The second store seam: slugs and provider links ---
 
-export type { AccountIdentity, AccountStore, IdentityStore, RotateSlugResult } from './identity-store.js';
+export type {
+  AccountIdentity,
+  AccountStore,
+  CreatedAccount,
+  IdentityStore,
+  RotateSlugResult,
+} from './identity-store.js';
 
 // --- Path 3: GitHub, an upgrade and never a gate ---
 
