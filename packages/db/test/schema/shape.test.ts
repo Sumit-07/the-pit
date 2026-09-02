@@ -21,7 +21,7 @@ afterAll(async () => {
 });
 
 /**
- * The twenty-one tables, plus nothing. An extra table is as much a defect as a
+ * The twenty-two tables, plus nothing. An extra table is as much a defect as a
  * missing one: it means a concept was modelled twice, or that something another
  * agent owns leaked in here.
  *
@@ -46,6 +46,13 @@ afterAll(async () => {
  *   300-character description. Dodo metadata is a small string map, and
  *   `products_source_submitter` refuses a paid row with no submitter — which
  *   under guest checkout is every row until the webhook arrives.
+ *
+ * `free_run_requests` is `0012`'s, and it is the free first throw's whole
+ * defence. The offer is only survivable because a person gets exactly one, and
+ * "exactly one" is a claim about state: `packages/auth`'s `MemoryRateLimiter`
+ * says of itself that on Vercel "every serverless invocation may be a fresh
+ * instance and the map is empty again", so a per-instance limiter on that path
+ * is not a weak defence but no defence at all.
  */
 const REQUIRED_TABLES = [
   'account_identities',
@@ -56,6 +63,7 @@ const REQUIRED_TABLES = [
   'clusters',
   'demand_votes',
   'flagged_injections',
+  'free_run_requests',
   'jobs',
   'jury_versions',
   'mob_votes',
@@ -72,7 +80,7 @@ const REQUIRED_TABLES = [
 ];
 
 describe('tables', () => {
-  it('creates exactly the twenty-one required tables', async () => {
+  it('creates exactly the twenty-two required tables', async () => {
     const tables = await tablesOf(database.pg);
     expect(tables).toEqual(REQUIRED_TABLES);
   });

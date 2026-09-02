@@ -15,12 +15,40 @@
  * needs these two functions. Neither needs the other once they both point here.
  */
 
-import { createPostgresListingStore, type Database } from '@the-pit/db';
+import { createDatabase, createPostgresListingStore, type Database } from '@the-pit/db';
 import type { SubmissionUrlResolver } from '@the-pit/payments';
 
 import { defaultBoardSource } from '@/lib/boards/source';
 import type { ListingLookup } from '@/lib/checkout/guards';
 import { resolveSubmissionUrl } from '@/lib/ingest/product-url';
+
+let handle: Database | null = null;
+
+/**
+ * The pool the submission path shares.
+ *
+ * One pool per process, opened on first use and never at import time — the same
+ * rule `lib/payments/config.ts` states, for the same reason: `createDatabase()`
+ * reads `DATABASE_URL`, so calling it at module scope turns a missing variable
+ * into a build failure and a present one into an idle connection per cold start.
+ *
+ * It lives HERE rather than beside `checkoutDeps()` because it is now shared: the
+ * checkout handlers and `lib/free/policy.ts` are two halves of one door — the
+ * paid one and the free one — and two pools for one request path would be two
+ * connections held against Neon's pooler for no benefit. That is the same
+ * argument this module's header already makes about the guards' other inputs: the
+ * pre-payment check and the pre-enqueue check must ask the same question, and
+ * keeping the INPUTS in one place is what stops them drifting.
+ */
+export function checkoutDatabase(): Database {
+  handle ??= createDatabase(undefined, 1).db;
+  return handle;
+}
+
+/** Drop the memoized pool. Tests only; `resetCheckoutWiring()` calls it. */
+export function resetCheckoutDatabase(): void {
+  handle = null;
+}
 
 /**
  * `brief §2.5`'s shortener resolution, as the guards' dependency.

@@ -14,6 +14,7 @@
  *   derived           snapshots, rankings                          <- rebuildable
  *   DELIVERED         verdicts                                     <- frozen, append-only
  *   the money path    submissions, webhook_events, orders, attempts
+ *   the free door     free_run_requests                            <- append-only
  *   surfaces          jobs, tokens, mob_votes, flagged_injections
  *
  * `02 §7` and `brief` Part 7 fix the RAW row: incremental placement and exact
@@ -52,6 +53,7 @@ export { rankings, snapshots } from './boards.js';
 export { verdicts } from './verdicts.js';
 export { attempts, orders } from './commerce.js';
 export { submissions } from './submissions.js';
+export { freeRunRequests } from './free-runs.js';
 export { webhookEvents } from './webhooks.js';
 export { tokens } from './auth.js';
 export { mobVotes } from './mob.js';

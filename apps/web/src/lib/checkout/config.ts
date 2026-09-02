@@ -31,22 +31,22 @@
  * config has to import the other.
  */
 
-import {
-  createDatabase,
-  createPostgresSubmissionStore,
-  hasDatabaseUrl,
-  type Database,
-} from '@the-pit/db';
+import { createPostgresSubmissionStore, hasDatabaseUrl } from '@the-pit/db';
 import { FixtureDodoTransport, seededCategoryClassifier, type DodoTransport } from '@the-pit/payments';
 
 import { capabilityDeps, secureCookies, sessionKeyring } from '@/lib/auth/config';
-import { candidateCategories, listingLookup, submissionUrlResolver } from '@/lib/checkout/bindings';
+import {
+  candidateCategories,
+  checkoutDatabase,
+  listingLookup,
+  resetCheckoutDatabase,
+  submissionUrlResolver,
+} from '@/lib/checkout/bindings';
 import { submitPageDepsFrom, type CheckoutHandlerDeps, type SubmitPageDeps } from '@/lib/checkout/handlers';
 import { HttpDodoTransport } from '@/lib/checkout/transport';
 import { dodoConfig, PaymentsNotWiredError } from '@/lib/payments/config';
 
 let registered: CheckoutHandlerDeps | null = null;
-let handle: Database | null = null;
 let transport: DodoTransport | null = null;
 
 /** Install dependencies directly. Tests use this; production uses the environment. */
@@ -57,14 +57,8 @@ export function registerCheckoutDeps(deps: CheckoutHandlerDeps): void {
 /** Drop everything this module memoized. Tests only. */
 export function resetCheckoutWiring(): void {
   registered = null;
-  handle = null;
+  resetCheckoutDatabase();
   transport = null;
-}
-
-/** One pool per process, opened on first use. See `lib/payments/config.ts`. */
-function database(): Database {
-  handle ??= createDatabase(undefined, 1).db;
-  return handle;
 }
 
 function isProduction(): boolean {
@@ -143,7 +137,7 @@ export function checkoutDeps(): CheckoutHandlerDeps {
   if (registered !== null) return registered;
   if (!hasDatabaseUrl()) throw new PaymentsNotWiredError('DATABASE_URL is not set');
 
-  const db = database();
+  const db = checkoutDatabase();
   const submissions = createPostgresSubmissionStore(db);
 
   return {
