@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 
+import { SiteNav } from '@/components/site-nav';
+
 import './pit.css';
 
 /**
@@ -85,7 +87,26 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {/*
+          The header, once, for every page Next renders — see
+          `components/site-nav.tsx` and `lib/site/nav.ts`. It used to be typed out
+          again at the top of four page components in three different cases; a
+          site with four navs is a site that tells a reader it changed every time
+          they follow a link.
+
+          `.sitebar` is the header's own column, and it tracks the width of the
+          page under it rather than picking one: `.wrap` is 1020px, `.wrap.wide`
+          on a category board is 1100px and `.wrap.hiw` is 900px, so the appended
+          block in `pit.css` widens the bar with `body:has(...)`. A wordmark
+          forty pixels inside the board it sits on top of is the kind of thing
+          nobody names and everybody sees.
+        */}
+        <div className="sitebar">
+          <SiteNav />
+        </div>
+        {children}
+      </body>
     </html>
   );
 }

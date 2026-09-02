@@ -90,13 +90,24 @@ describe('the homepage says them', () => {
     expect(html).not.toContain('<input');
     expect(html).not.toContain('disabled=""');
     expect(html).toMatch(/<a class="cta" href="\/submit"[^>]*>/);
-    expect(textOf(html)).toContain('$5. Five minutes. Public forever.');
+    expect(textOf(html)).toContain('$5. Public forever.');
   });
 
-  it('shows the board itself, above the three panels', async () => {
+  it('states the wait once, under the CTA, and nowhere else', async () => {
+    // It used to be a fragment of the terms line — "$5. Five minutes. Public
+    // forever." — where it read as a slogan rather than as an answer to the
+    // question a visitor has at the moment they are about to pay. One sentence,
+    // one place, and the terms line no longer says it: a duration stated twice
+    // is a duration that will one day disagree with itself.
+    const text = textOf(await renderHome());
+    expect(text).toContain('Verdicts land in about five minutes.');
+    expect([...text.matchAll(/\bminutes?\b/g)]).toHaveLength(1);
+  });
+
+  it('shows the board itself, above the panels', async () => {
     const html = await renderHome();
     const boardAt = html.indexOf('class="board"');
-    const panelsAt = html.indexOf('class="three"');
+    const panelsAt = html.indexOf('class="three pair"');
     expect(boardAt).toBeGreaterThan(-1);
     expect(panelsAt).toBeGreaterThan(boardAt);
     // A real row, wearing the designation every seeded listing now wears

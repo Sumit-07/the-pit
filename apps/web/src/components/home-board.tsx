@@ -21,29 +21,31 @@
  * - The board's contents come from a snapshot that was fixed when it was
  *   published. Nothing here polls, re-sorts or re-ranks, so there is no rank change
  *   for a browser to notice in the first place.
- * - The rotation is on a timer the board owns. It moves on its own schedule, and
- *   the progress bar shows the schedule so the movement is never a surprise.
+ * - The rotation is on a timer, and the progress bar shows that timer, so the
+ *   movement is never a surprise. The timer itself now lives one level up in
+ *   `<HomeRotation>`: the hero's verdict card reads the same index, and a card
+ *   and a board showing two different categories would be the page contradicting
+ *   itself above and below the fold. Reduced motion is handled there too.
  *
- * ## Reduced motion
+ * ## The one animation that is new
  *
- * `prefers-reduced-motion: reduce` stops the rotation entirely, not just the
- * animation on it — a board that silently swapped category every seven seconds
- * with no transition would be worse for the person who asked for less motion, not
- * better. The category buttons still work, so nothing becomes unreachable. The
- * check runs in an effect rather than during render because the server has no
- * media query, and a first paint that disagreed with the server's would be a
- * hydration mismatch on the most visible element on the site.
+ * Each row's health bar draws itself in: the teal head starts at a full hundred
+ * and falls to what survived, and the metric blocks land behind it, staggered
+ * 40ms a row. That is the page's own mechanic performed once — every product
+ * walks in at 100 and the cuts come off — and it is the one motion here that is
+ * about the content rather than about the furniture. It is pure CSS driven by
+ * `--draw-delay` (`pit.css`), so it costs nothing at runtime and disappears
+ * entirely under `prefers-reduced-motion: reduce`.
  */
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 
 import { HEALTH_NOTE, HOME_LEGEND } from '@/lib/boards/copy';
-import type { HomeBoard as HomeBoardData, TickerLine } from '@/lib/boards/home';
+import type { HomeBoard as HomeBoardData, HomeRow, TickerLine } from '@/lib/boards/home';
 import { depthOf, metricLabel, rank2, stampUtc } from '@/lib/boards/view';
 import { BoardHead, CutMeter, RowLead, RowNumbers } from '@/components/board-parts';
+import { useRotation } from '@/components/home-rotation';
 
-/** `brief` Part 6: "Categories auto-rotate every 7s". */
-const ROTATE_MS = 7000;
 /** How often a line joins the strip of cuts under the board. */
 const TICK_MS = 3200;
 /** How many lines the strip holds before the oldest falls off. */
@@ -56,33 +58,46 @@ export interface HomeBoardProps {
   deepest: number;
 }
 
+/**
+ * One row of the homepage board, and the whole row is the link.
+ *
+ * The board's job is to make a reader want a verdict, and until this was an
+ * anchor the eight most visible rows on the site were the only ones with no way
+ * into the thing they advertise: the name was text, the reason was text, and the
+ * only link on the surface was "full board" in the footer. A row that reads like
+ * a card and cannot be clicked is a dead end a reader blames themselves for.
+ *
+ * The anchor wraps the whole `.rowhead` rather than just the name, because the
+ * target on a phone is the row and not the fifteen pixels of a product's title.
+ * `RowLedger`'s own verdict link on the category board is unaffected — that
+ * surface is a `<details>` and its summary already has a job.
+ *
+ * A row whose product has no verdict yet falls back to its category board, which
+ * is where its ledger is written out in full. There is no state here in which the
+ * row is inert.
+ */
+function HomeRowLink({
+  row,
+  slug,
+  children,
+}: {
+  row: HomeRow;
+  slug: string;
+  children: ReactNode;
+}): ReactNode {
+  return (
+    <a className="rowlink" href={row.verdictHref ?? `/boards/${slug}`}>
+      {children}
+    </a>
+  );
+}
+
 export function HomeBoard({ boards, ticker, deepest }: HomeBoardProps): ReactNode {
-  const [current, setCurrent] = useState(0);
-  // Bumped on every switch, manual or automatic, so the progress bar's CSS
-  // animation restarts even when the category index happens to repeat.
-  const [cycle, setCycle] = useState(0);
-  const [animate, setAnimate] = useState(false);
+  // The rail's clock lives one level up, in `<HomeRotation>`, because the hero's
+  // verdict card reads the same index — the card and the board must never be two
+  // different categories.
+  const { current, cycle, animate, select } = useRotation();
   const [tick, setTick] = useState(0);
-  const rotate = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const apply = (): void => setAnimate(!query.matches);
-    apply();
-    query.addEventListener('change', apply);
-    return () => query.removeEventListener('change', apply);
-  }, []);
-
-  useEffect(() => {
-    if (!animate || boards.length < 2) return;
-    rotate.current = setTimeout(() => {
-      setCurrent((index) => (index + 1) % boards.length);
-      setCycle((value) => value + 1);
-    }, ROTATE_MS);
-    return () => {
-      if (rotate.current !== null) clearTimeout(rotate.current);
-    };
-  }, [animate, boards.length, cycle]);
 
   useEffect(() => {
     if (!animate || ticker.length < 2) return;
@@ -92,11 +107,6 @@ export function HomeBoard({ boards, ticker, deepest }: HomeBoardProps): ReactNod
 
   const board = boards[current];
   if (board === undefined) return null;
-
-  const select = (index: number): void => {
-    setCurrent(index);
-    setCycle((value) => value + 1);
-  };
 
   return (
     <>
@@ -140,20 +150,47 @@ export function HomeBoard({ boards, ticker, deepest }: HomeBoardProps): ReactNod
           stagger. Nothing keyed by rank, because nothing here reacts to a rank
           moving.
         */}
-        <div key={board.slug}>
+        {/*
+          `drawin` is on the FIRST board only — `cycle` counts switches, so it is
+          zero exactly until the rail moves or a reader picks a category. The
+          health bars draw themselves in once, on arrival, and a rotation after
+          that gets the row stagger `brief` Part 6 asks for and nothing more: a
+          board that re-performed every bar every seven seconds would be
+          advertising the animation rather than the mechanic.
+        */}
+        <div className={cycle === 0 ? 'boardrows drawin' : 'boardrows'} key={board.slug}>
           {board.rows.map((row, index) => (
             <div
               className={index === 0 ? 'brow first' : 'brow'}
-              style={{ animationDelay: animate ? `${index * 45}ms` : '0ms' }}
+              style={
+                {
+                  animationDelay: animate ? `${index * 45}ms` : '0ms',
+                  // The health bar's own stagger, 40ms a row: the teal head draws
+                  // down from a full hundred to what survived and the metric
+                  // blocks land behind it, so the board arrives showing the cuts
+                  // being taken rather than the state after them. CSS only, off
+                  // under `prefers-reduced-motion` — `pit.css` carries both.
+                  '--draw-delay': `${index * 40}ms`,
+                } as CSSProperties
+              }
               key={`${row.rank}-${row.name}`}
             >
-              <span className="rowhead" style={{ '--depth': depthOf(index, board.rows.length) } as CSSProperties}>
-                {row.soloCluster ? <span className="flag" aria-hidden="true" /> : null}
-                <span className="rk">{rank2(row.rank)}</span>
-                <RowLead row={row} />
-                <CutMeter row={row} />
-                <RowNumbers row={row} set="home" />
-              </span>
+              <HomeRowLink row={row} slug={board.slug}>
+                <span
+                  className="rowhead"
+                  style={
+                    {
+                      '--depth': depthOf(index, board.rows.length),
+                    } as CSSProperties
+                  }
+                >
+                  {row.soloCluster ? <span className="flag" aria-hidden="true" /> : null}
+                  <span className="rk">{rank2(row.rank)}</span>
+                  <RowLead row={row} />
+                  <CutMeter row={row} />
+                  <RowNumbers row={row} set="home" />
+                </span>
+              </HomeRowLink>
             </div>
           ))}
         </div>

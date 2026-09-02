@@ -50,6 +50,7 @@ import { escapeHtml } from '@the-pit/auth';
 import { formatUsd } from '@the-pit/payments';
 
 import { BASE, FONT_LINKS, TOKENS } from '@/lib/theme';
+import { renderSiteNav } from '@/lib/site/nav';
 
 import type { AccountListing, AccountPurchase, AccountView } from '@/lib/account/view';
 
@@ -107,7 +108,12 @@ header.page .who{font-family:var(--mono);font-size:11.5px;color:var(--dim);
   border:1px solid var(--line);border-radius:999px;padding:3px 9px;display:inline-block}
 `;
 
-function document_(title: string, body: string): string {
+/**
+ * `signedIn` decides the shared header's third item. On this page it is the one
+ * fact the header already knows: the signed-out screen says `Sign in` and points
+ * at the door, and the account page marks `Account` as the page you are on.
+ */
+function document_(title: string, body: string, signedIn = false): string {
   return [
     '<!doctype html>',
     '<html lang="en">',
@@ -125,9 +131,9 @@ function document_(title: string, body: string): string {
     `<style>${CSS}</style>`,
     '</head>',
     '<body><div class="wrap">',
-    '<nav><a class="mark" href="/">THE P<i>I</i>T</a>',
-    '<span class="navr"><a href="/how-it-works">How this works</a>' +
-      '<a href="/boards">Boards</a></span></nav>',
+    // The site's one header, from `lib/site/nav.ts` — the same items, in the same
+    // case, as every other surface. See that module's header.
+    renderSiteNav({ current: 'account', signedIn }),
     body,
     '</div></body>',
     '</html>',
@@ -373,6 +379,7 @@ export function renderAccountPage(view: AccountView): string {
       '<a href="/boards">Boards</a> · <a href="/">The Pit</a>',
       '</footer>',
     ].join(''),
+    true,
   );
 }
 

@@ -121,18 +121,7 @@ export default async function HowItWorks(): Promise<ReactNode> {
   const buyers = m.buyers === null ? 'Simulated buyers' : `${inWords(m.buyers).replace(/^./, (c) => c.toUpperCase())} simulated buyers`;
 
   return (
-    <div className="wrap hiw">
-      <nav>
-        <a className="mark" href="/">
-          THE <i>PIT</i>
-        </a>
-        <span className="navr">
-          <span className="navlink">how it works</span>
-          <a className="navlink" href="/boards">
-            boards
-          </a>
-        </span>
-      </nav>
+    <div className="wrap hiw" data-page="how-it-works">
 
       <div className="head">
         <span className="sh">How this works</span>

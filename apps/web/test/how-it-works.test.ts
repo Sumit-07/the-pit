@@ -27,10 +27,12 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import type { ReactElement, ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import BoardIndex from '@/app/boards/page';
+import RootLayout from '@/app/layout';
 import CategoryBoard from '@/app/boards/[slug]/page';
 import Home from '@/app/page';
 import HowItWorks from '@/app/how-it-works/page';
@@ -81,11 +83,23 @@ beforeAll(async () => {
   rendered = renderToStaticMarkup(await HowItWorks());
   prose = textOf(rendered);
 
-  surfaces.set('the homepage', renderToStaticMarkup(await Home()));
-  surfaces.set('the board index', renderToStaticMarkup(await BoardIndex()));
+  /*
+   * Through the layout, because that is now where the nav is.
+   *
+   * The header used to be typed out at the top of each of these three page
+   * components; `app/layout.tsx` renders it once from `lib/site/nav.ts` instead,
+   * which is the whole point of the change this wrapper is here for. A test that
+   * rendered the page alone would be asserting about a document no reader is
+   * ever served.
+   */
+  const wholeDocument = (page: ReactNode): string =>
+    renderToStaticMarkup(RootLayout({ children: page }) as ReactElement);
+
+  surfaces.set('the homepage', wholeDocument(await Home()));
+  surfaces.set('the board index', wholeDocument(await BoardIndex()));
   surfaces.set(
     'a category board',
-    renderToStaticMarkup(await CategoryBoard({ params: Promise.resolve({ slug: 'developer-tools' }) })),
+    wholeDocument(await CategoryBoard({ params: Promise.resolve({ slug: 'developer-tools' }) })),
   );
   surfaces.set(
     'the submit page',

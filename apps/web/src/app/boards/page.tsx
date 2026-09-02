@@ -53,18 +53,7 @@ export default async function Boards(): Promise<ReactNode> {
   const boards = await loadBoards();
 
   return (
-    <div className="wrap">
-      <nav>
-        <a className="mark" href="/">
-          THE <i>PIT</i>
-        </a>
-        <span className="navr">
-          <a className="navlink" href="/how-it-works">
-            how it works
-          </a>
-          <span className="navlink">boards</span>
-        </span>
-      </nav>
+    <div className="wrap" data-page="boards">
 
       <div className="head">
         <span className="sh">The boards</span>

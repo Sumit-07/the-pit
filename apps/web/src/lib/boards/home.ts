@@ -53,6 +53,11 @@ export type HomeRow = Pick<
   | 'tiebroken'
   | 'headline'
   | 'soloNote'
+  // The row's own verdict. Every row on the homepage board is a link to it —
+  // the board's whole job is to make a reader want one, and until this field
+  // came down with the slice the eight most visible rows on the site were the
+  // only ones with no way into the thing they are advertising.
+  | 'verdictHref'
 > & {
   /** `RowView` fields the homepage never renders, present so the shared row components typecheck. */
   url: string;
@@ -213,6 +218,7 @@ function toHomeRow(row: RowView): HomeRow {
     tiebroken: row.tiebroken,
     headline: row.headline,
     ...(row.soloNote === undefined ? {} : { soloNote: row.soloNote }),
+    ...(row.verdictHref === undefined ? {} : { verdictHref: row.verdictHref }),
     url: row.url,
     deductionCount: row.deductionCount,
     metrics: row.metrics.map(toMeterMetric),
@@ -239,6 +245,77 @@ export function toHomeBoard(board: BoardView, limit: number = HOME_ROWS): HomeBo
     rows,
     iconCss: pickFaviconCss(board.iconCss, worn),
   };
+}
+
+/**
+ * The card in the right half of the hero: whoever is currently #1.
+ *
+ * The hero was a headline, a sub and a CTA in its left half and four hundred
+ * pixels of nothing in its right. What belongs in that space is not an
+ * illustration of the product — it is the product: the board's current leader,
+ * with the same health bar every row on the page wears, and the sharpest thing a
+ * juror said about the best thing here. A page whose claim is "you can't outbid
+ * the pit" opens by showing what the top of it actually looks like, including
+ * what it lost.
+ *
+ * It is its own type rather than a `HomeRow`, and deliberately: the rank-1 row is
+ * ALREADY in the client payload as `board.rows[0]`, so handing the hero a second
+ * copy of it would serialize the same thirty fields twice into every document.
+ * This is the dozen the card draws.
+ *
+ * `metrics` keeps only each metric's loss, because the hero's bar is the same
+ * exact decomposition the row's is (`CutMeter`'s header says why the widths have
+ * to be exact) and the hero has no room to quote a reason per segment.
+ */
+export interface HeroCard {
+  slug: string;
+  category: string;
+  /** "#1 / 48" — the size of the field this row is first in. */
+  productCount: number;
+  name: string;
+  /** The row's own verdict, when one has been issued. Absent falls back to the board. */
+  verdictHref?: string;
+  anonymous: boolean;
+  robotSeed?: string;
+  iconClass?: string;
+  mark: string;
+  /** `100 − cuts`, the teal head of the bar and the figure beside it. */
+  health: number;
+  cuts: number;
+  /** Heaviest-first, matching the row: `{ metric, cuts }` and nothing else. */
+  metrics: { metric: string; cuts: number }[];
+  headline: HomeRow['headline'];
+}
+
+/**
+ * The #1 of every board the rail can rotate to, in the rail's own order.
+ *
+ * One per board, so the hero card can follow the rotation without a fetch — the
+ * same reason `toHomeBoard` ships all of them. A board with no rows contributes
+ * nothing rather than an empty card.
+ */
+export function heroCards(boards: readonly HomeBoard[]): HeroCard[] {
+  const cards: HeroCard[] = [];
+  for (const board of boards) {
+    const row = board.rows.at(0);
+    if (row === undefined) continue;
+    cards.push({
+      slug: board.slug,
+      category: board.category,
+      productCount: board.productCount,
+      name: row.name,
+      ...(row.verdictHref === undefined ? {} : { verdictHref: row.verdictHref }),
+      anonymous: row.anonymous,
+      ...(row.robotSeed === undefined ? {} : { robotSeed: row.robotSeed }),
+      ...(row.iconClass === undefined ? {} : { iconClass: row.iconClass }),
+      mark: row.mark,
+      health: row.health,
+      cuts: row.cuts,
+      metrics: row.metrics.map((metric) => ({ metric: metric.metric, cuts: metric.cuts })),
+      headline: row.headline,
+    });
+  }
+  return cards;
 }
 
 /**

@@ -92,8 +92,13 @@ import { metricLabel, n1, n2, rank2, type MetricView, type RowView } from '@/lib
 /** How much of a row's numbers a surface shows. The homepage shows fewer. */
 export type NumberSet = 'home' | 'board';
 
-/** The opacity ramp a segment sits on: heaviest is solid, the rest step back. */
-function segClass(index: number): string {
+/**
+ * The opacity ramp a segment sits on: heaviest is solid, the rest step back.
+ *
+ * Exported because the hero card draws the same bar at a larger size, and a
+ * second ramp would be a second answer to "how many metrics is this".
+ */
+export function segClass(index: number): string {
   return index === 0 ? 'seg' : `seg s${Math.min(index + 1, 6)}`;
 }
 
@@ -199,11 +204,20 @@ function RowTags({ row }: { row: RowView }): ReactNode {
  * `loading="lazy"` anywhere: a lazily-loaded `data:` URL is a hint about a fetch
  * that will never happen.
  */
-function RowMark({ row }: { row: RowView }): ReactNode {
+export interface MarkRow {
+  anonymous: boolean;
+  robotSeed?: string;
+  iconClass?: string;
+  mark: string;
+  /** Only a fallback seed for a robot on a row whose identity never got one. */
+  rank?: number;
+}
+
+export function RowMark({ row }: { row: MarkRow }): ReactNode {
   if (row.anonymous) {
     return (
       <span className="fav" aria-hidden="true">
-        <RobotAvatar seed={row.robotSeed ?? String(row.rank)} size={16} />
+        <RobotAvatar seed={row.robotSeed ?? String(row.rank ?? 1)} size={16} />
       </span>
     );
   }

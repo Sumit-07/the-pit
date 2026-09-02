@@ -2180,4 +2180,400 @@ footer {
 
 .runstatus .blk {
   margin-top: 26px;
+
+/* ===========================================================================
+ * HOMEPAGE + SITE HEADER — appended block
+ *
+ * Everything below this line was added in one pass over the homepage and the
+ * site header, and it is appended rather than merged into the sections above
+ * because `pit.css` was being edited in parallel for the verdict page. Nothing
+ * above this line was moved or rewritten; where a rule here changes an earlier
+ * one it says so and says why.
+ *
+ * It covers, in order:
+ *   1. the site header, now rendered once by `app/layout.tsx`
+ *   2. the hero's right half — the live #1 card
+ *   3. the wait time under the CTA
+ *   4. board rows as links
+ *   5. the health bars drawing in
+ *   6. two panels where there were three
+ * ======================================================================== */
+
+/* ---------- 1. the site header ---------- */
+/*
+ * `layout.tsx` renders the header above `{children}`, so it is no longer inside
+ * the page's own `.wrap` and needs that column reproduced here. It TRACKS the
+ * page's width instead of picking one: `.wrap` is 1020px, a category board is
+ * `.wrap.wide` at 1100px and `/how-it-works` is `.wrap.hiw` at 900px, and a
+ * wordmark sitting forty pixels inside the board beneath it is the kind of
+ * misalignment nobody names and everybody sees.
+ *
+ * `:has()` is the only way a preceding sibling can be sized by a later one, and
+ * it degrades exactly right: a browser without it gets the 1020px default, which
+ * is the width three of the four pages want anyway.
+ */
+.sitebar {
+  max-width: 1020px;
+  margin: 0 auto;
+  padding: 0 18px;
+}
+body:has(.wrap.wide) .sitebar {
+  max-width: 1100px;
+}
+body:has(.wrap.hiw) .sitebar {
+  max-width: 900px;
+}
+@media (max-width: 760px) {
+  .sitebar {
+    padding: 0 14px;
+  }
+}
+
+/*
+ * "You are here", without a client bundle.
+ *
+ * A layout cannot know the route, so the current item is marked in CSS from the
+ * `data-page` a page puts on its own `.wrap`. `<SiteNav>` stays a server
+ * component with no JavaScript at all, which matters for the first element in
+ * the document on every page. Where the string renderer knows the page for
+ * itself — `/submit`, `/account` — it emits `aria-current` and a `<span>`, and
+ * that is styled here too so both routes to the same state look the same.
+ */
+.navr [aria-current="page"],
+body:has([data-page="how-it-works"]) .navr .navlink[href="/how-it-works"],
+body:has([data-page="boards"]) .navr .navlink[href="/boards"] {
+  color: var(--ink);
+  border-bottom-color: var(--line);
+}
+
+/* ---------- 2. the hero's right half: the live #1 card ---------- */
+/*
+ * The hero was a headline in its left half and four hundred pixels of nothing in
+ * its right. What goes there is the board's current leader — see
+ * `components/hero-verdict.tsx`.
+ *
+ * The card is a RECESS in the slab: `--pit` inside `--rise`, which is the one
+ * gesture this whole surface is built on, read at hero scale. The hero is the top
+ * of the pit, still in daylight; the card is a window down into it, and what is
+ * in the window is the product that has lost the least.
+ */
+.hero h1 {
+  /*
+   * Down from `clamp(34px, 8.2vw, 74px)`. The right half is no longer empty, so
+   * the headline no longer has 928px to shout across; one clamp for both layouts
+   * rather than two, because a 24px jump at a breakpoint is visible to anyone who
+   * resizes a window.
+   */
+  font-size: clamp(34px, 6.4vw, 62px);
+}
+@media (min-width: 940px) {
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: clamp(28px, 3.4vw, 44px);
+    align-items: center;
+  }
+}
+.herostack {
+  min-width: 0;
+}
+@media (max-width: 939px) {
+  .herostack {
+    margin-top: 26px;
+  }
+}
+.hcsh {
+  display: block;
+  margin-bottom: 9px;
+}
+
+/*
+ * Every card in one grid cell.
+ *
+ * A crossfade needs both cards present, and stacking them with `grid-area` rather
+ * than `position: absolute` means the deck is as tall as the tallest card and the
+ * hero does not change height when a two-line juror reason follows a one-line
+ * one. A hero that resized every seven seconds would push the whole page around.
+ */
+.hcdeck {
+  display: grid;
+}
+.herocard {
+  grid-area: 1 / 1;
+  display: block;
+  background: var(--pit);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  box-shadow: inset 0 2px 8px rgb(var(--shade-c) / 0.45);
+  padding: 15px 16px 14px;
+  color: var(--ink);
+  text-decoration: none;
+  opacity: 0;
+  /* Hidden, not merely transparent: a tab key must not land on a card nobody can
+     see, and `visibility` is what takes it out of the focus order. */
+  visibility: hidden;
+  transition:
+    opacity 0.42s ease,
+    border-color 0.16s ease,
+    visibility 0s linear 0.42s;
+}
+.herocard.on {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 0.42s ease,
+    border-color 0.16s ease;
+}
+.herocard.on:hover,
+.herocard.on:focus-visible {
+  border-color: rgb(var(--ink-c) / 0.34);
+}
+.hcwho {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.hcname {
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hcrank {
+  display: block;
+  margin-top: 5px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+}
+/* The row's meter at hero scale: same decomposition, same ramp, two pixels
+   taller because it is the first bar a visitor ever sees. */
+.hcbar {
+  display: flex;
+  height: 12px;
+  margin-top: 13px;
+  background: var(--sunk);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgb(var(--shade-c) / 0.55);
+}
+.hcbar .kept {
+  background: rgb(var(--held-c) / 0.7);
+  height: 100%;
+  flex: 0 0 auto;
+}
+.hcbar .seg {
+  background: var(--cut);
+  height: 100%;
+  flex: 0 0 auto;
+  box-shadow: -1px 0 0 rgb(var(--shade-c) / 0.55);
+}
+.hcbar .seg.s2 {
+  background: rgb(var(--cut-c) / 0.9);
+}
+.hcbar .seg.s3 {
+  background: rgb(var(--cut-c) / 0.8);
+}
+.hcbar .seg.s4 {
+  background: rgb(var(--cut-c) / 0.71);
+}
+.hcbar .seg.s5 {
+  background: rgb(var(--cut-c) / 0.64);
+}
+.hcbar .seg.s6 {
+  background: rgb(var(--cut-c) / 0.58);
+}
+.hccap {
+  display: block;
+  margin-top: 7px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--dimmer);
+}
+.hccap .held {
+  font-weight: 600;
+  color: var(--held);
+}
+/* The sharpest thing said about the best thing here, in the register the board
+   uses: the points in `--cut`, the reason in plain text, the juror in mono. */
+.hccut {
+  display: block;
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dim);
+}
+.hccut .pts {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--cut);
+  margin-right: 3px;
+}
+.hccut .who {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--dimmer);
+}
+.hcgo {
+  display: block;
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid var(--hair);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+  transition: color 0.16s ease;
+}
+.herocard.on:hover .hcgo,
+.herocard.on:focus-visible .hcgo {
+  color: var(--ink);
+}
+
+/* ---------- 3. the wait, under the CTA ---------- */
+/*
+ * One sentence, once. It used to be a fragment of the terms line, where it read
+ * as a slogan; under the button it is an answer to the question a visitor has at
+ * the moment they are about to press it.
+ */
+.wait {
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+}
+
+/* ---------- 4. board rows as links ---------- */
+/*
+ * The homepage board's rows are anchors now. The whole `.rowhead` is the target,
+ * not the fifteen pixels of the product's name — on a phone the row IS the
+ * control — and the lift on hover is the same verb the row already had for its
+ * depth: it comes back up out of the pit while you are pointing at it.
+ *
+ * The category board's rows are untouched. They are `<details>`, their summary
+ * already has a job, and the ledger inside carries its own link to the verdict.
+ */
+.rowlink {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.rowlink .rowhead {
+  transition:
+    background 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+.rowlink:hover .rowhead {
+  background: color-mix(in srgb, var(--card) calc(100% - var(--depth) * 45%), var(--pit));
+  box-shadow:
+    inset 0 1px 0 rgb(var(--ink-c) / 0.15),
+    var(--e2);
+  transform: translateY(-1px);
+}
+/*
+ * The one licensed teal numeral on a row.
+ *
+ * `.cell.health .v` is `--ink` and not `--held` on purpose — forty-eight teal
+ * numerals down a column would spend a hue on a whole column. Hovering is exactly
+ * one row, which is the case that comment excludes: for as long as the pointer is
+ * on it, the figure is drawn in the colour of the block it names, so the number
+ * and the bar are visibly the same quantity.
+ */
+.rowlink:hover .cell.health .v {
+  color: var(--held);
+}
+.rowlink:focus-visible {
+  outline: none;
+}
+.rowlink:focus-visible .rowhead {
+  outline: 2px solid var(--ink);
+  outline-offset: -3px;
+}
+
+/* ---------- 5. the health bars draw in ---------- */
+/*
+ * The page's own mechanic, performed once, on first paint: every product walks in
+ * at 100, and then the cuts come off. The teal head starts at a full hundred and
+ * falls to what survived; the metric blocks land behind it; rows are staggered
+ * 40ms apart down the board, so the eye reads a descent rather than a flash.
+ *
+ * Each keyframe has only a `from`. The implicit `to` is the element's own
+ * computed width — which is the exact figure the component wrote inline — so the
+ * animation cannot disagree with the number it is drawing, and there is no second
+ * copy of a width in this file to drift from it.
+ *
+ * `--draw-delay` is set per row by `home-board.tsx` and per card by
+ * `hero-verdict.tsx`. `.drawin` is on the homepage board's first render only —
+ * the component takes it off as soon as the rail moves, so this plays once on
+ * arrival and a category switch afterwards gets the row stagger and nothing
+ * more. The category board never carries it at all: that is a static document a
+ * reader arrived at deliberately, and forty-eight bars redrawing on load would
+ * be noise rather than a mechanic.
+ */
+@keyframes drawkept {
+  from {
+    width: 100%;
+  }
+}
+@keyframes drawseg {
+  from {
+    width: 0;
+  }
+}
+.drawin .kept,
+.herocard .kept {
+  animation: drawkept 620ms cubic-bezier(0.22, 0.72, 0.28, 1) backwards;
+  animation-delay: var(--draw-delay, 0ms);
+}
+.drawin .seg,
+.herocard .seg {
+  animation: drawseg 300ms cubic-bezier(0.22, 0.72, 0.28, 1) backwards;
+  animation-delay: calc(var(--draw-delay, 0ms) + 520ms);
+}
+/*
+ * Stated again, and not only inherited from the blanket rule near the top of this
+ * file. The widths these animations end on are written inline by the components,
+ * so removing the animation leaves every bar drawn correctly and instantly —
+ * which is the whole reason the keyframes have no `to`.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .drawin .kept,
+  .drawin .seg,
+  .herocard .kept,
+  .herocard .seg {
+    animation: none;
+  }
+}
+
+/* ---------- 6. two panels, not three ---------- */
+/*
+ * The Mob panel is gone — there is no mob: no vote route, no vote store, no board
+ * for it to have its own board on, and a panel describing a panel that does not
+ * exist is the one piece of furniture on this page that could not be defended.
+ *
+ * `.three` above still styles the cards, which are unchanged; `.pair` is the
+ * column count, added here rather than by editing the rule above. It carries its
+ * own stacking breakpoint because the one attached to `.three` is a single class
+ * and would lose to this pair of them.
+ */
+.three.pair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 760px) {
+  .three.pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

@@ -80,20 +80,7 @@ export default async function BoardPage({
   if (document_ === undefined) notFound();
 
   return (
-    <div className="wrap wide">
-      <nav>
-        <a className="mark" href="/">
-          THE <i>PIT</i>
-        </a>
-        <span className="navr">
-          <a className="navlink" href="/how-it-works">
-            how it works
-          </a>
-          <a className="navlink" href="/boards">
-            all boards
-          </a>
-        </span>
-      </nav>
+    <div className="wrap wide" data-page="boards">
       <CategoryBoard board={toBoardView(document_)} />
     </div>
   );

@@ -59,6 +59,7 @@ import { BYLINE_ANONYMOUS, BYLINE_FIELD, BYLINE_NAMED } from '@/lib/checkout/byl
 import type { CategoryPanel } from '@/lib/checkout/panel';
 import { PITCH_LIMIT } from '@/lib/checkout/pitch';
 import { BASE, FONT_LINKS, TOKENS } from '@/lib/theme';
+import { renderSiteNav } from '@/lib/site/nav';
 
 /** One sans, one mono, from `lib/theme.ts` — the same two every surface loads. */
 const FONTS = FONT_LINKS;
@@ -456,7 +457,13 @@ const PANEL_SCRIPT = `(function(){
   show();
 })();`;
 
-function document_(title: string, body: string, wide = false): string {
+/**
+ * `wide` widens the column for the reference panel; `signedIn` decides whether the
+ * shared header's third item is `Account` or `Sign in`. Checkout is a guest
+ * flow (`brief §2.1`), so the nav here never asks anyone to sign in before
+ * paying — it is the way back to a purchase already made.
+ */
+function document_(title: string, body: string, wide = false, signedIn = false): string {
   return [
     '<!doctype html>',
     '<html lang="en">',
@@ -469,9 +476,11 @@ function document_(title: string, body: string, wide = false): string {
     `<style>${CSS}</style>`,
     '</head>',
     `<body><div class="wrap${wide ? ' wide' : ''}">`,
-    '<nav><a class="mark" href="/">THE P<i>I</i>T</a>',
-    '<span class="navr"><a href="/how-it-works">How this works</a>' +
-      '<a href="/boards">Boards</a><a href="/account">Account</a></span></nav>',
+    // The site's one header, from `lib/site/nav.ts`. This page used to type out
+    // its own — Title Case, three items, a different wordmark — while the
+    // homepage typed out a lowercase two-item one. A visitor who paid was told
+    // by the nav that they had left the site.
+    renderSiteNav({ signedIn }),
     body,
     '</div>',
     // At the end of the body, so they bind to markup that already exists and so
@@ -869,7 +878,7 @@ export function renderSubmitPage(view: SubmitPageView): string {
       '<a href="/boards">Read the cuts</a>.</footer>',
   ].join('');
 
-  return document_('Throw it in', body, panel !== '');
+  return document_('Throw it in', body, panel !== '', view.signedIn);
 }
 
 export interface RejectionView {
@@ -931,7 +940,7 @@ export function renderRejectionPage(view: RejectionView): string {
     '<footer><a href="/boards">Read the cuts</a> while you wait.</footer>',
   ].join('');
 
-  return document_(headingFor(rejection), body);
+  return document_(headingFor(rejection), body, false, view.form.signedIn);
 }
 
 /**

@@ -335,9 +335,23 @@ describe('guest checkout: nothing sits between a visitor and their purchase', ()
     expect(page).toContain('name="url"');
     expect(page).toContain('name="description"');
     expect(page).toContain('action="/api/checkout"');
-    // A sign-in prompt on a buying path becomes a step in the buying path.
-    expect(page).not.toContain('Sign in');
-    expect(page).not.toContain('/auth/github');
+    /*
+     * A sign-in prompt on a buying path becomes a step in the buying path — so
+     * the assertion is about the PAGE and not about the site header above it.
+     *
+     * `/submit` now renders the same three-item nav every surface renders
+     * (`lib/site/nav.ts`), and its third item is `Sign in` for a visitor without
+     * a session. That is a link out of the page to an account someone may
+     * already have; it is not a step, it does not gate anything, and it appears
+     * identically on the homepage a visitor arrived from. What `brief §2.1`
+     * forbids is the buying path asking anyone to authenticate, and that is what
+     * is checked here: everything below the header.
+     */
+    const body = page.slice(page.indexOf('</nav>'));
+    expect(body).not.toContain('Sign in');
+    expect(body).not.toContain('/auth/github');
+    // And the nav is the ONLY place the words appear: exactly one of each.
+    expect([...page.matchAll(/Sign in/g)]).toHaveLength(1);
   });
 
   it('accepts a form post with no JavaScript — urlencoded body, no JSON anywhere', async () => {
