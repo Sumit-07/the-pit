@@ -65,9 +65,14 @@ export function requiresDurableStorage(env: Env = process.env): boolean {
  * on this phase for exactly that reason; the read path needs the same escape,
  * because prerendering a board must not require a provisioned bucket.
  *
- * It is not a way to reach local disk on a live server: `assertBindingsConfigured`
- * runs on the deployed server's first cold start, before any request, and refuses
- * to boot an unconfigured one.
+ * Three callers, one phase: `instrumentation.ts` skips the boot check, `storageMode`
+ * declines to refuse a declared `PIT_STORAGE=filesystem`, and `sink.ts` falls back
+ * to a directory when `postgres` was chosen and no bucket exists to publish to.
+ *
+ * It is not a way to reach local disk on a live server. `NEXT_PHASE` is set by
+ * `next build` and is absent from the server that build produces, where
+ * `assertBindingsConfigured` runs on the first cold start, before any request, and
+ * refuses to boot an unconfigured one.
  */
 export function isProductionBuild(env: Env = process.env): boolean {
   return env['NEXT_PHASE'] === 'phase-production-build';
@@ -80,10 +85,22 @@ export function isProductionBuild(env: Env = process.env): boolean {
  * a deployment that needs durable storage is refused rather than honoured: it is
  * the one setting that produces the double-charge `service.ts` describes, and an
  * environment variable is not a good enough reason to allow it.
+ *
+ * The refusal is about a SERVER, though, not about `NODE_ENV`. `next build` sets
+ * `NODE_ENV=production` on a laptop with nothing provisioned, so a build would
+ * otherwise be refused for a double charge it cannot make: it serves no request,
+ * buys no phase and holds nobody's money — it prerenders `/boards/<slug>` from the
+ * board JSON already on disk, which is the filesystem mode working as intended.
+ * So `isProductionBuild` gates the refusal, and nothing else here (see its note on
+ * why a deployed server cannot borrow the same escape).
  */
 export function storageMode(env: Env = process.env): StorageMode {
   const requested = env[STORAGE_MODE_ENV];
   const durable = requiresDurableStorage(env);
+  // The environment fact and the refusal are two different questions, so they get
+  // two names. A build has the ephemeral disk (`durable`) without being the thing
+  // the refusal protects against (a deployment serving paid runs off it).
+  const refuseFilesystem = durable && !isProductionBuild(env);
 
   if (requested === undefined || requested === '') {
     return durable ? 'postgres' : 'filesystem';
@@ -93,7 +110,7 @@ export function storageMode(env: Env = process.env): StorageMode {
       `${STORAGE_MODE_ENV} must be "filesystem" or "postgres", got ${JSON.stringify(requested)}.`,
     );
   }
-  if (requested === 'filesystem' && durable) {
+  if (requested === 'filesystem' && refuseFilesystem) {
     throw new PipelineBindingError(
       `${STORAGE_MODE_ENV}=filesystem is refused on this deployment.\n\n` +
         'Every invocation here gets its own filesystem, so a run whose phases land on two instances would\n' +

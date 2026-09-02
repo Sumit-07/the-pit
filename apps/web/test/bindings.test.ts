@@ -57,6 +57,12 @@ const PRODUCTION = {
 /** A developer's laptop: nothing set. */
 const LOCAL = { NODE_ENV: 'development' } as const;
 
+/**
+ * `pnpm build` on that same laptop. `next build` sets both of these itself: it is
+ * `NODE_ENV=production` with nothing provisioned, and it is not a server.
+ */
+const BUILD = { NODE_ENV: 'production', NEXT_PHASE: 'phase-production-build' } as const;
+
 describe('the mode is chosen by the environment, not by a default', () => {
   it('binds the filesystem locally and Postgres on Vercel', () => {
     expect(storageMode(LOCAL)).toBe('filesystem');
@@ -79,10 +85,33 @@ describe('the mode is chosen by the environment, not by a default', () => {
   });
 
   it('refuses to be forced back onto the filesystem where it is a correctness bug', () => {
-    // The one setting that reinstates the double charge. There is deliberately no
-    // escape hatch: an environment variable is not a good enough reason.
+    // The one setting that reinstates the double charge. An environment variable
+    // is not a good enough reason, so the RUNNING deployment has no escape hatch.
     expect(() => storageMode({ ...PRODUCTION, PIT_STORAGE: 'filesystem' })).toThrow(PipelineBindingError);
     expect(() => storageMode({ ...PRODUCTION, PIT_STORAGE: 'filesystem' })).toThrow(/re-buy a phase/);
+  });
+
+  it('honours PIT_STORAGE=filesystem during `next build`, which is not a deployment', () => {
+    // `next build` sets NODE_ENV=production, so `requiresDurableStorage` is true
+    // on a laptop running `pnpm build` — and the checked-in .env declares
+    // `filesystem`. Refusing there fails the build in `generateStaticParams` for
+    // /boards/[slug] over a double charge a build cannot make: it serves no
+    // request and buys no phase, it reads board JSON that is already on disk.
+    expect(storageMode({ ...BUILD, PIT_STORAGE: 'filesystem' })).toBe('filesystem');
+
+    // And the deployed server that build produces has no NEXT_PHASE, so it is
+    // still refused. This is the pair: the same PIT_STORAGE, opposite answers.
+    expect(() => storageMode({ ...PRODUCTION, PIT_STORAGE: 'filesystem' })).toThrow(/re-buy a phase/);
+  });
+
+  it('does not let NEXT_PHASE weaken anything except that one refusal', () => {
+    // The escape is narrow on purpose. A build with nothing declared still binds
+    // Postgres — `sink.ts` is what decides a bucketless build reads a directory,
+    // and it does so knowing the mode, rather than the mode being quietly downgraded.
+    expect(storageMode(BUILD)).toBe('postgres');
+    expect(requiresDurableStorage(BUILD)).toBe(true);
+    // A typo is still a typo during a build.
+    expect(() => storageMode({ ...BUILD, PIT_STORAGE: 'sqlite' })).toThrow(/must be "filesystem" or "postgres"/);
   });
 
   it('refuses a mode it does not recognise rather than guessing', () => {
@@ -220,6 +249,17 @@ describe('the bindings themselves', () => {
     const { PIT_SNAPSHOT_BUCKET_URL: _omitted, ...noBucket } = PRODUCTION;
     expect(() => defaultSnapshotSink(noBucket)).toThrow(PipelineBindingError);
     expect(defaultSnapshotSink({ ...noBucket, NEXT_PHASE: 'phase-production-build' })).toBeInstanceOf(FileSnapshotSink);
+  });
+
+  it('builds a board from disk when the checked-in .env declares PIT_STORAGE=filesystem', () => {
+    // The call `generateStaticParams` for /boards/[slug] makes. This threw before
+    // `storageMode` learned the difference between a build and a deployment, and
+    // it threw from the mode rather than the sink — so the escape one line below
+    // the other test was unreachable and `pnpm build` failed from a clean clone.
+    expect(defaultSnapshotSink({ ...BUILD, PIT_STORAGE: 'filesystem' })).toBeInstanceOf(FileSnapshotSink);
+
+    // The same declaration on the server that build produces is still refused.
+    expect(() => defaultSnapshotSink({ ...PRODUCTION, PIT_STORAGE: 'filesystem' })).toThrow(/re-buy a phase/);
   });
 
   it('fails at STARTUP when the category source has no database, not at the first paid run', () => {
